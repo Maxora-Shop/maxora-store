@@ -216,10 +216,6 @@ export default function App() {
         onOpenTracker={() => setIsTrackerOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        onOpenAdmin={() => {
-          setActiveView('admin');
-          window.history.pushState(null, '', '/admin');
-        }}
       />
 
       {/* Main Content Area */}

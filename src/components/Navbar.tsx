@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Search, ShieldCheck, Truck, Phone, LayoutDashboard, Store } from 'lucide-react';
+import { ShoppingBag, Search, Truck, Phone } from 'lucide-react';
 import { StoreSettings } from '../types';
 
 interface NavbarProps {
@@ -9,7 +9,6 @@ interface NavbarProps {
   onOpenTracker: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onOpenAdmin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,7 +18,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTracker,
   searchQuery,
   onSearchChange,
-  onOpenAdmin,
 }) => {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
@@ -58,15 +56,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Track Order
             </button>
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="text-zinc-500 hover:text-emerald-400 transition-colors font-medium text-[11px] cursor-pointer flex items-center gap-1 bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700"
-              >
-                <LayoutDashboard className="w-3 h-3 text-emerald-400" />
-                <span>Admin</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
