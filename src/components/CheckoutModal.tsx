@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, Copy, Check, Truck, ShieldCheck, MapPin, Phone, User, Mail, AlertCircle, ShoppingBag } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict, SUB_DHAKA_AREAS } from '../data/bangladeshData';
+import { storeService } from '../services/storeService';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -99,37 +100,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          customer_name: customerName.trim(),
-          phone: cleanedPhone,
-          alt_phone: altPhone.trim(),
-          email: email.trim(),
-          district,
-          area,
-          address: address.trim(),
-          delivery_area: deliveryArea,
-          note: note.trim(),
-          items: cart.map((item) => ({
-            product_id: item.product_id,
-            name: item.name,
-            quantity: item.quantity,
-          })),
-        }),
+      const result = await storeService.createOrder({
+        customer_name: customerName.trim(),
+        phone: cleanedPhone,
+        alt_phone: altPhone.trim(),
+        email: email.trim(),
+        district,
+        area,
+        address: address.trim(),
+        delivery_area: deliveryArea,
+        note: note.trim(),
+        items: cart.map((item) => ({
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+        })),
       });
 
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to place order.');
+      if (!result.success || !result.order) {
+        throw new Error(result.error || 'Failed to place order.');
       }
 
-      setCompletedOrder(data.order);
-      onOrderSuccess(data.order);
+      setCompletedOrder(result.order);
+      onOrderSuccess(result.order);
     } catch (err: any) {
       setErrorMessage(err.message || 'Something went wrong while placing your order.');
     } finally {

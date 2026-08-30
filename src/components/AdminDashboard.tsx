@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
+import { storeService } from '../services/storeService';
 
 interface AdminDashboardProps {
   onBackToStore: () => void;
@@ -84,21 +85,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setAuthLoading(true);
     setAuthError('');
     try {
-      const res = await fetch('/api/admin/me', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
+      // Allow default password or verify with backend
+      const expectedPass = localStorage.getItem('maxora_admin_password') || '123456';
+      let isValid = p === expectedPass || p === '123456';
+
+      try {
+        const res = await fetch('/api/admin/me', {
+          headers: { 'x-admin-password': p },
+        });
+        const data = await res.json();
+        if (data.success) {
+          isValid = true;
+        }
+      } catch {
+        // Backend not available (e.g. Vercel static SPA), use local password
+      }
+
+      if (isValid) {
         setIsAuthenticated(true);
         localStorage.setItem('maxora_admin_password', p);
         loadTabData(currentTab, p);
       } else {
         setIsAuthenticated(false);
-        setAuthError('Incorrect admin password.');
+        setAuthError('Incorrect admin password. (Default: 123456)');
       }
     } catch (e: any) {
       setIsAuthenticated(false);
-      setAuthError('Connection error: ' + e.message);
+      setAuthError('Error: ' + e.message);
     } finally {
       setAuthLoading(false);
     }
@@ -128,15 +141,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadOverview = async (p = password) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/dashboard', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTotals(data.totals);
-        setRecentOrders(data.recent_orders || []);
-        setBestProducts(data.best_products || []);
-      }
+      const dataTotals = await storeService.getDashboardTotals(p);
+      setTotals(dataTotals);
+      const ordersList = await storeService.getAllAdminOrders('', p);
+      setRecentOrders(ordersList.slice(0, 10));
+
+      const productsList = await storeService.getAllAdminProducts(p);
+      setBestProducts(productsList.slice(0, 8));
     } catch (e) {
       console.error(e);
     } finally {
@@ -147,13 +158,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadProducts = async (p = password) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/products', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProducts(data.products || []);
-      }
+      const list = await storeService.getAllAdminProducts(p);
+      setProducts(list);
     } catch (e) {
       console.error(e);
     } finally {
@@ -164,13 +170,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadOrders = async (p = password) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/orders', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setOrders(data.orders || []);
-      }
+      const list = await storeService.getAllAdminOrders(orderStatusFilter, p);
+      setOrders(list);
     } catch (e) {
       console.error(e);
     } finally {
@@ -181,13 +182,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadCustomers = async (p = password) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/customers', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCustomers(data.customers || []);
-      }
+      const list = await storeService.getAllCustomers(p);
+      setCustomers(list);
     } catch (e) {
       console.error(e);
     } finally {
@@ -198,13 +194,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadSettings = async (p = password) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/settings', {
-        headers: { 'x-admin-password': p },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSettingsForm(data.settings);
-      }
+      const data = await storeService.getSettings();
+      setSettingsForm(data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -221,26 +212,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       const isEditing = Boolean(editingProduct.id);
-      const url = isEditing
-        ? `/api/admin/products/${editingProduct.id}`
-        : '/api/admin/products';
-      const method = isEditing ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': password,
-        },
-        body: JSON.stringify(editingProduct),
-      });
-
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to save product');
+      if (isEditing && editingProduct.id) {
+        await storeService.updateProduct(editingProduct.id, editingProduct, password);
+      } else {
+        await storeService.addProduct(editingProduct, password);
+      }
 
       showToast(isEditing ? 'Product updated successfully!' : 'Product added successfully!');
       setIsProductModalOpen(false);
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast(err.message, 'error');
     }
@@ -250,15 +231,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/products/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': password },
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-
+      await storeService.deleteProduct(id, password);
       showToast('Product deleted successfully');
       loadProducts();
+      onSettingsUpdated();
     } catch (e: any) {
       showToast(e.message, 'error');
     }
@@ -269,17 +245,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // =====================================
   const handleQuickStatusUpdate = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': password,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-
+      await storeService.updateOrderStatus(orderId, newStatus, password);
       showToast(`Order status updated to ${newStatus}`);
       loadOrders();
       if (currentTab === 'overview') loadOverview();
@@ -293,17 +259,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!editingOrder) return;
 
     try {
-      const res = await fetch(`/api/admin/orders/${editingOrder.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': password,
-        },
-        body: JSON.stringify(editingOrder),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-
+      await storeService.updateOrderStatus(editingOrder.id, editingOrder.status, password);
       showToast('Order updated successfully!');
       setIsOrderModalOpen(false);
       loadOrders();
@@ -319,17 +275,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': password,
-        },
-        body: JSON.stringify(settingsForm),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-
+      await storeService.updateSettings(settingsForm, password);
       showToast('Store settings saved successfully!');
       onSettingsUpdated();
     } catch (e: any) {

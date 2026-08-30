@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Search, Package, Truck, CheckCircle2, Clock, AlertCircle, MapPin } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
+import { storeService } from '../services/storeService';
 
 interface OrderTrackerModalProps {
   isOpen: boolean;
@@ -35,12 +36,11 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
     setOrder(null);
 
     try {
-      const res = await fetch(`/api/orders/track/${encodeURIComponent(query.trim())}`);
-      const data = await res.json();
-      if (!data.success) {
-        throw new Error(data.error || 'No matching order found.');
+      const result = await storeService.trackOrder(query.trim());
+      if (!result.success || !result.order) {
+        throw new Error(result.error || 'No matching order found.');
       }
-      setOrder(data.order);
+      setOrder(result.order);
     } catch (err: any) {
       setError(err.message || 'Unable to track order.');
     } finally {

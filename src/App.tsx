@@ -10,6 +10,8 @@ import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { Product, CartItem, StoreSettings } from './types';
+import { storeService } from './services/storeService';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
 import { Truck, ShieldCheck, Phone, Mail, MapPin, Heart, ShoppingBag, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -19,23 +21,11 @@ export default function App() {
   });
 
   // Settings State
-  const [settings, setSettings] = useState<StoreSettings>({
-    store_name: "Maxora",
-    store_tagline: "Premium Products. Trusted Service.",
-    delivery_inside_dhaka: 70,
-    delivery_sub_dhaka: 100,
-    delivery_outside_dhaka: 130,
-    currency: "৳",
-    phone: "01700-123456",
-    hero_title: "Discover Products You'll Love",
-    hero_subtitle: "Quality products delivered across Bangladesh with Cash on Delivery.",
-    promo_text: "Cash on Delivery Available Across Bangladesh",
-    footer_text: "© Maxora Bangladesh. All rights reserved."
-  });
+  const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
   // Products State
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
 
@@ -90,11 +80,8 @@ export default function App() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.success && data.settings) {
-        setSettings((prev) => ({ ...prev, ...data.settings }));
-      }
+      const data = await storeService.getSettings();
+      setSettings(data);
     } catch (err) {
       console.error('Failed to load settings:', err);
     }
@@ -103,11 +90,8 @@ export default function App() {
   const fetchProducts = async () => {
     setLoadingProducts(true);
     try {
-      const res = await fetch('/api/products');
-      const data = await res.json();
-      if (data.success && data.products) {
-        setProducts(data.products);
-      }
+      const data = await storeService.getProducts(searchQuery, selectedCategory);
+      setProducts(data);
     } catch (err) {
       console.error('Failed to load products:', err);
     } finally {
