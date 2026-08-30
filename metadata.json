@@ -1,0 +1,6 @@
+{
+  "name": "Maxora - Premium Online Store",
+  "description": "Full-featured e-commerce platform and admin dashboard for Bangladesh with Cash on Delivery and automated district delivery calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
