@@ -9,10 +9,12 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { SEOHead } from './components/SEOHead';
 import { Product, CartItem, StoreSettings } from './types';
 import { storeService } from './services/storeService';
+import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, Mail, MapPin, Heart, ShoppingBag, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, Mail, MapPin, Heart, ShoppingBag, Sparkles, CheckCircle2, Lock } from 'lucide-react';
 
 export default function App() {
   // App view: 'store' or 'admin' based on route /admin or #admin
@@ -55,6 +57,13 @@ export default function App() {
       console.error(e);
     }
   }, [cart]);
+
+  // Initialize Marketing & Ad Pixels when settings change
+  useEffect(() => {
+    if (settings) {
+      pixelService.initPixels(settings);
+    }
+  }, [settings]);
 
   // Load Settings & Products on startup and listen for route changes
   useEffect(() => {
@@ -132,6 +141,9 @@ export default function App() {
       }
     });
 
+    // Fire Ad Pixels (Meta, Google, TikTok) AddToCart event
+    pixelService.trackAddToCart(product, quantity);
+
     setRecentlyAddedId(product.id);
     setTimeout(() => setRecentlyAddedId(null), 1500);
   };
@@ -139,7 +151,19 @@ export default function App() {
   const handleBuyNow = (product: Product, quantity = 1) => {
     handleAddToCart(product, quantity);
     setIsCartOpen(false);
+    openCheckout();
+  };
+
+  const openCheckout = () => {
+    const cartSubtotal = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+    pixelService.trackInitiateCheckout(cart, cartSubtotal);
     setIsCheckoutOpen(true);
+  };
+
+  const handleOpenProductDetail = (product: Product) => {
+    setQuickViewProduct(product);
+    // Fire Ad Pixels ViewContent event for product page views
+    pixelService.trackViewContent(product);
   };
 
   const handleUpdateQuantity = (productId: string, delta: number) => {
@@ -160,7 +184,11 @@ export default function App() {
     setCart((prev) => prev.filter((item) => item.product_id !== productId));
   };
 
-  const handleOrderSuccess = () => {
+  const handleOrderSuccess = (orderData?: any) => {
+    if (orderData) {
+      // Fire Ad Pixels Purchase event with conversion values
+      pixelService.trackPurchase(orderData);
+    }
     setCart([]);
     fetchProducts();
   };
@@ -208,6 +236,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">
+      {/* Dynamic SEO & Google SERP JSON-LD schema injection */}
+      <SEOHead settings={settings} activeProduct={quickViewProduct} />
+
       {/* Sticky Top Navbar */}
       <Navbar
         settings={settings}
@@ -279,7 +310,7 @@ export default function App() {
                   key={product.id}
                   product={product}
                   onAddToCart={(p) => handleAddToCart(p, 1)}
-                  onQuickView={(p) => setQuickViewProduct(p)}
+                  onQuickView={(p) => handleOpenProductDetail(p)}
                   isAdded={recentlyAddedId === product.id}
                 />
               ))}
@@ -453,9 +484,11 @@ export default function App() {
                 setActiveView('admin');
                 window.history.pushState(null, '', '/admin');
               }}
-              className="text-zinc-600 hover:text-zinc-300 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+              title="Store Management & Admin Panel (Secured with PIN)"
+              className="text-zinc-600 hover:text-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md hover:bg-zinc-900"
             >
-              <span>Admin Portal</span>
+              <Lock className="w-3 h-3 text-zinc-500" />
+              <span>Admin</span>
             </button>
           </div>
         </div>

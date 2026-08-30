@@ -16,6 +16,13 @@ export interface Product {
   active?: number | boolean;
   created_at?: string;
   updated_at?: string;
+  // SEO & Marketing Fields for Google & Meta Ads
+  meta_title?: string;
+  meta_description?: string;
+  meta_keywords?: string;
+  slug?: string;
+  brand?: string;
+  og_image?: string;
 }
 
 export interface Customer {
@@ -93,6 +100,18 @@ export interface StoreSettings {
   hero_subtitle: string;
   promo_text: string;
   footer_text: string;
+  // Ads Tracking & Marketing Pixels
+  meta_pixel_id?: string;
+  google_tag_id?: string;
+  google_ads_id?: string;
+  tiktok_pixel_id?: string;
+  // Global Site SEO
+  site_meta_title?: string;
+  site_meta_description?: string;
+  site_meta_keywords?: string;
+  canonical_url?: string;
+  custom_head_code?: string;
+  custom_body_code?: string;
 }
 
 export interface DashboardTotals {

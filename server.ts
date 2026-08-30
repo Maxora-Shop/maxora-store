@@ -805,6 +805,12 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
     badge: body.badge || "",
     featured: body.featured ? 1 : 0,
     active: body.active === false || body.active === 0 ? 0 : 1,
+    meta_title: body.meta_title || "",
+    meta_description: body.meta_description || "",
+    meta_keywords: body.meta_keywords || "",
+    slug: body.slug || (body.name ? String(body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ""),
+    brand: body.brand || "Maxora",
+    og_image: body.og_image || body.image_url || "",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -845,6 +851,12 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
     badge: body.badge ?? existing.badge,
     featured: body.featured !== undefined ? (body.featured ? 1 : 0) : existing.featured,
     active: body.active !== undefined ? (body.active ? 1 : 0) : existing.active,
+    meta_title: body.meta_title ?? existing.meta_title,
+    meta_description: body.meta_description ?? existing.meta_description,
+    meta_keywords: body.meta_keywords ?? existing.meta_keywords,
+    slug: body.slug ?? existing.slug,
+    brand: body.brand ?? existing.brand,
+    og_image: body.og_image ?? existing.og_image,
     updated_at: new Date().toISOString()
   };
 
@@ -982,6 +994,54 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     success: true,
     message: "Settings saved successfully."
   });
+});
+
+// GET /sitemap.xml (Dynamic Google XML Sitemap)
+app.get('/sitemap.xml', (req, res) => {
+  const host = req.get('host') || 'maxora-store.vercel.app';
+  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const baseUrl = `${protocol}://${host}`;
+
+  const activeProducts = db.products.filter(p => p.active !== 0 && p.active !== false);
+
+  const productUrls = activeProducts.map(p => {
+    const slug = p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
+    const lastMod = (p.updated_at || p.created_at || new Date().toISOString()).split('T')[0];
+    return `  <url>
+    <loc>${baseUrl}/#product-${slug}</loc>
+    <lastmod>${lastMod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+  }).join('\n');
+
+  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+${productUrls}
+</urlset>`;
+
+  res.setHeader('Content-Type', 'application/xml');
+  res.send(sitemap);
+});
+
+// GET /robots.txt (Crawler directives)
+app.get('/robots.txt', (req, res) => {
+  const host = req.get('host') || 'maxora-store.vercel.app';
+  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/admin/
+
+Sitemap: ${protocol}://${host}/sitemap.xml
+`);
 });
 
 // ==========================================

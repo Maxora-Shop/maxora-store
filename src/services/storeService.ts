@@ -188,6 +188,12 @@ export const storeService = {
       badge: productData.badge || '',
       featured: productData.featured ? 1 : 0,
       active: productData.active !== undefined ? (productData.active ? 1 : 0) : 1,
+      meta_title: productData.meta_title || '',
+      meta_description: productData.meta_description || '',
+      meta_keywords: productData.meta_keywords || '',
+      slug: productData.slug || (productData.name ? productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+      brand: productData.brand || 'Maxora',
+      og_image: productData.og_image || productData.image_url || images[0],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

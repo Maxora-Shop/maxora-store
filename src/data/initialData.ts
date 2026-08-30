@@ -14,7 +14,14 @@ export const INITIAL_SETTINGS: StoreSettings = {
   hero_title: "Discover Products You'll Love",
   hero_subtitle: "Quality lifestyle gadgets & accessories delivered across Bangladesh with 100% Cash on Delivery.",
   promo_text: "Cash on Delivery Available Across Bangladesh (All 64 Districts)",
-  footer_text: "© Maxora Bangladesh. All rights reserved. Premium lifestyle gadgets & accessories."
+  footer_text: "© Maxora Bangladesh. All rights reserved. Premium lifestyle gadgets & accessories.",
+  site_meta_title: "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
+  site_meta_description: "Shop premium smartwatches, earbuds, mechanical keyboards, and lifestyle accessories online in Bangladesh. Fast Cash on Delivery across all 64 districts & 7-day easy warranty return.",
+  site_meta_keywords: "smartwatch bangladesh, wireless earbuds bd, gadgets store dhaka, cash on delivery online shopping bd",
+  meta_pixel_id: "",
+  google_tag_id: "",
+  google_ads_id: "",
+  tiktok_pixel_id: "",
 };
 
 export const INITIAL_PRODUCTS: Product[] = [

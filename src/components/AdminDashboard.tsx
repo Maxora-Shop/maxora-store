@@ -21,7 +21,14 @@ import {
   Eye,
   LogOut,
   Save,
-  Check
+  Check,
+  Globe,
+  Share2,
+  Megaphone,
+  Sparkles,
+  Code,
+  ExternalLink,
+  BarChart3
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -70,7 +77,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [productModalTab, setProductModalTab] = useState<'general' | 'seo'>('general');
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
+
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'marketing'>('general');
 
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -765,7 +775,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     description: '',
                     featured: 0,
                     active: 1,
+                    meta_title: '',
+                    meta_description: '',
+                    meta_keywords: '',
+                    slug: '',
+                    brand: 'Maxora',
+                    og_image: '',
                   });
+                  setProductModalTab('general');
                   setIsProductModalOpen(true);
                 }}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer"
@@ -888,17 +905,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => {
-                                  setEditingProduct(p);
+                                  setEditingProduct({
+                                    ...p,
+                                    meta_title: p.meta_title || '',
+                                    meta_description: p.meta_description || '',
+                                    meta_keywords: p.meta_keywords || '',
+                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    brand: p.brand || 'Maxora',
+                                    og_image: p.og_image || p.image_url || '',
+                                  });
+                                  setProductModalTab('seo');
                                   setIsProductModalOpen(true);
                                 }}
-                                className="p-1.5 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100 rounded-lg transition-colors"
+                                className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                title="SEO & Google Rank Settings"
+                              >
+                                <Globe className="w-3.5 h-3.5" />
+                                SEO
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProduct({
+                                    ...p,
+                                    meta_title: p.meta_title || '',
+                                    meta_description: p.meta_description || '',
+                                    meta_keywords: p.meta_keywords || '',
+                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    brand: p.brand || 'Maxora',
+                                    og_image: p.og_image || p.image_url || '',
+                                  });
+                                  setProductModalTab('general');
+                                  setIsProductModalOpen(true);
+                                }}
+                                className="p-1.5 text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
                                 title="Edit Product"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p.id, p.name)}
-                                className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                                 title="Delete Product"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -1155,184 +1201,397 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ==================================================== */}
         {currentTab === 'settings' && (
           <div className="max-w-3xl space-y-6">
-            <div>
-              <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
-                Store Settings
-              </h2>
-              <p className="text-xs text-zinc-500">
-                Update store branding, banner headlines, hotline and delivery tariffs
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
+                  Store & Marketing Settings
+                </h2>
+                <p className="text-xs text-zinc-500">
+                  Manage branding, hotline, delivery rates, Facebook/Google Ads pixels & Google SEO
+                </p>
+              </div>
+
+              {/* Settings Sub-tabs */}
+              <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-2xl border border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('general')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    settingsSubTab === 'general'
+                      ? 'bg-white text-zinc-950 shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  🏢 Store & Delivery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('marketing')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    settingsSubTab === 'marketing'
+                      ? 'bg-white text-zinc-950 shadow-xs'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <Megaphone className="w-3.5 h-3.5 text-blue-600" />
+                  Marketing & Pixels
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
-              <div className="space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">
-                  Branding & Contact
-                </h3>
+              {settingsSubTab === 'general' ? (
+                <>
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                      Branding & Contact
+                    </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Store Name
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.store_name || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, store_name: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Helpline Mobile Number
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.phone || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                          placeholder="e.g. 01700-123456"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          WhatsApp Number (For Order Inquiries)
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.whatsapp || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp: e.target.value })}
+                          placeholder="e.g. +8801700123456"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Facebook Page / Group URL
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.facebook || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
+                          placeholder="https://facebook.com/..."
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Store Tagline
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.store_tagline || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, store_tagline: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Promo / Header Announcement Bar Text
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.promo_text || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, promo_text: e.target.value })}
+                        placeholder="Cash on Delivery Available Across Bangladesh"
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Hero Title
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.hero_title || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, hero_title: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Hero Subtitle
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={settingsForm.hero_subtitle || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, hero_subtitle: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Delivery Tariffs */}
+                  <div className="pt-4 border-t border-zinc-200 space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                      <Truck className="w-4 h-4 text-emerald-600" />
+                      Delivery Rates (Bangladesh Taka ৳)
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Inside Dhaka City (৳)
+                        </label>
+                        <input
+                          type="number"
+                          value={settingsForm.delivery_inside_dhaka || 70}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, delivery_inside_dhaka: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Dhaka Sub-Area (৳)
+                        </label>
+                        <input
+                          type="number"
+                          value={settingsForm.delivery_sub_dhaka || 100}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, delivery_sub_dhaka: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Outside Dhaka (৳)
+                        </label>
+                        <input
+                          type="number"
+                          value={settingsForm.delivery_outside_dhaka || 130}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, delivery_outside_dhaka: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer text */}
+                  <div className="pt-4 border-t border-zinc-200">
                     <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Store Name
+                      Footer Copyright Text
                     </label>
                     <input
                       type="text"
-                      value={settingsForm.store_name || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, store_name: e.target.value })}
+                      value={settingsForm.footer_text || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, footer_text: e.target.value })}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
                   </div>
+                </>
+              ) : (
+                /* ====================================================
+                   MARKETING, ADS PIXELS & SEO TAB
+                ==================================================== */
+                <div className="space-y-6">
+                  {/* Meta / Facebook Pixel */}
+                  <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                          f
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-sm text-zinc-900">
+                            Meta / Facebook Pixel ID
+                          </h4>
+                          <p className="text-[11px] text-zinc-500">
+                            Automatically tracks PageView, ViewContent, AddToCart, InitiateCheckout & Purchase (with BDT total)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 123456789012345"
+                        value={settingsForm.meta_pixel_id || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, meta_pixel_id: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-blue-200 focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Google Tag / GA4 / Google Ads */}
+                  <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm">
+                        G
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-zinc-900">
+                          Google Tag / Google Ads / GA4 Measurement ID
+                        </h4>
+                        <p className="text-[11px] text-zinc-500">
+                          Integrates Google Ads conversions & Google Analytics 4 (e.g. G-XXXXX or AW-XXXXX)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="e.g. G-XXXXXXXXXX or AW-XXXXXXXXXX"
+                        value={settingsForm.google_tag_id || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, google_tag_id: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-emerald-200 focus:outline-none focus:border-emerald-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* TikTok Pixel */}
+                  <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-zinc-950 text-white flex items-center justify-center font-bold text-xs">
+                        TT
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-zinc-900">
+                          TikTok Pixel ID
+                        </h4>
+                        <p className="text-[11px] text-zinc-500">
+                          Track TikTok ads traffic & conversions
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="e.g. CXXXXXXXXXXXXXXX"
+                        value={settingsForm.tiktok_pixel_id || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, tiktok_pixel_id: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Global Homepage SEO */}
+                  <div className="space-y-4 pt-2">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-blue-600" />
+                      Global Homepage Google SEO
+                    </h3>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Homepage Meta Title (Google SERP Title)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Maxora BD | Premium Smart Gadgets & Lifestyle Store"
+                        value={settingsForm.site_meta_title || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, site_meta_title: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Homepage Meta Description (Google Search Snippet)
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Shop genuine smartwatches, wireless earbuds and gadgets in Bangladesh. Fast Cash on Delivery across 64 districts..."
+                        value={settingsForm.site_meta_description || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, site_meta_description: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Global Target Keywords (Comma separated)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="smartwatch bd, earbuds price in bangladesh, gadgets online shop dhaka"
+                        value={settingsForm.site_meta_keywords || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, site_meta_keywords: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sitemap & Crawler Links */}
+                  <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/70 space-y-2">
+                    <h4 className="font-extrabold text-xs text-amber-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      Google Search Console & Crawlers (Ready)
+                    </h4>
+                    <p className="text-xs text-amber-800">
+                      Your store dynamically serves standard Google-compliant XML Sitemap and Robots.txt files:
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <a
+                        href="/sitemap.xml"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-white text-zinc-800 rounded-xl border border-amber-300 text-xs font-bold flex items-center gap-1 hover:bg-amber-100"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View /sitemap.xml
+                      </a>
+                      <a
+                        href="/robots.txt"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 bg-white text-zinc-800 rounded-xl border border-amber-300 text-xs font-bold flex items-center gap-1 hover:bg-amber-100"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View /robots.txt
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Custom Header Code / Verification Tags */}
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Helpline Mobile Number
+                      Custom Header Code / Meta Verification (Optional)
                     </label>
-                    <input
-                      type="text"
-                      value={settingsForm.phone || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                      placeholder="e.g. 01700-123456"
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    <textarea
+                      rows={2}
+                      placeholder='<meta name="facebook-domain-verification" content="..." />'
+                      value={settingsForm.custom_head_code || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, custom_head_code: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono resize-none"
                     />
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      WhatsApp Number (For Order Inquiries)
-                    </label>
-                    <input
-                      type="text"
-                      value={settingsForm.whatsapp || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp: e.target.value })}
-                      placeholder="e.g. +8801700123456"
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Facebook Page / Group URL
-                    </label>
-                    <input
-                      type="text"
-                      value={settingsForm.facebook || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
-                      placeholder="https://facebook.com/..."
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Store Tagline
-                  </label>
-                  <input
-                    type="text"
-                    value={settingsForm.store_tagline || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, store_tagline: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Promo / Header Announcement Bar Text
-                  </label>
-                  <input
-                    type="text"
-                    value={settingsForm.promo_text || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, promo_text: e.target.value })}
-                    placeholder="Cash on Delivery Available Across Bangladesh"
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Hero Title
-                  </label>
-                  <input
-                    type="text"
-                    value={settingsForm.hero_title || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, hero_title: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Hero Subtitle
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={settingsForm.hero_subtitle || ''}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, hero_subtitle: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Delivery Tariffs */}
-              <div className="pt-4 border-t border-zinc-200 space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-emerald-600" />
-                  Delivery Rates (Bangladesh Taka ৳)
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Inside Dhaka City (৳)
-                    </label>
-                    <input
-                      type="number"
-                      value={settingsForm.delivery_inside_dhaka || 70}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, delivery_inside_dhaka: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Dhaka Sub-Area (৳)
-                    </label>
-                    <input
-                      type="number"
-                      value={settingsForm.delivery_sub_dhaka || 100}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, delivery_sub_dhaka: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Outside Dhaka (৳)
-                    </label>
-                    <input
-                      type="number"
-                      value={settingsForm.delivery_outside_dhaka || 130}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, delivery_outside_dhaka: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer text */}
-              <div className="pt-4 border-t border-zinc-200">
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Footer Copyright Text
-                </label>
-                <input
-                  type="text"
-                  value={settingsForm.footer_text || ''}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, footer_text: e.target.value })}
-                  className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                />
-              </div>
+              )}
 
               <button
                 type="submit"
@@ -1347,194 +1606,436 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </main>
 
       {/* ====================================================
-          PRODUCT MODAL (ADD / EDIT)
+          PRODUCT MODAL (ADD / EDIT with SEO & Ads Rank)
       ==================================================== */}
       {isProductModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-          <div className="relative bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col">
+          <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col">
             <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
-              <h3 className="font-extrabold text-base text-zinc-900">
-                {editingProduct?.id ? 'Edit Product' : 'Add New Product'}
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-extrabold text-base text-zinc-900">
+                  {editingProduct?.id ? 'Edit Product' : 'Add New Product'}
+                </h3>
+
+                {/* Modal Subtabs */}
+                <div className="flex items-center bg-zinc-200/80 p-0.5 rounded-xl text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setProductModalTab('general')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      productModalTab === 'general'
+                        ? 'bg-white text-zinc-950 shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    📦 Basic Info
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductModalTab('seo')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                      productModalTab === 'seo'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-zinc-600 hover:text-blue-700'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Google SEO & Ads
+                  </button>
+                </div>
+              </div>
+
               <button
                 onClick={() => setIsProductModalOpen(false)}
-                className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Product Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Maxora AMOLED Smartwatch Series 9"
-                  value={editingProduct?.name || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                />
-              </div>
+              {productModalTab === 'general' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Product Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Maxora AMOLED Smartwatch Series 9"
+                      value={editingProduct?.name || ''}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        const autoSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                        setEditingProduct({
+                          ...editingProduct,
+                          name: newName,
+                          slug: editingProduct?.slug || autoSlug,
+                        });
+                      }}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Category
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Smart Gadgets, Audio, Bags..."
-                    value={editingProduct?.category || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Category
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Smart Gadgets, Audio, Bags..."
+                        value={editingProduct?.category || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        SKU Code
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="MX-SW-09"
+                        value={editingProduct?.sku || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Buying Price (৳)
+                      </label>
+                      <input
+                        type="number"
+                        value={editingProduct?.buying_price || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, buying_price: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Selling Price (৳)
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        value={editingProduct?.selling_price || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, selling_price: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Discount (৳)
+                      </label>
+                      <input
+                        type="number"
+                        value={editingProduct?.discount || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, discount: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 text-rose-600 font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Stock Quantity
+                      </label>
+                      <input
+                        type="number"
+                        value={editingProduct?.stock || 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Badge Label
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="HOT DEAL, NEW, BESTSELLER"
+                        value={editingProduct?.badge || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, badge: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Product Image URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={editingProduct?.image_url || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, image_url: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Key features, specs, warranty info..."
+                      value={editingProduct?.description || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Featured Product
+                      </label>
+                      <select
+                        value={editingProduct?.featured ? 1 : 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, featured: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                      >
+                        <option value={0}>No</option>
+                        <option value={1}>Yes (Featured)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Visibility
+                      </label>
+                      <select
+                        value={editingProduct?.active !== 0 ? 1 : 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, active: Number(e.target.value) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                      >
+                        <option value={1}>Active in Store</option>
+                        <option value={0}>Hidden</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* ====================================================
+                   PRODUCT SEO & GOOGLE RANK TAB
+                ==================================================== */
+                <div className="space-y-4">
+                  {/* Auto-generate SEO Helper button */}
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-blue-50 border border-blue-100">
+                    <div>
+                      <h4 className="font-extrabold text-xs text-blue-950 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        Smart SEO Generator
+                      </h4>
+                      <p className="text-[11px] text-blue-800">
+                        Auto-generate Google ranking titles, description & keywords based on product details
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingProduct?.name) return;
+                        const name = editingProduct.name;
+                        const finalPrice = Math.max(0, Number(editingProduct.selling_price || 0) - Number(editingProduct.discount || 0));
+                        const autoSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                        const autoTitle = `${name} Price in BD (৳${finalPrice}) | Maxora`;
+                        const autoDesc = `Buy ${name} online in Bangladesh at best price (৳${finalPrice}). 100% genuine product, fast Cash on Delivery across 64 districts & 7-day warranty support.`;
+                        const autoKeywords = `${name}, ${name} price in bangladesh, buy ${editingProduct.category || 'gadgets'} bd, best price ${name}`;
+
+                        setEditingProduct({
+                          ...editingProduct,
+                          meta_title: autoTitle,
+                          meta_description: autoDesc,
+                          meta_keywords: autoKeywords,
+                          slug: autoSlug,
+                          brand: editingProduct.brand || 'Maxora',
+                          og_image: editingProduct.og_image || editingProduct.image_url || '',
+                        });
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      ✨ Auto Generate
+                    </button>
+                  </div>
+
+                  {/* Meta Title */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-zinc-700">
+                        Google SEO Title (Meta Title)
+                      </label>
+                      <span
+                        className={`text-[10px] font-mono font-bold ${
+                          (editingProduct?.meta_title || '').length > 60
+                            ? 'text-amber-600'
+                            : 'text-zinc-400'
+                        }`}
+                      >
+                        {(editingProduct?.meta_title || '').length}/60 chars (Recommended: 50-60)
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. Maxora Ultra AMOLED Smartwatch 9 Price in Bangladesh | Maxora"
+                      value={editingProduct?.meta_title || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, meta_title: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  {/* Meta Description */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-zinc-700">
+                        Google Search Snippet Description (Meta Description)
+                      </label>
+                      <span
+                        className={`text-[10px] font-mono font-bold ${
+                          (editingProduct?.meta_description || '').length > 160
+                            ? 'text-amber-600'
+                            : 'text-zinc-400'
+                        }`}
+                      >
+                        {(editingProduct?.meta_description || '').length}/160 chars (Recommended: 120-160)
+                      </span>
+                    </div>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Buy Maxora Ultra AMOLED Smartwatch Series 9 online in BD with Bluetooth calling, IP68 water resistance & 100% Cash on Delivery across all 64 districts."
+                      value={editingProduct?.meta_description || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, meta_description: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* URL Slug */}
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        URL Slug (Search Friendly Link)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="maxora-ultra-amoled-smartwatch-9"
+                        value={editingProduct?.slug || ''}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-'),
+                          })
+                        }
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"
+                      />
+                    </div>
+
+                    {/* Brand */}
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Brand Name (For Google Schema)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Maxora"
+                        value={editingProduct?.brand || 'Maxora'}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Target Keywords */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Focus Keywords / Search Tags (Comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="smartwatch bd, calling watch price bangladesh, cash on delivery gadget"
+                      value={editingProduct?.meta_keywords || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, meta_keywords: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  {/* Custom Social Share Image (OG Image) */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Social Share / Meta Ads Image URL (OG:Image)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Defaults to product main image URL if empty"
+                      value={editingProduct?.og_image || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, og_image: e.target.value })}
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  {/* LIVE GOOGLE SERP PREVIEW BOX */}
+                  <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                      <span className="flex items-center gap-1 text-zinc-800">
+                        <Globe className="w-3.5 h-3.5 text-blue-600" />
+                        Live Google Search Preview (SERP)
+                      </span>
+                      <span>Desktop & Mobile snippet</span>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-zinc-200 shadow-xs space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-600 truncate">
+                        <div className="w-4 h-4 rounded-full bg-zinc-100 flex items-center justify-center text-[10px] font-bold text-zinc-700">
+                          M
+                        </div>
+                        <span className="text-zinc-700 font-medium">maxora.store</span>
+                        <span className="text-zinc-400">› product › {editingProduct?.slug || 'item-name'}</span>
+                      </div>
+
+                      <h4 className="text-sm font-semibold text-blue-800 hover:underline line-clamp-1">
+                        {editingProduct?.meta_title || editingProduct?.name || 'Product Title on Google Search BD'}
+                      </h4>
+
+                      {/* Google Rich Snippet Rating & Stock badge */}
+                      <div className="flex items-center gap-2 text-xs text-zinc-600">
+                        <span className="text-amber-500 font-bold">★★★★★ 4.9</span>
+                        <span className="text-zinc-400">·</span>
+                        <span className="text-emerald-700 font-bold">
+                          {Number(editingProduct?.stock || 1) > 0 ? 'In Stock' : 'Out of Stock'}
+                        </span>
+                        <span className="text-zinc-400">·</span>
+                        <span className="font-bold text-zinc-900">
+                          ৳{Math.max(0, Number(editingProduct?.selling_price || 0) - Number(editingProduct?.discount || 0)).toLocaleString('en-BD')}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-zinc-600 line-clamp-2 leading-relaxed">
+                        {editingProduct?.meta_description ||
+                          editingProduct?.description ||
+                          'Buy this product online in Bangladesh at the best price with Cash on Delivery across 64 districts.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    SKU Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="MX-SW-09"
-                    value={editingProduct?.sku || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Buying Price (৳)
-                  </label>
-                  <input
-                    type="number"
-                    value={editingProduct?.buying_price || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, buying_price: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Selling Price (৳)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={editingProduct?.selling_price || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, selling_price: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Discount (৳)
-                  </label>
-                  <input
-                    type="number"
-                    value={editingProduct?.discount || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, discount: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 text-rose-600 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    value={editingProduct?.stock || 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Badge Label
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="HOT DEAL, NEW, BESTSELLER"
-                    value={editingProduct?.badge || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, badge: e.target.value })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Product Image URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={editingProduct?.image_url || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, image_url: e.target.value })}
-                  className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Key features, specs, warranty info..."
-                  value={editingProduct?.description || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                  className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Featured Product
-                  </label>
-                  <select
-                    value={editingProduct?.featured ? 1 : 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, featured: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
-                  >
-                    <option value={0}>No</option>
-                    <option value={1}>Yes (Featured)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Visibility
-                  </label>
-                  <select
-                    value={editingProduct?.active !== 0 ? 1 : 0}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, active: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
-                  >
-                    <option value={1}>Active in Store</option>
-                    <option value={0}>Hidden</option>
-                  </select>
-                </div>
-              </div>
+              )}
 
               <div className="pt-2">
                 <button
                   type="submit"
                   className="w-full py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
                 >
-                  Save Product
+                  Save Product & SEO Settings
                 </button>
               </div>
             </form>
