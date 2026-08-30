@@ -940,6 +940,18 @@ app.put('/api/admin/orders/:id', requireAdmin, (req, res) => {
   });
 });
 
+// DELETE /api/admin/orders/:id
+app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
+  const orderId = req.params.id;
+  db.orders = db.orders.filter(o => o.id !== orderId && o.order_number !== orderId);
+  db.order_items = db.order_items.filter(i => i.order_id !== orderId);
+  saveDB();
+  res.json({
+    success: true,
+    message: "Order deleted successfully."
+  });
+});
+
 // GET /api/admin/customers
 app.get('/api/admin/customers', requireAdmin, (req, res) => {
   const sorted = [...db.customers].sort((a, b) =>

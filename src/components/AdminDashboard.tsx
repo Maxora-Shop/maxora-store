@@ -80,6 +80,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     verifyAdminAuth();
   }, []);
 
+  useEffect(() => {
+    if (globalSettings) {
+      setSettingsForm(globalSettings);
+    }
+  }, [globalSettings]);
+
   const verifyAdminAuth = async (passToTry?: string) => {
     const p = passToTry !== undefined ? passToTry : password;
     setAuthLoading(true);
@@ -259,9 +265,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!editingOrder) return;
 
     try {
-      await storeService.updateOrderStatus(editingOrder.id, editingOrder.status, password);
-      showToast('Order updated successfully!');
+      await storeService.updateOrder(editingOrder, password);
+      showToast('Order and customer details updated successfully!');
       setIsOrderModalOpen(false);
+      loadOrders();
+      if (currentTab === 'overview') loadOverview();
+    } catch (e: any) {
+      showToast(e.message, 'error');
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string, orderNumber: string) => {
+    if (!confirm(`Are you sure you want to delete Order #${orderNumber}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await storeService.deleteOrder(orderId, password);
+      showToast(`Order #${orderNumber} deleted successfully!`);
+      if (isOrderModalOpen) {
+        setIsOrderModalOpen(false);
+      }
       loadOrders();
       if (currentTab === 'overview') loadOverview();
     } catch (e: any) {
@@ -642,15 +666,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </span>
                           </td>
                           <td className="py-3 text-right">
-                            <button
-                              onClick={() => {
-                                setEditingOrder(ord);
-                                setIsOrderModalOpen(true);
-                              }}
-                              className="text-xs font-bold text-zinc-700 hover:text-zinc-950 p-1 hover:bg-zinc-100 rounded-md"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setEditingOrder(ord);
+                                  setIsOrderModalOpen(true);
+                                }}
+                                className="text-xs font-bold text-zinc-700 hover:text-zinc-950 px-2 py-1 hover:bg-zinc-100 rounded-md cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOrder(ord.id, ord.order_number)}
+                                title="Delete Order"
+                                className="text-xs font-bold text-zinc-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-md cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1012,15 +1045,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </select>
                         </td>
                         <td className="p-4 text-right">
-                          <button
-                            onClick={() => {
-                              setEditingOrder(ord);
-                              setIsOrderModalOpen(true);
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs transition-colors"
-                          >
-                            Details & Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setEditingOrder(ord);
+                                setIsOrderModalOpen(true);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs transition-colors cursor-pointer"
+                            >
+                              Details & Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteOrder(ord.id, ord.order_number)}
+                              title="Delete this order"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1149,6 +1191,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="text"
                       value={settingsForm.phone || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                      placeholder="e.g. 01700-123456"
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      WhatsApp Number (For Order Inquiries)
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.whatsapp || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, whatsapp: e.target.value })}
+                      placeholder="e.g. +8801700123456"
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Facebook Page / Group URL
+                    </label>
+                    <input
+                      type="text"
+                      value={settingsForm.facebook || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
+                      placeholder="https://facebook.com/..."
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
                   </div>
@@ -1162,6 +1233,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="text"
                     value={settingsForm.store_tagline || ''}
                     onChange={(e) => setSettingsForm({ ...settingsForm, store_tagline: e.target.value })}
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Promo / Header Announcement Bar Text
+                  </label>
+                  <input
+                    type="text"
+                    value={settingsForm.promo_text || ''}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, promo_text: e.target.value })}
+                    placeholder="Cash on Delivery Available Across Bangladesh"
                     className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                   />
                 </div>
@@ -1640,10 +1724,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrder(editingOrder.id, editingOrder.order_number)}
+                  className="px-4 py-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-sm transition-all border border-rose-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Order
+                </button>
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
+                  className="flex-1 py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
                 >
                   Update Order Details
                 </button>

@@ -479,6 +479,47 @@ export const storeService = {
     return { success: true };
   },
 
+  async updateOrder(orderData: Partial<Order> & { id: string }, adminPassword?: string): Promise<{ success: boolean }> {
+    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    const index = orders.findIndex((o) => o.id === orderData.id);
+    if (index !== -1) {
+      orders[index] = {
+        ...orders[index],
+        ...orderData,
+        updated_at: new Date().toISOString(),
+      };
+      setLocal(ORDERS_KEY, orders);
+    }
+
+    if (adminPassword) {
+      tryApi(`/api/admin/orders/${orderData.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPassword,
+        },
+        body: JSON.stringify(orderData),
+      });
+    }
+
+    return { success: true };
+  },
+
+  async deleteOrder(orderId: string, adminPassword?: string): Promise<{ success: boolean }> {
+    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    const filtered = orders.filter((o) => o.id !== orderId && o.order_number !== orderId);
+    setLocal(ORDERS_KEY, filtered);
+
+    if (adminPassword) {
+      tryApi(`/api/admin/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword },
+      });
+    }
+
+    return { success: true };
+  },
+
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
     if (adminPassword) {
       const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
