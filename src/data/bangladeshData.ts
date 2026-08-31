@@ -4,7 +4,6 @@ export const SUB_DHAKA_AREAS = [
   "Savar",
   "Keraniganj",
   "Demra",
-  "Narayanganj",
   "Tongi",
   "Dhamrai",
   "Nawabganj"

@@ -561,65 +561,117 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
 
-            {/* Metrics 8-Card Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs space-y-2">
+            {/* Metrics 7-Card Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+              {/* 1. Today's Sales */}
+              <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs space-y-1.5 hover:border-zinc-300 transition-colors">
                 <div className="flex items-center justify-between text-zinc-400">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Today's Sales</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Today's Sales</span>
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">
                     ৳
                   </div>
                 </div>
-                <div className="text-2xl font-black text-zinc-950">
+                <div className="text-xl sm:text-2xl font-black text-zinc-950">
                   ৳{(totals?.today_sales || 0).toLocaleString('en-BD')}
                 </div>
-                <div className="text-[11px] text-zinc-400 font-medium">
-                  {totals?.today_orders || 0} orders received today
+                <div className="text-[10px] text-zinc-400 font-medium">
+                  {totals?.today_orders || 0} orders today
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs space-y-2">
+              {/* 2. Monthly Sales */}
+              <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs space-y-1.5 hover:border-zinc-300 transition-colors">
                 <div className="flex items-center justify-between text-zinc-400">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Monthly Sales</span>
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Monthly Sales</span>
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <TrendingUp className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-zinc-950">
+                <div className="text-xl sm:text-2xl font-black text-zinc-950">
                   ৳{(totals?.monthly_sales || 0).toLocaleString('en-BD')}
                 </div>
-                <div className="text-[11px] text-zinc-400 font-medium">
-                  {totals?.monthly_orders || 0} total monthly orders
+                <div className="text-[10px] text-zinc-400 font-medium">
+                  {totals?.monthly_orders || 0} orders this month
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs space-y-2">
+              {/* 3. Total Orders */}
+              <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs space-y-1.5 hover:border-zinc-300 transition-colors">
                 <div className="flex items-center justify-between text-zinc-400">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Pending Orders</span>
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <Clock className="w-4 h-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Total Orders</span>
+                  <div className="w-7 h-7 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center">
+                    <ShoppingBag className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-amber-600">
+                <div className="text-xl sm:text-2xl font-black text-zinc-950">
+                  {orders.length || (totals?.today_orders || 0) + (totals?.monthly_orders || 0)}
+                </div>
+                <div className="text-[10px] text-zinc-400 font-medium">
+                  All-time store orders
+                </div>
+              </div>
+
+              {/* 4. Pending Orders */}
+              <div className="bg-white p-4 rounded-2xl border border-amber-200/80 bg-amber-50/20 shadow-xs space-y-1.5 hover:border-amber-300 transition-colors">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Pending</span>
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Clock className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-amber-600">
                   {totals?.pending || 0}
                 </div>
-                <div className="text-[11px] text-zinc-400 font-medium">
-                  Requires phone confirmation
+                <div className="text-[10px] text-amber-700/80 font-medium">
+                  Requires phone call
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs space-y-2">
+              {/* 5. Processing Orders */}
+              <div className="bg-white p-4 rounded-2xl border border-sky-200/80 bg-sky-50/20 shadow-xs space-y-1.5 hover:border-sky-300 transition-colors">
                 <div className="flex items-center justify-between text-zinc-400">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Delivered Orders</span>
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <CheckCircle className="w-4 h-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700">Processing</span>
+                  <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center">
+                    <Truck className="w-3.5 h-3.5" />
                   </div>
                 </div>
-                <div className="text-2xl font-black text-emerald-600">
+                <div className="text-xl sm:text-2xl font-black text-sky-600">
+                  {totals?.processing || 0}
+                </div>
+                <div className="text-[10px] text-sky-700/80 font-medium">
+                  Confirmed & in courier
+                </div>
+              </div>
+
+              {/* 6. Delivered Orders */}
+              <div className="bg-white p-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/20 shadow-xs space-y-1.5 hover:border-emerald-300 transition-colors">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Delivered</span>
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-600">
                   {totals?.delivered || 0}
                 </div>
-                <div className="text-[11px] text-zinc-400 font-medium">
-                  Successfully completed
+                <div className="text-[10px] text-emerald-700/80 font-medium">
+                  Completed orders
+                </div>
+              </div>
+
+              {/* 7. Total Customers */}
+              <div className="bg-white p-4 rounded-2xl border border-purple-200/80 bg-purple-50/20 shadow-xs space-y-1.5 hover:border-purple-300 transition-colors">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700">Customers</span>
+                  <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-purple-700">
+                  {customers.length || totals?.customers || 0}
+                </div>
+                <div className="text-[10px] text-purple-700/80 font-medium">
+                  Registered buyers
                 </div>
               </div>
             </div>

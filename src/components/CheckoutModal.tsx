@@ -398,7 +398,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       Inside Dhaka City — ৳{settings.delivery_inside_dhaka || 70}
                     </option>
                     <option value="sub_dhaka">
-                      Dhaka Sub-Area (Gazipur, Savar, Narayanganj, Tongi, etc.) — ৳{settings.delivery_sub_dhaka || 100}
+                      Dhaka Sub-Area (Gazipur, Savar, Keraniganj, Tongi, etc.) — ৳{settings.delivery_sub_dhaka || 100}
                     </option>
                     <option value="outside_dhaka">
                       Outside Dhaka (Nationwide) — ৳{settings.delivery_outside_dhaka || 130}
