@@ -7,21 +7,15 @@ import { ProductQuickView } from './components/ProductQuickView';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackerModal } from './components/OrderTrackerModal';
-import { AdminDashboard } from './components/AdminDashboard';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 import { Product, CartItem, StoreSettings } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, Mail, MapPin, Heart, ShoppingBag, Sparkles, CheckCircle2, Lock } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag } from 'lucide-react';
 
 export default function App() {
-  // App view: 'store' or 'admin' based on route /admin or #admin
-  const [activeView, setActiveView] = useState<'store' | 'admin'>(() => {
-    return window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin') || window.location.hash === '#admin' ? 'admin' : 'store';
-  });
-
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
@@ -65,26 +59,10 @@ export default function App() {
     }
   }, [settings]);
 
-  // Load Settings & Products on startup and listen for route changes
+  // Load Settings & Products on startup
   useEffect(() => {
     fetchSettings();
     fetchProducts();
-
-    const handleLocationChange = () => {
-      const isAdminRoute =
-        window.location.pathname === '/admin' ||
-        window.location.pathname.startsWith('/admin') ||
-        window.location.hash === '#admin';
-      setActiveView(isAdminRoute ? 'admin' : 'store');
-    };
-
-    window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
-
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange);
-      window.removeEventListener('hashchange', handleLocationChange);
-    };
   }, []);
 
   const fetchSettings = async () => {
@@ -217,23 +195,6 @@ export default function App() {
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // If activeView is admin, show the admin portal
-  if (activeView === 'admin') {
-    return (
-      <AdminDashboard
-        onBackToStore={() => {
-          setActiveView('store');
-          window.history.pushState(null, '', '/');
-        }}
-        globalSettings={settings}
-        onSettingsUpdated={() => {
-          fetchSettings();
-          fetchProducts();
-        }}
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">
       {/* Dynamic SEO & Google SERP JSON-LD schema injection */}
@@ -255,7 +216,10 @@ export default function App() {
         {!searchQuery && (
           <Hero
             settings={settings}
+            products={products}
             onExploreClick={scrollToProducts}
+            onOpenProduct={handleOpenProductDetail}
+            onAddToCart={(p) => handleAddToCart(p, 1)}
           />
         )}
 
@@ -470,26 +434,16 @@ export default function App() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-zinc-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">
           <div>
             <span>{settings.footer_text || "© Maxora Bangladesh. All rights reserved."}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsTrackerOpen(true)} className="hover:text-zinc-300 cursor-pointer">Order Tracking</button>
+          <div className="flex items-center flex-wrap gap-3 sm:gap-4">
+            <button onClick={() => setIsTrackerOpen(true)} className="hover:text-zinc-300 transition-colors cursor-pointer">Track Your Order</button>
             <span>•</span>
-            <button onClick={scrollToProducts} className="hover:text-zinc-300 cursor-pointer">Shop Collections</button>
+            <button onClick={scrollToProducts} className="hover:text-zinc-300 transition-colors cursor-pointer">Shop Collections</button>
             <span>•</span>
-            <button
-              onClick={() => {
-                setActiveView('admin');
-                window.history.pushState(null, '', '/admin');
-              }}
-              title="Store Management & Admin Panel (Secured with PIN)"
-              className="text-zinc-600 hover:text-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md hover:bg-zinc-900"
-            >
-              <Lock className="w-3 h-3 text-zinc-500" />
-              <span>Admin</span>
-            </button>
+            <span className="text-zinc-400">Cash on Delivery</span>
           </div>
         </div>
       </footer>

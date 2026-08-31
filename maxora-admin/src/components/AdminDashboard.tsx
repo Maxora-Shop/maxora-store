@@ -128,7 +128,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       // 1. Try modern login API
       try {
-        const res = await fetch('/api/admin/login', {
+        const apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') : '';
+        const res = await fetch(`${apiBase}/api/admin/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: u, password: p }),
