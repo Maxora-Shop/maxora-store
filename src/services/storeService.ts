@@ -46,7 +46,12 @@ export function initLocalStorage(): void {
 initLocalStorage();
 
 // Check if online API is reachable
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') : '';
+const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
+  ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
+  : (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) 
+    ? DEFAULT_BACKEND_URL 
+    : '';
 
 function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -129,9 +134,7 @@ export const storeService = {
     );
 
     if (apiResult.success && Array.isArray(apiResult.data?.products)) {
-      if (apiResult.data.products.length > 0) {
-        setLocal(PRODUCTS_KEY, apiResult.data.products);
-      }
+      setLocal(PRODUCTS_KEY, apiResult.data.products);
       return apiResult.data.products;
     }
 

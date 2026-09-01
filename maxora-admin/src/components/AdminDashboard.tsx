@@ -139,7 +139,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       // 1. Try modern login API
       try {
-        const apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') : '';
+        const defaultBackend = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
+        const apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
+          ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
+          : (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) || defaultBackend;
+        
         if (apiBase) {
           const res = await fetch(`${apiBase}/api/admin/login`, {
             method: 'POST',
