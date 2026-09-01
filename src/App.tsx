@@ -9,13 +9,25 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
+import { AdminDashboard } from './components/AdminDashboard';
 import { Product, CartItem, StoreSettings } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, Lock } from 'lucide-react';
 
 export default function App() {
+  // Admin View State
+  const [isAdminView, setIsAdminView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      const search = window.location.search;
+      return path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true');
+    }
+    return false;
+  });
+
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
@@ -42,6 +54,22 @@ export default function App() {
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
 
   const productSectionRef = useRef<HTMLDivElement>(null);
+
+  // Route listener
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      const search = window.location.search;
+      setIsAdminView(path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true'));
+    };
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
+  }, []);
 
   // Save Cart to LocalStorage
   useEffect(() => {
@@ -206,6 +234,24 @@ export default function App() {
   );
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  if (isAdminView) {
+    return (
+      <AdminDashboard
+        onBackToStore={() => {
+          setIsAdminView(false);
+          window.history.pushState({}, '', '/');
+          fetchProducts();
+          fetchSettings();
+        }}
+        globalSettings={settings}
+        onSettingsUpdated={() => {
+          fetchSettings();
+          fetchProducts();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">

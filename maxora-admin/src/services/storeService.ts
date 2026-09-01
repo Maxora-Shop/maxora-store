@@ -45,13 +45,25 @@ export function initLocalStorage(): void {
 // Initialize immediately
 initLocalStorage();
 
-// Check if online API is reachable
-const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
-  ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
-  : (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) || DEFAULT_BACKEND_URL;
+export const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
 
-function getAuthHeaders(adminPassword?: string): Record<string, string> {
+export function getApiBaseUrl(): string {
+  const envUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
+    ? String((import.meta as any).env.VITE_API_URL).trim() 
+    : '';
+  if (envUrl && envUrl.startsWith('http')) {
+    return envUrl.replace(/\/$/, '');
+  }
+  const custom = (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) 
+    ? String(localStorage.getItem('maxora_backend_url')).trim() 
+    : '';
+  if (custom && custom.startsWith('http')) {
+    return custom.replace(/\/$/, '');
+  }
+  return DEFAULT_BACKEND_URL;
+}
+
+export function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -70,8 +82,16 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
 
 async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
-    const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
-    const res = await fetch(fullUrl, options);
+    const base = getApiBaseUrl();
+    const fullUrl = url.startsWith('http') ? url : `${base}${url}`;
+    const defaultHeaders = getAuthHeaders();
+    const res = await fetch(fullUrl, {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...(options?.headers || {}),
+      },
+    });
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
       return { success: false, error: errJson?.error || res.statusText };
@@ -83,6 +103,7 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
     const json = await res.json();
     return { success: true, data: json };
   } catch (err: any) {
+    console.warn(`[StoreService API Error] ${url}:`, err);
     return { success: false, error: err?.message };
   }
 }
@@ -322,15 +343,13 @@ export const storeService = {
 
   // 3. ORDERS
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
-    if (adminPassword) {
-      const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
-      const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
-        setLocal(ORDERS_KEY, apiResult.data.orders);
-        return apiResult.data.orders;
-      }
+    const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
+    const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
+      setLocal(ORDERS_KEY, apiResult.data.orders);
+      return apiResult.data.orders;
     }
 
     let orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
@@ -350,16 +369,11 @@ export const storeService = {
       setLocal(ORDERS_KEY, orders);
     }
 
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
-        },
-        body: JSON.stringify({ status }),
-      });
-    }
+    await tryApi(`/api/admin/orders/${idStr}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify({ status }),
+    });
 
     return { success: true };
   },
@@ -377,16 +391,11 @@ export const storeService = {
       setLocal(ORDERS_KEY, orders);
     }
 
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
-        },
-        body: JSON.stringify(orderData),
-      });
-    }
+    await tryApi(`/api/admin/orders/${idStr}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(orderData),
+    });
 
     return { success: true };
   },
@@ -401,25 +410,21 @@ export const storeService = {
     const filtered = orders.filter((o) => String(o.id) !== idStr && o.order_number !== idStr);
     setLocal(ORDERS_KEY, filtered);
 
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword },
-      });
-    }
+    await tryApi(`/api/admin/orders/${idStr}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    });
 
     return { success: true };
   },
 
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
-    if (adminPassword) {
-      const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.customers)) {
-        setLocal(CUSTOMERS_KEY, apiResult.data.customers);
-        return apiResult.data.customers;
-      }
+    const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (apiResult.success && Array.isArray(apiResult.data?.customers)) {
+      setLocal(CUSTOMERS_KEY, apiResult.data.customers);
+      return apiResult.data.customers;
     }
 
     const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
@@ -427,13 +432,11 @@ export const storeService = {
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {
-    if (adminPassword) {
-      const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && apiResult.data?.totals) {
-        return apiResult.data.totals;
-      }
+    const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (apiResult.success && apiResult.data?.totals) {
+      return apiResult.data.totals;
     }
 
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
