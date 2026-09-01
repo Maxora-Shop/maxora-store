@@ -46,21 +46,44 @@ export function initLocalStorage(): void {
 initLocalStorage();
 
 // Check if online API is reachable
-const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') : '';
+const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
+const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
+  ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
+  : (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) || DEFAULT_BACKEND_URL;
 
-async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T }> {
+function getAuthHeaders(adminPassword?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
+  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+
+  if (pass) {
+    headers['x-admin-password'] = pass;
+    headers['Authorization'] = `Bearer ${pass}`;
+  }
+  if (token) {
+    headers['x-admin-token'] = token;
+  }
+  return headers;
+}
+
+async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
     const res = await fetch(fullUrl, options);
-    if (!res.ok) return { success: false };
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      return { success: false, error: errJson?.error || res.statusText };
+    }
     const contentType = res.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      return { success: false };
+      return { success: true };
     }
     const json = await res.json();
     return { success: true, data: json };
-  } catch {
-    return { success: false };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
   }
 }
 
@@ -83,15 +106,16 @@ export const storeService = {
     setLocal(SETTINGS_KEY, updated);
 
     // Try API
-    if (adminPassword) {
-      await tryApi('/api/admin/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
-        },
-        body: JSON.stringify(newSettings),
-      });
+    const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newSettings),
+    });
+
+    if (apiRes.success && apiRes.data?.settings) {
+      const merged = { ...updated, ...apiRes.data.settings };
+      setLocal(SETTINGS_KEY, merged);
+      return { success: true, settings: merged };
     }
 
     return { success: true, settings: updated };
@@ -103,24 +127,24 @@ export const storeService = {
 
   // 2. PRODUCTS
   async getProducts(search = '', category = ''): Promise<Product[]> {
-    let local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const apiResult = await tryApi<{ success: boolean; products: Product[] }>(
+      `/api/products?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}`
+    );
 
-    // If local was empty for any reason, re-seed
+    if (apiResult.success && Array.isArray(apiResult.data?.products)) {
+      if (apiResult.data.products.length > 0) {
+        setLocal(PRODUCTS_KEY, apiResult.data.products);
+      }
+      return apiResult.data.products;
+    }
+
+    // Filter locally
+    let local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     if (!local || local.length === 0) {
       local = INITIAL_PRODUCTS;
       setLocal(PRODUCTS_KEY, local);
     }
 
-    const apiResult = await tryApi<{ success: boolean; products: Product[] }>(
-      `/api/products?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}`
-    );
-
-    if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
-      setLocal(PRODUCTS_KEY, apiResult.data.products);
-      return apiResult.data.products;
-    }
-
-    // Filter locally
     let list = local.filter((p) => p.active !== 0 && p.active !== false);
 
     if (search.trim()) {
@@ -156,24 +180,20 @@ export const storeService = {
   },
 
   async getAllAdminProducts(adminPassword?: string): Promise<Product[]> {
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-
-    if (adminPassword) {
-      const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.products)) {
-        setLocal(PRODUCTS_KEY, apiResult.data.products);
-        return apiResult.data.products;
-      }
+    const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (apiResult.success && Array.isArray(apiResult.data?.products)) {
+      setLocal(PRODUCTS_KEY, apiResult.data.products);
+      return apiResult.data.products;
     }
 
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     return [...local].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
 
   async addProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product: Product }> {
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    const newId = `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+    const newId = productData.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
 
     const images = Array.isArray(productData.images) && productData.images.length > 0
       ? productData.images
@@ -201,32 +221,59 @@ export const storeService = {
       slug: productData.slug || (productData.name ? productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
       brand: productData.brand || 'Maxora',
       og_image: productData.og_image || productData.image_url || images[0],
-      created_at: new Date().toISOString(),
+      created_at: productData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    local.unshift(newProd);
-    setLocal(PRODUCTS_KEY, local);
+    // 1. Try Backend API FIRST
+    const apiResult = await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newProd),
+    });
 
-    if (adminPassword) {
-      tryApi('/api/admin/products', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
-        },
-        body: JSON.stringify(newProd),
-      });
+    let savedProduct = newProd;
+    if (apiResult.success && apiResult.data?.product) {
+      savedProduct = apiResult.data.product;
     }
 
-    return { success: true, product: newProd };
+    // 2. Update local storage
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const existingIdx = local.findIndex(p => String(p.id) === String(savedProduct.id));
+    if (existingIdx >= 0) {
+      local[existingIdx] = savedProduct;
+    } else {
+      local.unshift(savedProduct);
+    }
+    setLocal(PRODUCTS_KEY, local);
+
+    return { success: true, product: savedProduct };
   },
 
   async updateProduct(id: string | number, productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product?: Product }> {
     const idStr = String(id);
+
+    // 1. Try Backend API
+    const apiResult = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(productData),
+    });
+
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const index = local.findIndex((p) => String(p.id) === idStr);
 
+    if (apiResult.success && apiResult.data?.product) {
+      if (index !== -1) {
+        local[index] = apiResult.data.product;
+      } else {
+        local.unshift(apiResult.data.product);
+      }
+      setLocal(PRODUCTS_KEY, local);
+      return { success: true, product: apiResult.data.product };
+    }
+
+    // Fallback
     if (index === -1) {
       return { success: false };
     }
@@ -248,17 +295,6 @@ export const storeService = {
     local[index] = updated;
     setLocal(PRODUCTS_KEY, local);
 
-    if (adminPassword) {
-      tryApi(`/api/admin/products/${idStr}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
-        },
-        body: JSON.stringify(updated),
-      });
-    }
-
     return { success: true, product: updated };
   },
 
@@ -272,16 +308,14 @@ export const storeService = {
 
   async deleteProduct(id: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(id);
+    await tryApi(`/api/admin/products/${idStr}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    });
+
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const filtered = local.filter((p) => String(p.id) !== idStr);
     setLocal(PRODUCTS_KEY, filtered);
-
-    if (adminPassword) {
-      tryApi(`/api/admin/products/${idStr}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword },
-      });
-    }
 
     return { success: true };
   },

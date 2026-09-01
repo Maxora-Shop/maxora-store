@@ -288,6 +288,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setIsProductModalOpen(false);
       setEditingProduct(null);
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to save product: ' + err.message, 'error');
     } finally {
@@ -304,6 +305,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await storeService.deleteProduct(id, password);
       showToast('Product deleted', 'success');
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to delete product: ' + err.message, 'error');
     } finally {
@@ -321,6 +323,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         'success'
       );
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to update featured status: ' + err.message, 'error');
     }

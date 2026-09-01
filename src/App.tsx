@@ -63,6 +63,18 @@ export default function App() {
   useEffect(() => {
     fetchSettings();
     fetchProducts();
+
+    // Auto-refresh products when tab becomes active again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchProducts();
+        fetchSettings();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const fetchSettings = async () => {
