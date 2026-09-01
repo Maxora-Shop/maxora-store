@@ -707,21 +707,26 @@ app.post('/api/orders', (req, res) => {
 
   saveDB();
 
+  const fullOrderResponse = {
+    ...newOrder,
+    items: finalItems.map(i => ({
+      id: `item-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`,
+      order_id: orderId,
+      product_id: i.product.id,
+      product_name: i.product.name,
+      sku: i.product.sku || "",
+      quantity: i.quantity,
+      unit_price: i.unitPrice,
+      buying_price: i.buyingPrice,
+      line_total: i.lineTotal,
+      image_url: i.product.image_url
+    }))
+  };
+
   res.status(201).json({
     success: true,
     message: "Order placed successfully.",
-    order: {
-      id: orderId,
-      order_number: orderNo,
-      subtotal,
-      delivery_charge: deliveryCharge,
-      total,
-      items: finalItems.map(i => ({
-        name: i.product.name,
-        quantity: i.quantity,
-        price: i.unitPrice
-      }))
-    }
+    order: fullOrderResponse
   });
 });
 

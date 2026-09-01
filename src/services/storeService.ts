@@ -6,6 +6,24 @@ const PRODUCTS_KEY = 'maxora_products_v1';
 const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
 
+function notifyProductsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+  }
+}
+
+function notifySettingsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+  }
+}
+
+function notifyOrdersChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+  }
+}
+
 // Helpers for Local Storage
 function getLocal<T>(key: string, defaultValue: T): T {
   try {
@@ -46,7 +64,7 @@ export function initLocalStorage(): void {
 initLocalStorage();
 
 // Check if online API is reachable
-const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
+const DEFAULT_BACKEND_URL = 'https://ais-pre-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
   ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
   : (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) 
@@ -117,9 +135,11 @@ export const storeService = {
     if (apiRes.success && apiRes.data?.settings) {
       const merged = { ...updated, ...apiRes.data.settings };
       setLocal(SETTINGS_KEY, merged);
+      notifySettingsChanged();
       return { success: true, settings: merged };
     }
 
+    notifySettingsChanged();
     return { success: true, settings: updated };
   },
 
@@ -246,6 +266,7 @@ export const storeService = {
       local.unshift(savedProduct);
     }
     setLocal(PRODUCTS_KEY, local);
+    notifyProductsChanged();
 
     return { success: true, product: savedProduct };
   },
@@ -270,6 +291,7 @@ export const storeService = {
         local.unshift(apiResult.data.product);
       }
       setLocal(PRODUCTS_KEY, local);
+      notifyProductsChanged();
       return { success: true, product: apiResult.data.product };
     }
 
@@ -294,6 +316,7 @@ export const storeService = {
 
     local[index] = updated;
     setLocal(PRODUCTS_KEY, local);
+    notifyProductsChanged();
 
     return { success: true, product: updated };
   },
@@ -316,6 +339,7 @@ export const storeService = {
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const filtered = local.filter((p) => String(p.id) !== idStr);
     setLocal(PRODUCTS_KEY, filtered);
+    notifyProductsChanged();
 
     return { success: true };
   },
@@ -343,8 +367,14 @@ export const storeService = {
     if (apiResult.success && apiResult.data?.order) {
       // Also save to local store
       const localOrders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-      localOrders.unshift(apiResult.data.order);
+      const existingIdx = localOrders.findIndex(o => o.id === apiResult.data?.order?.id || o.order_number === apiResult.data?.order?.order_number);
+      if (existingIdx !== -1) {
+        localOrders[existingIdx] = apiResult.data.order;
+      } else {
+        localOrders.unshift(apiResult.data.order);
+      }
       setLocal(ORDERS_KEY, localOrders);
+      notifyOrdersChanged();
       return { success: true, order: apiResult.data.order };
     }
 
@@ -465,6 +495,7 @@ export const storeService = {
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
     orders.unshift(newOrder);
     setLocal(ORDERS_KEY, orders);
+    notifyOrdersChanged();
 
     return { success: true, order: newOrder };
   },
@@ -495,15 +526,15 @@ export const storeService = {
   },
 
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
-    if (adminPassword) {
-      const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
-      const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
-        setLocal(ORDERS_KEY, apiResult.data.orders);
-        return apiResult.data.orders;
-      }
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
+    const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
+      headers: { 'x-admin-password': pass },
+    });
+
+    if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
+      setLocal(ORDERS_KEY, apiResult.data.orders);
+      return apiResult.data.orders;
     }
 
     let orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
@@ -585,14 +616,13 @@ export const storeService = {
   },
 
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
-    if (adminPassword) {
-      const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.customers)) {
-        setLocal(CUSTOMERS_KEY, apiResult.data.customers);
-        return apiResult.data.customers;
-      }
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
+      headers: { 'x-admin-password': pass },
+    });
+    if (apiResult.success && Array.isArray(apiResult.data?.customers)) {
+      setLocal(CUSTOMERS_KEY, apiResult.data.customers);
+      return apiResult.data.customers;
     }
 
     const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
@@ -600,13 +630,12 @@ export const storeService = {
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {
-    if (adminPassword) {
-      const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (apiResult.success && apiResult.data?.totals) {
-        return apiResult.data.totals;
-      }
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
+      headers: { 'x-admin-password': pass },
+    });
+    if (apiResult.success && apiResult.data?.totals) {
+      return apiResult.data.totals;
     }
 
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);

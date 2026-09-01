@@ -114,6 +114,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     verifyAdminAuth();
   }, []);
 
+  // Listen for live order, product, and settings updates & auto-poll
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleOrdersUpdated = () => {
+      loadTabData(currentTab);
+    };
+
+    const handleProductsUpdated = () => {
+      if (currentTab === 'products' || currentTab === 'overview') {
+        loadTabData(currentTab);
+      }
+    };
+
+    // Listen for custom events and storage events
+    window.addEventListener('maxora_orders_updated', handleOrdersUpdated);
+    window.addEventListener('maxora_products_updated', handleProductsUpdated);
+    window.addEventListener('storage', handleOrdersUpdated);
+
+    // Auto-refresh orders every 10 seconds for real-time order tracking
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadTabData(currentTab);
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
+      window.removeEventListener('maxora_products_updated', handleProductsUpdated);
+      window.removeEventListener('storage', handleOrdersUpdated);
+      clearInterval(pollInterval);
+    };
+  }, [isAuthenticated, currentTab]);
+
   useEffect(() => {
     if (globalSettings) {
       setSettingsForm(globalSettings);

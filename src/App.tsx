@@ -87,10 +87,19 @@ export default function App() {
     }
   }, [settings]);
 
-  // Load Settings & Products on startup
+  // Load Settings & Products on startup and listen for live updates
   useEffect(() => {
     fetchSettings();
     fetchProducts();
+
+    // Live update listeners
+    const handleProductsUpdated = () => {
+      fetchProducts();
+    };
+
+    const handleSettingsUpdated = () => {
+      fetchSettings();
+    };
 
     // Auto-refresh products when tab becomes active again
     const handleVisibilityChange = () => {
@@ -99,11 +108,24 @@ export default function App() {
         fetchSettings();
       }
     };
+
+    window.addEventListener('maxora_products_updated', handleProductsUpdated);
+    window.addEventListener('maxora_settings_updated', handleSettingsUpdated);
+    window.addEventListener('storage', handleProductsUpdated);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      window.removeEventListener('maxora_products_updated', handleProductsUpdated);
+      window.removeEventListener('maxora_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('storage', handleProductsUpdated);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  // Re-fetch products when category or search or view changes
+  useEffect(() => {
+    fetchProducts();
+  }, [searchQuery, selectedCategory, isAdminView]);
 
   const fetchSettings = async () => {
     try {
