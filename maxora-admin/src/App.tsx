@@ -22,12 +22,21 @@ export default function App() {
     }
   };
 
+  const handleBackToStore = () => {
+    const storeUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STORE_URL) 
+      ? String((import.meta as any).env.VITE_STORE_URL) 
+      : 'https://maxora-store.vercel.app';
+    window.location.href = storeUrl;
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
       <AdminDashboard
         globalSettings={settings}
         onSettingsUpdated={() => fetchSettings()}
+        onBackToStore={handleBackToStore}
       />
     </div>
   );
 }
+
