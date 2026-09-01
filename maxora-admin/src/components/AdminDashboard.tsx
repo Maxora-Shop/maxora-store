@@ -60,10 +60,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Auth state
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState(
-    () => localStorage.getItem('maxora_admin_password') || '123456'
+    () => (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') || '' : '')
   );
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window === 'undefined') return false;
     return !!localStorage.getItem('maxora_admin_token') || !!localStorage.getItem('maxora_admin_password');
   });
   const [authError, setAuthError] = useState('');
@@ -111,7 +112,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Check auth on load
   useEffect(() => {
-    verifyAdminAuth();
+    const savedToken = localStorage.getItem('maxora_admin_token');
+    const savedPass = localStorage.getItem('maxora_admin_password');
+    if (savedToken || savedPass) {
+      verifyAdminAuth(savedPass || '123456');
+    }
   }, []);
 
   useEffect(() => {
@@ -123,24 +128,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const verifyAdminAuth = async (passToTry?: string, userToTry?: string) => {
     const p = passToTry !== undefined ? passToTry : password;
     const u = userToTry !== undefined ? userToTry : username;
+    
+    if (!p) {
+      setIsAuthenticated(false);
+      return;
+    }
+
     setAuthLoading(true);
     setAuthError('');
     try {
       // 1. Try modern login API
       try {
         const apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') : '';
-        const res = await fetch(`${apiBase}/api/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: u, password: p }),
-        });
-        const data = await res.json();
-        if (data.success && data.token) {
-          localStorage.setItem('maxora_admin_token', data.token);
-          localStorage.setItem('maxora_admin_password', p);
-          setIsAuthenticated(true);
-          loadTabData(currentTab, p);
-          return;
+        if (apiBase) {
+          const res = await fetch(`${apiBase}/api/admin/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: u, password: p }),
+          });
+          const data = await res.json();
+          if (data.success && data.token) {
+            localStorage.setItem('maxora_admin_token', data.token);
+            localStorage.setItem('maxora_admin_password', p);
+            setIsAuthenticated(true);
+            loadTabData(currentTab, p);
+            return;
+          }
         }
       } catch {
         // Local fallback
@@ -165,6 +178,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setAuthLoading(false);
     }
   };
+
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
