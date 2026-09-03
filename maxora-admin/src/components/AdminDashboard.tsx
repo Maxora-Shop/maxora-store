@@ -38,13 +38,71 @@ import {
   Layers,
   ArrowUpRight,
   ShieldCheck,
-  Percent
+  Percent,
+  Upload,
+  Image as ImageIcon,
+  Link2,
+  Copy,
+  Camera,
+  X
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
+
+// Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
+const compressAndReadImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Please select a valid image file (JPG, PNG, WEBP)'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const dataUrl = canvas.toDataURL('image/webp', 0.85);
+          resolve(dataUrl);
+        } catch {
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => reject(new Error('Failed to load image file'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+};
 
 interface AdminDashboardProps {
   onBackToStore: () => void;
@@ -101,6 +159,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [productModalTab, setProductModalTab] = useState<'general' | 'seo'>('general');
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
+
+  // Image & Product Link States
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageInputMode, setImageInputMode] = useState<'upload' | 'url'>('upload');
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+
+  const handleMainImageFileChange = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      setIsUploadingImage(true);
+      const dataUrl = await compressAndReadImage(file);
+      setEditingProduct((prev) => (prev ? { ...prev, image_url: dataUrl } : prev));
+      showToast('Product image uploaded successfully!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Image upload failed', 'error');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleGalleryImageUpload = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      setIsUploadingImage(true);
+      const dataUrl = await compressAndReadImage(file);
+      setEditingProduct((prev) => {
+        if (!prev) return prev;
+        const current = Array.isArray(prev.images) ? prev.images : [];
+        return { ...prev, images: [...current, dataUrl] };
+      });
+      showToast('Gallery image added!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Gallery image upload failed', 'error');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemoveGalleryImage = (index: number) => {
+    setEditingProduct((prev) => {
+      if (!prev) return prev;
+      const current = [...(Array.isArray(prev.images) ? prev.images : [])];
+      current.splice(index, 1);
+      return { ...prev, images: current };
+    });
+  };
 
   const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'marketing'>('general');
 
@@ -1149,6 +1253,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     stock: 10,
                     badge: 'NEW',
                     image_url: '',
+                    images: [],
+                    product_link: '',
                     description: '',
                     featured: 0,
                     active: 1,
@@ -1308,8 +1414,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => {
+                                  const directLink = p.product_link || `${window.location.origin}/?product=${p.id}`;
+                                  navigator.clipboard.writeText(directLink);
+                                  showToast('Product link copied to clipboard! (প্রোডাক্ট লিংক কপি হয়েছে)', 'success');
+                                }}
+                                className="p-1.5 text-zinc-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                title="Copy Product Direct Link (ক্লিক করে সরাসরি প্রোডাক্টের লিংক কপি করুন)"
+                              >
+                                <Link2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
                                   setEditingProduct({
                                     ...p,
+                                    product_link: p.product_link || '',
+                                    images: p.images || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
@@ -1330,6 +1449,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 onClick={() => {
                                   setEditingProduct({
                                     ...p,
+                                    product_link: p.product_link || '',
+                                    images: p.images || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
@@ -2157,17 +2278,221 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Product Image URL
-                    </label>
-                    <input
-                      type="url"
-                      placeholder="https://images.unsplash.com/..."
-                      value={editingProduct?.image_url || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, image_url: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
-                    />
+                  {/* Product Direct Link (প্রোডাক্টের সরাসরি লিংক) */}
+                  <div className="bg-zinc-50/90 p-4 rounded-2xl border border-zinc-200/90 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                        <Link2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Product Link / Direct URL (প্রোডাক্টের লিংক)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const directId = editingProduct?.id || (editingProduct?.name ? editingProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : 'product');
+                          const autoLink = `${window.location.origin}/?product=${directId}`;
+                          setEditingProduct({ ...editingProduct, product_link: autoLink });
+                          showToast('Storefront direct product link generated!', 'success');
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3" /> Auto Generate Storefront Link
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="e.g. https://yourdomain.com/?product=watch-01 or custom landing link"
+                          value={editingProduct?.product_link || ''}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, product_link: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                        <Link2 className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                      </div>
+                      {editingProduct?.product_link && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(editingProduct.product_link || '');
+                            showToast('Product link copied to clipboard!', 'success');
+                          }}
+                          className="px-3.5 py-2.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                          title="Copy Link"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Facebook বা WhatsApp ক্যাম্পেইনের জন্য সরাসরি এই প্রোডাক্ট পেজে কাস্টমার আনার লিংক।
+                    </p>
+                  </div>
+
+                  {/* Product Image Section: Direct Device Upload + Live Preview + URL Toggle */}
+                  <div className="bg-zinc-50/90 p-4 rounded-2xl border border-zinc-200/90 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Product Image (প্রোডাক্টের সরাসরি ছবি) *</span>
+                      </label>
+                      <div className="flex items-center bg-zinc-200/90 p-0.5 rounded-lg text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setImageInputMode('upload')}
+                          className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                            imageInputMode === 'upload' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
+                          }`}
+                        >
+                          Upload from Device
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImageInputMode('url')}
+                          className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                            imageInputMode === 'url' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
+                          }`}
+                        >
+                          Web URL
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Current Main Image Preview Card */}
+                    {editingProduct?.image_url && (
+                      <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-zinc-200 shadow-xs">
+                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 shadow-inner">
+                          <img
+                            src={editingProduct.image_url}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <p className="text-xs font-bold text-zinc-900 truncate">Main Photo Set</p>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                            {editingProduct.image_url.startsWith('data:') ? 'Uploaded directly from device' : editingProduct.image_url}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg text-xs font-bold cursor-pointer transition-colors inline-flex items-center gap-1">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Change</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleMainImageFileChange(file);
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setEditingProduct({ ...editingProduct, image_url: '' })}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                            title="Remove Photo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Upload Box: Drag and Drop or Direct Device File Picker */}
+                    {imageInputMode === 'upload' && !editingProduct?.image_url && (
+                      <label
+                        onDragOver={(e) => { e.preventDefault(); setIsDraggingImage(true); }}
+                        onDragLeave={() => setIsDraggingImage(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingImage(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) handleMainImageFileChange(file);
+                        }}
+                        className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+                          isDraggingImage ? 'border-emerald-500 bg-emerald-50/60' : 'border-zinc-300 hover:border-zinc-900 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleMainImageFileChange(file);
+                          }}
+                        />
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 shadow-xs">
+                          {isUploadingImage ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Camera className="w-6 h-6" />}
+                        </div>
+                        <p className="text-xs font-bold text-zinc-900">
+                          {isUploadingImage ? 'Processing & Optimizing Image...' : 'Click to Choose Photo from Device / Gallery'}
+                        </p>
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          সরাসরি মোবাইল বা কম্পিউটার থেকে ছবি সিলেক্ট বা ড্র্যাগ করুন (JPG, PNG, WEBP)
+                        </p>
+                      </label>
+                    )}
+
+                    {/* URL Input Mode */}
+                    {imageInputMode === 'url' && (
+                      <div className="space-y-1">
+                        <input
+                          type="url"
+                          placeholder="https://images.unsplash.com/photo-..."
+                          value={editingProduct?.image_url || ''}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, image_url: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                        <p className="text-[10px] text-zinc-500">অনলাইন কোনো ছবি থাকলে তার লিংক এখানে পেস্ট করতে পারেন।</p>
+                      </div>
+                    )}
+
+                    {/* Additional Gallery Photos */}
+                    <div className="pt-3 border-t border-zinc-200/80">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-zinc-700">More Gallery Photos (অতিরিক্ত ছবি)</span>
+                        <label className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline inline-flex items-center gap-1 cursor-pointer">
+                          <Plus className="w-3.5 h-3.5" /> Upload More
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleGalleryImageUpload(file);
+                            }}
+                          />
+                        </label>
+                      </div>
+
+                      {Array.isArray(editingProduct?.images) && editingProduct.images.length > 0 && (
+                        <div className="flex flex-wrap gap-2.5">
+                          {editingProduct.images.map((img, idx) => (
+                            <div key={idx} className="relative w-14 h-14 rounded-xl overflow-hidden border border-zinc-300 bg-white group shadow-xs">
+                              <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveGalleryImage(idx)}
+                                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs shadow-md hover:scale-110 transition-transform cursor-pointer"
+                                title="Delete photo"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>

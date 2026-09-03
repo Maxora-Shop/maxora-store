@@ -6,6 +6,7 @@ export interface Product {
   sku?: string;
   image_url: string;
   images?: string[];
+  product_link?: string;
   buying_price: number;
   selling_price: number;
   discount: number;
