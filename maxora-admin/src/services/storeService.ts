@@ -221,7 +221,10 @@ export const storeService = {
           p.name.toLowerCase().includes(q) ||
           (p.description && p.description.toLowerCase().includes(q)) ||
           (p.sku && p.sku.toLowerCase().includes(q)) ||
-          p.category.toLowerCase().includes(q)
+          p.category.toLowerCase().includes(q) ||
+          (p.sub_category && p.sub_category.toLowerCase().includes(q)) ||
+          (p.child_category && p.child_category.toLowerCase().includes(q)) ||
+          (p.meta_keywords && p.meta_keywords.toLowerCase().includes(q))
       );
     }
 

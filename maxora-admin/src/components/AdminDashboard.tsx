@@ -44,7 +44,9 @@ import {
   Link2,
   Copy,
   Camera,
-  X
+  X,
+  Tag,
+  Hash
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -543,7 +545,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.product_type && p.product_type.toLowerCase().includes(productSearch.toLowerCase()));
+      (p.product_type && p.product_type.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (p.meta_keywords && p.meta_keywords.toLowerCase().includes(productSearch.toLowerCase()));
     const matchesCategory =
       productCategoryFilter === '' || p.category === productCategoryFilter;
     const matchesStatus =
@@ -1379,6 +1382,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   {p.product_type}
                                 </span>
                               )}
+                              {p.meta_keywords && (
+                                <span
+                                  className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[9px] font-bold border border-emerald-200/70 w-fit"
+                                  title={`Google SEO: ${p.meta_keywords}`}
+                                >
+                                  <Tag className="w-2.5 h-2.5" />
+                                  <span>SEO ({p.meta_keywords.split(',').filter((k: string) => k.trim()).length})</span>
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="p-4 font-mono text-zinc-500">{p.sku || '-'}</td>
@@ -1462,11 +1474,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   setProductModalTab('seo');
                                   setIsProductModalOpen(true);
                                 }}
-                                className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                title="SEO & Meta Tags"
+                                className={`px-2 py-1 ${
+                                  p.meta_keywords
+                                    ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80'
+                                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                } rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer`}
+                                title={p.meta_keywords ? `Google SEO Keywords: ${p.meta_keywords}` : 'Configure Google SEO & Keywords'}
                               >
                                 <Globe className="w-3.5 h-3.5" />
-                                SEO
+                                <span>SEO {p.meta_keywords ? '✓' : ''}</span>
                               </button>
                               <button
                                 onClick={() => {
@@ -2172,13 +2188,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setProductModalTab('seo')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                       productModalTab === 'seo'
                         ? 'bg-white text-zinc-950 shadow-xs'
                         : 'text-zinc-600 hover:text-zinc-900'
                     }`}
                   >
-                    Google SEO
+                    <span>Google SEO</span>
+                    {editingProduct?.meta_keywords && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100"></span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2629,6 +2648,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
 
+                  {/* Quick Shortcut to Google SEO */}
+                  <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 font-bold">
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-extrabold text-blue-950">Google SEO & Search Keywords (গুগল এসইও কি-ওয়ার্ড)</p>
+                        <p className="text-[11px] text-blue-700 truncate">
+                          {editingProduct?.meta_keywords
+                            ? `${editingProduct.meta_keywords.split(',').filter(k => k.trim()).length} টি কি-ওয়ার্ড কনফিগার করা আছে`
+                            : 'গুগল সার্চ ও শপিংয়ে দ্রুত খুঁজে পেতে কি-ওয়ার্ড যুক্ত করুন'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProductModalTab('seo')}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 flex items-center gap-1"
+                    >
+                      <span>এসইও কি-ওয়ার্ড</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-6 pt-2">
                     <label className="flex items-center gap-2 text-xs font-bold text-zinc-700 cursor-pointer">
                       <input
@@ -2654,36 +2698,257 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ) : (
                 /* SEO Tab */
                 <div className="space-y-4">
+                  {/* Google SEO Introduction Card */}
+                  <div className="bg-blue-50/80 border border-blue-200 p-4 rounded-2xl flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-extrabold text-blue-950">Google SEO & Search Rankings (গুগল এসইও কনফিগারেশন)</h4>
+                      <p className="text-[11px] text-blue-700 leading-relaxed mt-0.5">
+                        গুগল ও অন্যান্য সার্চ ইঞ্জিনে আপনার প্রোডাক্ট সবার উপরে র্যাংক করানোর জন্য কি-ওয়ার্ড, মেটা টাইটেল এবং মেটা ডেসক্রিপশন সেট করুন।
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 1. Google SEO Keywords (প্রোডাক্ট কি-ওয়ার্ড ও সার্চ ট্যাগ) */}
+                  <div className="bg-zinc-50/90 p-4 rounded-2xl border border-zinc-200/90 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <label className="text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Google SEO Product Keywords (প্রোডাক্ট কি-ওয়ার্ড) *</span>
+                        </label>
+                        <p className="text-[11px] text-zinc-500">
+                          কমা (,) দিয়ে একাধিক সার্চ কি-ওয়ার্ড লিখুন (যেমন: smart watch bd, amoled calling watch, best watch price)
+                        </p>
+                      </div>
+                      
+                      {/* Auto-generate Keywords Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editingProduct) return;
+                          const name = (editingProduct.name || '').trim();
+                          const cat = (editingProduct.category || '').trim();
+                          const subCat = (editingProduct.sub_category || '').trim();
+                          const childCat = (editingProduct.child_category || '').trim();
+                          
+                          const baseList: string[] = [];
+                          if (name) {
+                            baseList.push(name);
+                            baseList.push(`${name} price in bd`);
+                            baseList.push(`buy ${name} online`);
+                            baseList.push(`original ${name}`);
+                          }
+                          if (subCat) {
+                            baseList.push(subCat);
+                            baseList.push(`best ${subCat} in bangladesh`);
+                          }
+                          if (childCat) {
+                            baseList.push(childCat);
+                          }
+                          if (cat) {
+                            baseList.push(`${cat} shop in bd`);
+                          }
+                          baseList.push('cash on delivery bangladesh');
+                          baseList.push('official warranty bd');
+
+                          // Merge with existing keywords without duplicates
+                          const existing = (editingProduct.meta_keywords || '')
+                            .split(',')
+                            .map(k => k.trim())
+                            .filter(Boolean);
+                          const combined = Array.from(new Set([...existing, ...baseList])).join(', ');
+                          setEditingProduct({ ...editingProduct, meta_keywords: combined });
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Auto-Suggest Keywords</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      placeholder="e.g. smart watch bd, amoled smartwatch, calling watch, bluetooth watch price in bangladesh, ultra watch series 9"
+                      value={editingProduct?.meta_keywords || ''}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, meta_keywords: e.target.value })}
+                      className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 leading-relaxed"
+                    />
+
+                    {/* Active Keyword Chips Preview */}
+                    {editingProduct?.meta_keywords && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-zinc-700 flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-zinc-400" />
+                            Active Google Keywords ({editingProduct.meta_keywords.split(',').map(k => k.trim()).filter(Boolean).length}):
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingProduct({ ...editingProduct, meta_keywords: '' })}
+                            className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-white rounded-xl border border-zinc-200/80">
+                          {editingProduct.meta_keywords
+                            .split(',')
+                            .map((k) => k.trim())
+                            .filter(Boolean)
+                            .map((kw, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded-lg text-xs font-semibold"
+                              >
+                                <span>{kw}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const filtered = editingProduct.meta_keywords
+                                      ?.split(',')
+                                      .map(k => k.trim())
+                                      .filter((k, i) => i !== idx && k.length > 0)
+                                      .join(', ');
+                                    setEditingProduct({ ...editingProduct, meta_keywords: filtered || '' });
+                                  }}
+                                  className="w-3.5 h-3.5 rounded-full hover:bg-emerald-200 text-emerald-900 flex items-center justify-center cursor-pointer ml-0.5"
+                                  title="Remove keyword"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Add Popular SEO Terms */}
+                    <div className="pt-2 border-t border-zinc-200/80">
+                      <p className="text-[11px] font-bold text-zinc-500 mb-1.5">Quick Add Search Modifiers (ক্লিক করলেই যুক্ত হবে):</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          'Price in BD',
+                          'Best Price in Bangladesh',
+                          'Cash on Delivery',
+                          'Original Authentic',
+                          'Official Warranty',
+                          'Online Shopping BD',
+                          'Fast Home Delivery'
+                        ].map((term) => (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => {
+                              if (!editingProduct) return;
+                              const existing = (editingProduct.meta_keywords || '')
+                                .split(',')
+                                .map(k => k.trim())
+                                .filter(Boolean);
+                              const fullTerm = editingProduct.name ? `${editingProduct.name} ${term}` : term;
+                              if (!existing.includes(fullTerm)) {
+                                existing.push(fullTerm);
+                                setEditingProduct({ ...editingProduct, meta_keywords: existing.join(', ') });
+                              }
+                            }}
+                            className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-[11px] font-medium border border-zinc-200 transition-colors cursor-pointer"
+                          >
+                            + {term}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. SEO Meta Title */}
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      SEO Meta Title (Google Search Title)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-zinc-700">
+                        SEO Meta Title (Google Search Title)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editingProduct?.name) return;
+                          setEditingProduct({
+                            ...editingProduct,
+                            meta_title: `${editingProduct.name} Price in Bangladesh | Maxora`
+                          });
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Auto-fill from Name
+                      </button>
+                    </div>
                     <input
                       type="text"
-                      placeholder="e.g. Buy Ultra Smart Watch Online in BD | Maxora"
+                      placeholder="e.g. Maxora Ultra Smartwatch Series 9 Price in BD | Official Store"
                       value={editingProduct?.meta_title || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, meta_title: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
+                    <div className="flex justify-between items-center text-[10px] text-zinc-400 mt-1">
+                      <span>গুগল সার্চ ফলাফলের প্রধান শিরোনাম হিসেবে দেখা যাবে।</span>
+                      <span>{(editingProduct?.meta_title || '').length} / 60 characters</span>
+                    </div>
                   </div>
 
+                  {/* 3. SEO Meta Description */}
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      SEO Meta Description (Google Snippet)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-zinc-700">
+                        SEO Meta Description (Google Snippet)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editingProduct) return;
+                          const name = editingProduct.name || 'Product';
+                          const desc = editingProduct.description || '';
+                          const snippet = `Buy genuine ${name} at best price in Bangladesh. ${desc.slice(0, 80)}... Cash on delivery available across BD with official warranty. Order online at Maxora.`;
+                          setEditingProduct({
+                            ...editingProduct,
+                            meta_description: snippet
+                          });
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Auto-fill Snippet
+                      </button>
+                    </div>
                     <textarea
                       rows={2}
-                      placeholder="High quality genuine smartwatch in Bangladesh with Cash on delivery..."
+                      placeholder="Buy genuine smartwatch in Bangladesh with best price. 100% original product with fast home delivery and cash on delivery at Maxora..."
                       value={editingProduct?.meta_description || ''}
                       onChange={(e) => setEditingProduct({ ...editingProduct, meta_description: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 resize-none"
+                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 resize-none focus:outline-none focus:border-zinc-900"
                     />
+                    <div className="flex justify-between items-center text-[10px] text-zinc-400 mt-1">
+                      <span>গুগলে সার্চ করার পর শিরোনামের নিচে এই বর্ণনাটি দেখা যাবে।</span>
+                      <span>{(editingProduct?.meta_description || '').length} / 160 characters</span>
+                    </div>
                   </div>
 
+                  {/* 4. URL Slug */}
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      URL Slug
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-zinc-700">
+                        URL Slug (ওয়েব পেজ লিংক)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editingProduct?.name) return;
+                          const slug = editingProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                          setEditingProduct({ ...editingProduct, slug });
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                      >
+                        Generate Slug
+                      </button>
+                    </div>
                     <input
                       type="text"
                       placeholder="ultra-smart-watch-series-9"
@@ -2691,6 +2956,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-mono"
                     />
+                  </div>
+
+                  {/* 5. Live Google Search Snippet Preview */}
+                  <div className="p-4 bg-white rounded-2xl border border-zinc-200 shadow-xs space-y-2">
+                    <span className="text-xs font-extrabold text-zinc-700 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Live Google Search Preview (গুগল সার্চে যেমন দেখাবে):</span>
+                    </span>
+                    <div className="p-3 bg-zinc-50/70 rounded-xl border border-zinc-200/90 font-sans">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-4 h-4 rounded-full bg-zinc-900 text-white text-[9px] font-bold flex items-center justify-center">
+                          M
+                        </div>
+                        <div className="text-[11px] text-zinc-600 truncate">
+                          <span>maxora.com</span>
+                          <span className="text-zinc-400 mx-1">›</span>
+                          <span className="text-zinc-500">product</span>
+                          <span className="text-zinc-400 mx-1">›</span>
+                          <span className="text-zinc-700 font-mono">{editingProduct?.slug || 'product-slug'}</span>
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-semibold text-blue-700 hover:underline truncate cursor-pointer">
+                        {editingProduct?.meta_title || editingProduct?.name || 'Maxora Premium Product - Buy Online in BD'}
+                      </h4>
+                      <p className="text-xs text-zinc-600 line-clamp-2 mt-1 leading-relaxed">
+                        {editingProduct?.meta_description || editingProduct?.description || 'Discover genuine products in Bangladesh at best prices with nationwide cash on delivery.'}
+                      </p>
+                      {editingProduct?.meta_keywords && (
+                        <div className="mt-2 pt-2 border-t border-zinc-200/70 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] text-zinc-400 font-semibold">Indexed Keywords:</span>
+                          {editingProduct.meta_keywords
+                            .split(',')
+                            .slice(0, 4)
+                            .map((k, i) => (
+                              <span key={i} className="text-[10px] bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-medium border border-blue-100">
+                                {k.trim()}
+                              </span>
+                            ))}
+                          {editingProduct.meta_keywords.split(',').length > 4 && (
+                            <span className="text-[10px] text-zinc-400">
+                              +{editingProduct.meta_keywords.split(',').length - 4} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

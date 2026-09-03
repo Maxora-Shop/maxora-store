@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, ShoppingBag, Truck, ShieldCheck, Check, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ShoppingBag, Truck, ShieldCheck, Check, ArrowRight, Tag } from 'lucide-react';
 import { Product } from '../types';
 
 interface ProductQuickViewProps {
@@ -21,6 +21,51 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
   const [selectedImage, setSelectedImage] = useState<string>(
     product.image_url || (product.images && product.images[0]) || ""
   );
+
+  // Dynamic Google SEO tags insertion when product modal opens
+  useEffect(() => {
+    if (!product) return;
+    const prevTitle = document.title;
+    if (product.meta_title) {
+      document.title = product.meta_title;
+    } else if (product.name) {
+      document.title = `${product.name} | Maxora Bangladesh`;
+    }
+
+    // Update or add meta keywords
+    let kwMeta = document.querySelector('meta[name="keywords"]');
+    if (!kwMeta && product.meta_keywords) {
+      kwMeta = document.createElement('meta');
+      kwMeta.setAttribute('name', 'keywords');
+      document.head.appendChild(kwMeta);
+    }
+    const prevKeywords = kwMeta ? kwMeta.getAttribute('content') : null;
+    if (kwMeta && product.meta_keywords) {
+      kwMeta.setAttribute('content', product.meta_keywords);
+    }
+
+    // Update or add meta description
+    let descMeta = document.querySelector('meta[name="description"]');
+    if (!descMeta && (product.meta_description || product.description)) {
+      descMeta = document.createElement('meta');
+      descMeta.setAttribute('name', 'description');
+      document.head.appendChild(descMeta);
+    }
+    const prevDesc = descMeta ? descMeta.getAttribute('content') : null;
+    if (descMeta && (product.meta_description || product.description)) {
+      descMeta.setAttribute('content', product.meta_description || product.description || '');
+    }
+
+    return () => {
+      document.title = prevTitle;
+      if (kwMeta && prevKeywords !== null) {
+        kwMeta.setAttribute('content', prevKeywords);
+      }
+      if (descMeta && prevDesc !== null) {
+        descMeta.setAttribute('content', prevDesc);
+      }
+    };
+  }, [product]);
 
   const allImages = Array.isArray(product.images) && product.images.length > 0
     ? product.images
@@ -118,9 +163,33 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
             </div>
 
             {/* Description */}
-            <div className="text-xs sm:text-sm text-zinc-700 leading-relaxed mb-6">
+            <div className="text-xs sm:text-sm text-zinc-700 leading-relaxed mb-4">
               {product.description || "High quality guaranteed. Designed for durability and performance."}
             </div>
+
+            {/* Google SEO Tags / Product Keywords */}
+            {product.meta_keywords && (
+              <div className="mb-4">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-zinc-500 flex items-center gap-1 mr-1">
+                    <Tag className="w-3 h-3 text-zinc-400" />
+                    Keywords:
+                  </span>
+                  {product.meta_keywords
+                    .split(',')
+                    .map((k) => k.trim())
+                    .filter(Boolean)
+                    .map((kw, i) => (
+                      <span
+                        key={i}
+                        className="inline-block text-[10px] font-medium bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded-md border border-zinc-200 transition-colors"
+                      >
+                        #{kw}
+                      </span>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Reassurance points */}
             <div className="space-y-2 text-xs text-zinc-700 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/60 mb-6">
