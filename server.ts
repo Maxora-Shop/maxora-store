@@ -451,6 +451,17 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   next();
 }
 
+// GET /api/download-admin-zip - allows user to download the full maxora-admin folder as a zip archive
+app.get('/api/download-admin-zip', (req, res) => {
+  const zipPath = path.join(process.cwd(), 'maxora-admin.zip');
+  if (fs.existsSync(zipPath)) {
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="maxora-admin.zip"');
+    return res.sendFile(zipPath);
+  }
+  return res.status(404).json({ error: 'maxora-admin.zip not found' });
+});
+
 // POST /api/admin/login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body || {};
