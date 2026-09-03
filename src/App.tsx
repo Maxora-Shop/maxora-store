@@ -14,7 +14,7 @@ import { Product, CartItem, StoreSettings } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, Lock } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag } from 'lucide-react';
 
 export default function App() {
   // Admin View State

@@ -1,5 +1,16 @@
 import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS } from '../data/initialData';
+import { db } from '../firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+} from 'firebase/firestore';
 
 const SETTINGS_KEY = 'maxora_settings_v1';
 const PRODUCTS_KEY = 'maxora_products_v1';
@@ -26,6 +37,24 @@ function setLocal<T>(key: string, value: T): void {
   }
 }
 
+function notifyProductsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+  }
+}
+
+function notifySettingsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+  }
+}
+
+function notifyOrdersChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+  }
+}
+
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
   if (!localStorage.getItem(SETTINGS_KEY)) {
@@ -42,103 +71,118 @@ export function initLocalStorage(): void {
   }
 }
 
-// Initialize immediately
 initLocalStorage();
 
-export const DEFAULT_BACKEND_URL = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
+// Realtime Firestore Listeners
+let isListening = false;
+export function initRealtimeFirestoreListeners() {
+  if (isListening || typeof window === 'undefined') return;
+  isListening = true;
 
-export function getApiBaseUrl(): string {
-  const envUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
-    ? String((import.meta as any).env.VITE_API_URL).trim() 
-    : '';
-  if (envUrl && envUrl.startsWith('http')) {
-    return envUrl.replace(/\/$/, '');
-  }
-  const custom = (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) 
-    ? String(localStorage.getItem('maxora_backend_url')).trim() 
-    : '';
-  if (custom && custom.startsWith('http')) {
-    return custom.replace(/\/$/, '');
-  }
-  return DEFAULT_BACKEND_URL;
-}
-
-export function getAuthHeaders(adminPassword?: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
-  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
-
-  if (pass) {
-    headers['x-admin-password'] = pass;
-    headers['Authorization'] = `Bearer ${pass}`;
-  }
-  if (token) {
-    headers['x-admin-token'] = token;
-  }
-  return headers;
-}
-
-async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
-    const base = getApiBaseUrl();
-    const fullUrl = url.startsWith('http') ? url : `${base}${url}`;
-    const defaultHeaders = getAuthHeaders();
-    const res = await fetch(fullUrl, {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...(options?.headers || {}),
-      },
-    });
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => null);
-      return { success: false, error: errJson?.error || res.statusText };
-    }
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return { success: true };
-    }
-    const json = await res.json();
-    return { success: true, data: json };
-  } catch (err: any) {
-    console.warn(`[StoreService API Error] ${url}:`, err);
-    return { success: false, error: err?.message };
+    // 1. Listen for product changes in Firestore
+    onSnapshot(collection(db, 'products'), (snapshot) => {
+      const prods: Product[] = [];
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data() as Product;
+        prods.push({ ...d, id: d.id || docSnap.id });
+      });
+      prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }, (err) => console.warn('Admin Products Firestore listener warning:', err));
+
+    // 2. Listen for settings changes
+    onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
+      if (docSnap.exists()) {
+        const settings = docSnap.data() as StoreSettings;
+        setLocal(SETTINGS_KEY, settings);
+        notifySettingsChanged();
+      }
+    }, (err) => console.warn('Admin Settings Firestore listener warning:', err));
+
+    // 3. Listen for orders changes
+    onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const orders: Order[] = [];
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data() as Order;
+        orders.push({ ...d, id: d.id || docSnap.id });
+      });
+      if (orders.length > 0) {
+        orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        setLocal(ORDERS_KEY, orders);
+        notifyOrdersChanged();
+      }
+    }, (err) => console.warn('Admin Orders Firestore listener warning:', err));
+  } catch (err) {
+    console.warn('Admin Realtime listener error:', err);
   }
 }
+
+initRealtimeFirestoreListeners();
+
+// Seed initial products to Firestore if empty
+let isSeeding = false;
+async function seedInitialDataIfNeeded() {
+  if (isSeeding) return;
+  try {
+    const settingsDoc = await getDoc(doc(db, 'settings', 'store_settings'));
+    if (settingsDoc.exists() && (settingsDoc.data() as any)?.seeded_v1) {
+      return; // Already initialized, never re-seed
+    }
+    const prodSnap = await getDocs(collection(db, 'products'));
+    if (prodSnap.empty) {
+      isSeeding = true;
+      const batch = writeBatch(db);
+      for (const p of INITIAL_PRODUCTS) {
+        const ref = doc(db, 'products', String(p.id));
+        batch.set(ref, p);
+      }
+      await batch.commit();
+      console.log('[Admin] Seeded initial products to Firestore');
+    }
+    await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
+  } catch (e) {
+    console.warn('[Admin] Firestore seeding check error:', e);
+  } finally {
+    isSeeding = false;
+  }
+}
+
+seedInitialDataIfNeeded();
 
 export const storeService = {
   // 1. SETTINGS
   async getSettings(): Promise<StoreSettings> {
     const local = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-    if (apiResult.success && apiResult.data?.settings) {
-      const merged = { ...local, ...apiResult.data.settings };
-      setLocal(SETTINGS_KEY, merged);
-      return merged;
+    try {
+      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+      if (docSnap.exists()) {
+        const firestoreSettings = docSnap.data() as StoreSettings;
+        const merged = { ...local, ...firestoreSettings };
+        setLocal(SETTINGS_KEY, merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('Firestore getSettings error:', e);
     }
     return local;
   },
 
-  async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
+  async updateSettings(newSettings: Partial<StoreSettings>, _adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const updated = { ...current, ...newSettings };
     setLocal(SETTINGS_KEY, updated);
 
-    // Try API
-    const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newSettings),
-    });
-
-    if (apiRes.success && apiRes.data?.settings) {
-      const merged = { ...updated, ...apiRes.data.settings };
-      setLocal(SETTINGS_KEY, merged);
-      return { success: true, settings: merged };
+    // Save directly to Cloud Firestore
+    try {
+      await setDoc(doc(db, 'settings', 'store_settings'), updated, { merge: true });
+      console.log('[Admin] Settings saved to Cloud Firestore');
+    } catch (e) {
+      console.warn('Firestore updateSettings error:', e);
     }
 
+    notifySettingsChanged();
     return { success: true, settings: updated };
   },
 
@@ -148,25 +192,27 @@ export const storeService = {
 
   // 2. PRODUCTS
   async getProducts(search = '', category = ''): Promise<Product[]> {
-    const apiResult = await tryApi<{ success: boolean; products: Product[] }>(
-      `/api/products?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}`
-    );
-
-    if (apiResult.success && Array.isArray(apiResult.data?.products)) {
-      if (apiResult.data.products.length > 0) {
-        setLocal(PRODUCTS_KEY, apiResult.data.products);
+    let prods: Product[] = [];
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      if (!snap.empty) {
+        snap.forEach((d) => {
+          const p = d.data() as Product;
+          prods.push({ ...p, id: p.id || d.id });
+        });
+        if (prods.length > 0) {
+          setLocal(PRODUCTS_KEY, prods);
+        }
       }
-      return apiResult.data.products;
+    } catch (e) {
+      console.warn('Firestore getProducts error:', e);
     }
 
-    // Filter locally
-    let local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    if (!local || local.length === 0) {
-      local = INITIAL_PRODUCTS;
-      setLocal(PRODUCTS_KEY, local);
+    if (prods.length === 0) {
+      prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     }
 
-    let list = local.filter((p) => p.active !== 0 && p.active !== false);
+    let list = prods.filter((p) => p.active !== 0 && p.active !== false);
 
     if (search.trim()) {
       const q = search.toLowerCase().trim();
@@ -200,21 +246,31 @@ export const storeService = {
     });
   },
 
-  async getAllAdminProducts(adminPassword?: string): Promise<Product[]> {
-    const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
-      headers: getAuthHeaders(adminPassword),
-    });
-    if (apiResult.success && Array.isArray(apiResult.data?.products)) {
-      setLocal(PRODUCTS_KEY, apiResult.data.products);
-      return apiResult.data.products;
+  async getAllAdminProducts(_adminPassword?: string): Promise<Product[]> {
+    let prods: Product[] = [];
+    let firestoreLoaded = false;
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      firestoreLoaded = true;
+      snap.forEach((d) => {
+        const p = d.data() as Product;
+        prods.push({ ...p, id: String(p.id || d.id) });
+      });
+      setLocal(PRODUCTS_KEY, prods);
+      return prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    } catch (e) {
+      console.warn('Firestore getAllAdminProducts error:', e);
     }
 
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    return [...local].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    if (!firestoreLoaded) {
+      const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      return [...local].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    }
+    return prods;
   },
 
-  async addProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product: Product }> {
-    const newId = productData.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+  async addProduct(productData: Partial<Product>, _adminPassword?: string): Promise<{ success: boolean; product: Product }> {
+    const newId = String(productData.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`);
 
     const images = Array.isArray(productData.images) && productData.images.length > 0
       ? productData.images
@@ -246,75 +302,64 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Try Backend API FIRST
-    const apiResult = await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
-      method: 'POST',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newProd),
-    });
-
-    let savedProduct = newProd;
-    if (apiResult.success && apiResult.data?.product) {
-      savedProduct = apiResult.data.product;
+    // 1. Save directly to Cloud Firestore
+    try {
+      await setDoc(doc(db, 'products', newId), newProd);
+      console.log('[Admin] Product saved to Cloud Firestore:', newId);
+    } catch (e) {
+      console.warn('Firestore addProduct error:', e);
     }
 
     // 2. Update local storage
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    const existingIdx = local.findIndex(p => String(p.id) === String(savedProduct.id));
+    const existingIdx = local.findIndex(p => String(p.id) === newId);
     if (existingIdx >= 0) {
-      local[existingIdx] = savedProduct;
+      local[existingIdx] = newProd;
     } else {
-      local.unshift(savedProduct);
+      local.unshift(newProd);
     }
     setLocal(PRODUCTS_KEY, local);
+    notifyProductsChanged();
 
-    return { success: true, product: savedProduct };
+    return { success: true, product: newProd };
   },
 
-  async updateProduct(id: string | number, productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product?: Product }> {
+  async updateProduct(id: string | number, productData: Partial<Product>, _adminPassword?: string): Promise<{ success: boolean; product?: Product }> {
     const idStr = String(id);
-
-    // 1. Try Backend API
-    const apiResult = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(productData),
-    });
-
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const index = local.findIndex((p) => String(p.id) === idStr);
 
-    if (apiResult.success && apiResult.data?.product) {
-      if (index !== -1) {
-        local[index] = apiResult.data.product;
-      } else {
-        local.unshift(apiResult.data.product);
-      }
-      setLocal(PRODUCTS_KEY, local);
-      return { success: true, product: apiResult.data.product };
-    }
-
-    // Fallback
-    if (index === -1) {
-      return { success: false };
-    }
-
-    const current = local[index];
-    const sellingPrice = productData.selling_price !== undefined ? Number(productData.selling_price) : Number(current.selling_price);
-    const discount = productData.discount !== undefined ? Number(productData.discount) : Number(current.discount);
+    let current = index !== -1 ? local[index] : (INITIAL_PRODUCTS.find(p => String(p.id) === idStr) || {} as Product);
+    const sellingPrice = productData.selling_price !== undefined ? Number(productData.selling_price) : Number(current.selling_price || 0);
+    const discount = productData.discount !== undefined ? Number(productData.discount) : Number(current.discount || 0);
 
     const updated: Product = {
       ...current,
       ...productData,
+      id: idStr,
       selling_price: sellingPrice,
       discount: discount,
       final_price: Math.max(0, sellingPrice - discount),
-      stock: productData.stock !== undefined ? Number(productData.stock) : Number(current.stock),
+      stock: productData.stock !== undefined ? Number(productData.stock) : Number(current.stock || 0),
       updated_at: new Date().toISOString(),
     };
 
-    local[index] = updated;
+    // 1. Update in Cloud Firestore
+    try {
+      await setDoc(doc(db, 'products', idStr), updated, { merge: true });
+      console.log('[Admin] Product updated in Cloud Firestore:', idStr);
+    } catch (e) {
+      console.warn('Firestore updateProduct error:', e);
+    }
+
+    // 2. Update local storage
+    if (index !== -1) {
+      local[index] = updated;
+    } else {
+      local.unshift(updated);
+    }
     setLocal(PRODUCTS_KEY, local);
+    notifyProductsChanged();
 
     return { success: true, product: updated };
   },
@@ -327,39 +372,56 @@ export const storeService = {
     }
   },
 
-  async deleteProduct(id: string | number, adminPassword?: string): Promise<{ success: boolean }> {
+  async deleteProduct(id: string | number, _adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(id);
-    await tryApi(`/api/admin/products/${idStr}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(adminPassword),
-    });
 
+    // 1. Delete from Cloud Firestore
+    try {
+      await deleteDoc(doc(db, 'products', idStr));
+      console.log('[Admin] Product deleted from Cloud Firestore:', idStr);
+    } catch (e) {
+      console.warn('Firestore deleteProduct error:', e);
+    }
+
+    // 2. Update local storage
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const filtered = local.filter((p) => String(p.id) !== idStr);
     setLocal(PRODUCTS_KEY, filtered);
+    notifyProductsChanged();
 
     return { success: true };
   },
 
   // 3. ORDERS
-  async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
-    const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
-    const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
-      headers: getAuthHeaders(adminPassword),
-    });
-    if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
-      setLocal(ORDERS_KEY, apiResult.data.orders);
-      return apiResult.data.orders;
+  async getAllAdminOrders(statusFilter = '', _adminPassword?: string): Promise<Order[]> {
+    let orders: Order[] = [];
+    try {
+      const snap = await getDocs(collection(db, 'orders'));
+      if (!snap.empty) {
+        snap.forEach((d) => {
+          const ord = d.data() as Order;
+          orders.push({ ...ord, id: ord.id || d.id });
+        });
+        if (orders.length > 0) {
+          orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          setLocal(ORDERS_KEY, orders);
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore getAllAdminOrders error:', e);
     }
 
-    let orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    if (orders.length === 0) {
+      orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    }
+
     if (statusFilter) {
       orders = orders.filter((o) => o.status === statusFilter);
     }
     return [...orders].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
 
-  async updateOrderStatus(orderId: string | number, status: OrderStatus, adminPassword?: string): Promise<{ success: boolean }> {
+  async updateOrderStatus(orderId: string | number, status: OrderStatus, _adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderId);
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
     const index = orders.findIndex((o) => String(o.id) === idStr);
@@ -369,16 +431,19 @@ export const storeService = {
       setLocal(ORDERS_KEY, orders);
     }
 
-    await tryApi(`/api/admin/orders/${idStr}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify({ status }),
-    });
+    // Update in Cloud Firestore
+    try {
+      await setDoc(doc(db, 'orders', idStr), { status, updated_at: new Date().toISOString() }, { merge: true });
+      console.log('[Admin] Order status updated in Cloud Firestore:', idStr, status);
+    } catch (e) {
+      console.warn('Firestore updateOrderStatus error:', e);
+    }
 
+    notifyOrdersChanged();
     return { success: true };
   },
 
-  async updateOrder(orderData: Partial<Order> & { id: string | number }, adminPassword?: string): Promise<{ success: boolean }> {
+  async updateOrder(orderData: Partial<Order> & { id: string | number }, _adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderData.id);
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
     const index = orders.findIndex((o) => String(o.id) === idStr);
@@ -391,12 +456,14 @@ export const storeService = {
       setLocal(ORDERS_KEY, orders);
     }
 
-    await tryApi(`/api/admin/orders/${idStr}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(orderData),
-    });
+    // Update in Cloud Firestore
+    try {
+      await setDoc(doc(db, 'orders', idStr), { ...orderData, updated_at: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore updateOrder error:', e);
+    }
 
+    notifyOrdersChanged();
     return { success: true };
   },
 
@@ -404,44 +471,49 @@ export const storeService = {
     return this.updateOrder(orderData, adminPassword);
   },
 
-  async deleteOrder(orderId: string | number, adminPassword?: string): Promise<{ success: boolean }> {
+  async deleteOrder(orderId: string | number, _adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderId);
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
     const filtered = orders.filter((o) => String(o.id) !== idStr && o.order_number !== idStr);
     setLocal(ORDERS_KEY, filtered);
 
-    await tryApi(`/api/admin/orders/${idStr}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(adminPassword),
-    });
+    // Delete in Cloud Firestore
+    try {
+      await deleteDoc(doc(db, 'orders', idStr));
+    } catch (e) {
+      console.warn('Firestore deleteOrder error:', e);
+    }
 
+    notifyOrdersChanged();
     return { success: true };
   },
 
-  async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
-    const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
-      headers: getAuthHeaders(adminPassword),
-    });
-    if (apiResult.success && Array.isArray(apiResult.data?.customers)) {
-      setLocal(CUSTOMERS_KEY, apiResult.data.customers);
-      return apiResult.data.customers;
+  async getAllCustomers(_adminPassword?: string): Promise<Customer[]> {
+    let customers: Customer[] = [];
+    try {
+      const snap = await getDocs(collection(db, 'customers'));
+      if (!snap.empty) {
+        snap.forEach((d) => {
+          const c = d.data() as Customer;
+          customers.push({ ...c, id: c.id || d.id });
+        });
+        if (customers.length > 0) {
+          setLocal(CUSTOMERS_KEY, customers);
+          return customers.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore getAllCustomers error:', e);
     }
 
-    const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
-    return [...customers].sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+    const localCustomers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    return [...localCustomers].sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {
-    const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
-      headers: getAuthHeaders(adminPassword),
-    });
-    if (apiResult.success && apiResult.data?.totals) {
-      return apiResult.data.totals;
-    }
-
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    const orders = await this.getAllAdminOrders('', adminPassword);
+    const products = await this.getAllAdminProducts(adminPassword);
+    const customers = await this.getAllCustomers(adminPassword);
 
     const today = new Date().toISOString().split('T')[0];
     const thisMonth = today.substring(0, 7);
