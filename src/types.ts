@@ -3,6 +3,9 @@ export interface Product {
   name: string;
   description?: string;
   category: string;
+  sub_category?: string;
+  child_category?: string;
+  product_type?: string;
   sku?: string;
   image_url: string;
   images?: string[];

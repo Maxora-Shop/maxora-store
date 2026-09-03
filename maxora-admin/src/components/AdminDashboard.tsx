@@ -540,7 +540,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       productSearch === '' ||
       p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
-      p.category.toLowerCase().includes(productSearch.toLowerCase());
+      p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (p.product_type && p.product_type.toLowerCase().includes(productSearch.toLowerCase()));
     const matchesCategory =
       productCategoryFilter === '' || p.category === productCategoryFilter;
     const matchesStatus =
@@ -1246,6 +1249,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   setEditingProduct({
                     name: '',
                     category: 'Smart Gadgets',
+                    sub_category: '',
+                    child_category: '',
+                    product_type: 'Standard Product',
                     sku: '',
                     buying_price: 0,
                     selling_price: 0,
@@ -1360,7 +1366,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </div>
                             </div>
                           </td>
-                          <td className="p-4 text-zinc-600">{p.category}</td>
+                          <td className="p-4">
+                            <div className="flex flex-col gap-0.5 min-w-[130px]">
+                              <span className="font-bold text-zinc-900 text-xs">{p.category}</span>
+                              {(p.sub_category || p.child_category) && (
+                                <span className="text-[11px] text-zinc-500 font-medium leading-tight">
+                                  {[p.sub_category, p.child_category].filter(Boolean).join(' › ')}
+                                </span>
+                              )}
+                              {p.product_type && (
+                                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-zinc-100 text-zinc-700 rounded text-[10px] font-semibold w-fit border border-zinc-200">
+                                  {p.product_type}
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="p-4 font-mono text-zinc-500">{p.sku || '-'}</td>
                           <td className="p-4 text-zinc-600 font-semibold">
                             ৳{Number(p.buying_price || 0).toLocaleString('en-BD')}
@@ -1427,6 +1447,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 onClick={() => {
                                   setEditingProduct({
                                     ...p,
+                                    sub_category: p.sub_category || '',
+                                    child_category: p.child_category || '',
+                                    product_type: p.product_type || 'Standard Product',
                                     product_link: p.product_link || '',
                                     images: p.images || [],
                                     meta_title: p.meta_title || '',
@@ -1449,6 +1472,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 onClick={() => {
                                   setEditingProduct({
                                     ...p,
+                                    sub_category: p.sub_category || '',
+                                    child_category: p.child_category || '',
+                                    product_type: p.product_type || 'Standard Product',
                                     product_link: p.product_link || '',
                                     images: p.images || [],
                                     meta_title: p.meta_title || '',
@@ -2181,31 +2207,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-700 mb-1">
-                        Category
+                  {/* Category, Sub Category, Child Category & Product Type */}
+                  <div className="bg-zinc-50/80 p-4 rounded-2xl border border-zinc-200/90 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-extrabold text-zinc-800 flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Category & Taxonomy (ক্যাটেগরি ও ধরণ)</span>
                       </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Smart Gadgets"
-                        value={editingProduct?.category || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
-                      />
+                      <span className="text-[11px] text-zinc-400 font-medium">Categorization Hierarchy</span>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-700 mb-1">
-                        SKU / Code
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. MX-WTCH-01"
-                        value={editingProduct?.sku || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-mono"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 1. Category */}
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Category (ক্যাটেগরি) *
+                        </label>
+                        <input
+                          list="admin-category-list"
+                          type="text"
+                          required
+                          placeholder="e.g. Smart Gadgets"
+                          value={editingProduct?.category || ''}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                        />
+                        <datalist id="admin-category-list">
+                          <option value="Smart Gadgets" />
+                          <option value="Audio" />
+                          <option value="Computer & Gaming" />
+                          <option value="Mobile Accessories" />
+                          <option value="Lifestyle & Bags" />
+                          <option value="Home & Living" />
+                          <option value="Fashion & Apparel" />
+                          <option value="Watches & Wearables" />
+                        </datalist>
+                      </div>
+
+                      {/* 2. Sub Category */}
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Sub Category (সাব ক্যাটেগরি)
+                        </label>
+                        <input
+                          list="admin-subcategory-list"
+                          type="text"
+                          placeholder="e.g. Smartwatches, Wireless Earbuds"
+                          value={editingProduct?.sub_category || ''}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, sub_category: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                        />
+                        <datalist id="admin-subcategory-list">
+                          <option value="Smartwatches" />
+                          <option value="Fitness Bands" />
+                          <option value="TWS Earbuds" />
+                          <option value="Neckbands" />
+                          <option value="Bluetooth Speakers" />
+                          <option value="Fast Chargers & GaN" />
+                          <option value="Charging Cables" />
+                          <option value="Power Banks" />
+                          <option value="Mechanical Keyboards" />
+                          <option value="Gaming Mouse" />
+                          <option value="Backpacks & Bags" />
+                        </datalist>
+                      </div>
+
+                      {/* 3. Child Category */}
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Child Category (চাইল্ড ক্যাটেগরি)
+                        </label>
+                        <input
+                          list="admin-childcategory-list"
+                          type="text"
+                          placeholder="e.g. AMOLED Display, ANC Earbuds"
+                          value={editingProduct?.child_category || ''}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, child_category: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                        />
+                        <datalist id="admin-childcategory-list">
+                          <option value="AMOLED Calling" />
+                          <option value="Waterproof IP68" />
+                          <option value="Active Noise Cancelling (ANC)" />
+                          <option value="Deep Bass Gaming" />
+                          <option value="65W Fast GaN" />
+                          <option value="100W PD Type-C" />
+                          <option value="RGB Hot-swappable" />
+                        </datalist>
+                      </div>
+
+                      {/* 4. Product Type */}
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Product Type (প্রোডাক্ট টাইপ)
+                        </label>
+                        <select
+                          value={editingProduct?.product_type || 'Standard Product'}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, product_type: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                        >
+                          <option value="Standard Product">Standard / Simple Product (সাধারণ প্রোডাক্ট)</option>
+                          <option value="Variant Product">Variant / Multi-Choice (ভ্যারিয়েন্ট - কালার/সাইজ)</option>
+                          <option value="Combo Offer">Combo / Bundle Offer (কম্বো বান্ডেল)</option>
+                          <option value="Physical Product">Physical Product (ফিজিক্যাল ডেলিভারি)</option>
+                          <option value="Digital Product">Digital Product (ডিজিটাল ডাউনলোড/কোড)</option>
+                          <option value="Pre-Order">Pre-Order (প্রি-অর্ডার পণ্য)</option>
+                          <option value="Hot Deal">Hot Deal / Flash Sale (হট ডিল)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -2251,7 +2360,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        SKU / Code
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. MX-WTCH-01"
+                        value={editingProduct?.sku || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-mono"
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 mb-1">
                         Stock Quantity (Units)
