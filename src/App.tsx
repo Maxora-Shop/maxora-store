@@ -15,6 +15,7 @@ import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
 import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag } from 'lucide-react';
+import { getProductSlug, findProductBySlugOrId } from './utils/seo';
 
 export default function App() {
   // Admin View State
@@ -50,26 +51,87 @@ export default function App() {
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
 
+  // Ref to hold a pending product slug while products are loading
+  const pendingSlugRef = useRef<string | null>(
+    typeof window !== 'undefined'
+      ? window.location.pathname.startsWith('/product/')
+        ? window.location.pathname.replace('/product/', '').replace(/\/$/, '').trim()
+        : window.location.hash.startsWith('#product-')
+        ? window.location.hash.replace('#product-', '').trim()
+        : null
+      : null
+  );
+
   // Added animation state map
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
 
   const productSectionRef = useRef<HTMLDivElement>(null);
 
-  // Route listener
+  // Route listener: handles /admin, /product/:slug, browser back/forward, and direct URLs
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
       const hash = window.location.hash;
       const search = window.location.search;
-      setIsAdminView(path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true'));
+
+      // Admin check
+      if (path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
+        setIsAdminView(true);
+        setQuickViewProduct(null);
+        return;
+      } else {
+        setIsAdminView(false);
+      }
+
+      // Product check: /product/:slug or legacy #product-:slug
+      let productSlug: string | null = null;
+      if (path.startsWith('/product/')) {
+        productSlug = path.replace('/product/', '').replace(/\/$/, '').trim();
+      } else if (hash.startsWith('#product-')) {
+        productSlug = hash.replace('#product-', '').trim();
+        // Redirect legacy hash to clean URL
+        if (productSlug) {
+          window.history.replaceState({}, '', `/product/${productSlug}`);
+        }
+      }
+
+      if (productSlug) {
+        const found = findProductBySlugOrId(products, productSlug);
+        if (found) {
+          setQuickViewProduct(found);
+          pixelService.trackViewContent(found);
+        } else {
+          // If product not found in current products list yet, remember slug
+          pendingSlugRef.current = productSlug;
+        }
+      } else {
+        setQuickViewProduct(null);
+      }
     };
+
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('hashchange', handlePopState);
+
+    // Initial check on mount
+    handlePopState();
+
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
     };
-  }, []);
+  }, [products]);
+
+  // Resolve any pending product slug whenever products array changes
+  useEffect(() => {
+    if (pendingSlugRef.current && products.length > 0) {
+      const found = findProductBySlugOrId(products, pendingSlugRef.current);
+      if (found) {
+        setQuickViewProduct(found);
+        pixelService.trackViewContent(found);
+        pendingSlugRef.current = null;
+      }
+    }
+  }, [products]);
 
   // Save Cart to LocalStorage
   useEffect(() => {
@@ -218,10 +280,24 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  const handleOpenProductDetail = (product: Product) => {
+  const handleOpenProductDetail = (product: Product, updateHistory = true) => {
     setQuickViewProduct(product);
+    if (updateHistory) {
+      const slug = getProductSlug(product);
+      const newPath = `/product/${slug}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({ slug, productId: product.id }, '', newPath);
+      }
+    }
     // Fire Ad Pixels ViewContent event for product page views
     pixelService.trackViewContent(product);
+  };
+
+  const handleCloseProductDetail = () => {
+    setQuickViewProduct(null);
+    if (window.location.pathname.startsWith('/product/')) {
+      window.history.pushState({}, '', '/');
+    }
   };
 
   const handleUpdateQuantity = (productId: string, delta: number, selectedColor?: string) => {
@@ -595,7 +671,7 @@ export default function App() {
 
       <ProductQuickView
         product={quickViewProduct}
-        onClose={() => setQuickViewProduct(null)}
+        onClose={handleCloseProductDetail}
         onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
         onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
       />

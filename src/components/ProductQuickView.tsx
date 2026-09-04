@@ -33,51 +33,6 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
     }
   };
 
-  // Dynamic Google SEO tags insertion when product modal opens
-  useEffect(() => {
-    if (!product) return;
-    const prevTitle = document.title;
-    if (product.meta_title) {
-      document.title = product.meta_title;
-    } else if (product.name) {
-      document.title = `${product.name} | Maxora Bangladesh`;
-    }
-
-    // Update or add meta keywords
-    let kwMeta = document.querySelector('meta[name="keywords"]');
-    if (!kwMeta && product.meta_keywords) {
-      kwMeta = document.createElement('meta');
-      kwMeta.setAttribute('name', 'keywords');
-      document.head.appendChild(kwMeta);
-    }
-    const prevKeywords = kwMeta ? kwMeta.getAttribute('content') : null;
-    if (kwMeta && product.meta_keywords) {
-      kwMeta.setAttribute('content', product.meta_keywords);
-    }
-
-    // Update or add meta description
-    let descMeta = document.querySelector('meta[name="description"]');
-    if (!descMeta && (product.meta_description || product.description)) {
-      descMeta = document.createElement('meta');
-      descMeta.setAttribute('name', 'description');
-      document.head.appendChild(descMeta);
-    }
-    const prevDesc = descMeta ? descMeta.getAttribute('content') : null;
-    if (descMeta && (product.meta_description || product.description)) {
-      descMeta.setAttribute('content', product.meta_description || product.description || '');
-    }
-
-    return () => {
-      document.title = prevTitle;
-      if (kwMeta && prevKeywords !== null) {
-        kwMeta.setAttribute('content', prevKeywords);
-      }
-      if (descMeta && prevDesc !== null) {
-        descMeta.setAttribute('content', prevDesc);
-      }
-    };
-  }, [product]);
-
   const allImages = Array.isArray(product.images) && product.images.length > 0
     ? product.images
     : [product.image_url].filter(Boolean);
@@ -89,8 +44,14 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
   const isOutOfStock = Number(product.stock || 0) <= 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in">
-      <div className="relative bg-white w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[90vh] flex flex-col md:flex-row">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative bg-white w-full max-w-3xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[90vh] flex flex-col md:flex-row"
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -104,7 +65,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
           <div className="aspect-square rounded-2xl overflow-hidden bg-white border border-zinc-200 shadow-inner flex items-center justify-center mb-4">
             <img
               src={selectedImage || product.image_url}
-              alt={product.name}
+              alt={`${product.name}${product.sku ? ` - ${product.sku}` : ''}`}
               className="w-full h-full object-cover"
               onError={(e) => {
                 (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
@@ -125,7 +86,11 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                       : "border-transparent opacity-70 hover:opacity-100"
                   }`}
                 >
-                  <img src={img} alt="thumb" className="w-full h-full object-cover" />
+                  <img
+                    src={img}
+                    alt={`${product.name} thumbnail ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

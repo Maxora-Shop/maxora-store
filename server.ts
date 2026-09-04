@@ -1230,17 +1230,17 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
 
 // GET /sitemap.xml (Dynamic Google XML Sitemap)
 app.get('/sitemap.xml', (req, res) => {
-  const host = req.get('host') || 'maxora-store.vercel.app';
-  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  const baseUrl = `${protocol}://${host}`;
+  const host = req.get('host') || '';
+  const isVercelOrProd = host.includes('maxora-store-ruby.vercel.app') || (!host.includes('localhost') && !host.includes('127.0.0.1'));
+  const baseUrl = isVercelOrProd ? 'https://maxora-store-ruby.vercel.app' : `${req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${host}`;
 
   const activeProducts = db.products.filter(p => p.active !== 0 && p.active !== false);
 
   const productUrls = activeProducts.map(p => {
-    const slug = p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
+    const slug = p.slug || (p.name ? p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
     const lastMod = (p.updated_at || p.created_at || new Date().toISOString()).split('T')[0];
     return `  <url>
-    <loc>${baseUrl}/#product-${slug}</loc>
+    <loc>${baseUrl}/product/${slug}</loc>
     <lastmod>${lastMod}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -1258,21 +1258,19 @@ app.get('/sitemap.xml', (req, res) => {
 ${productUrls}
 </urlset>`;
 
-  res.setHeader('Content-Type', 'application/xml');
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.send(sitemap);
 });
 
 // GET /robots.txt (Crawler directives)
 app.get('/robots.txt', (req, res) => {
-  const host = req.get('host') || 'maxora-store.vercel.app';
-  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.send(`User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/admin/
 
-Sitemap: ${protocol}://${host}/sitemap.xml
+Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
 `);
 });
 

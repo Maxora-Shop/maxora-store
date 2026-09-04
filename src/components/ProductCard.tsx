@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingBag, Eye, Check } from 'lucide-react';
 import { Product } from '../types';
+import { getProductSlug } from '../utils/seo';
 
 interface ProductCardProps {
   product: Product;
@@ -22,18 +23,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isOutOfStock = Number(product.stock || 0) <= 0;
   const isLowStock = Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 5;
 
+  const productSlug = getProductSlug(product);
+  const productPath = `/product/${productSlug}`;
+  const imageAlt = `${product.name}${product.sku ? ` - ${product.sku}` : ''}`;
+
   const displayImage = product.image_url || (product.images && product.images[0]) || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
 
   return (
     <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col justify-between hover:-translate-y-1">
       {/* Product Image Area */}
-      <div
-        onClick={() => onQuickView(product)}
-        className="relative aspect-square bg-zinc-100 overflow-hidden cursor-pointer"
+      <a
+        href={productPath}
+        onClick={(e) => {
+          e.preventDefault();
+          onQuickView(product);
+        }}
+        className="relative aspect-square bg-zinc-100 overflow-hidden cursor-pointer block"
+        aria-label={`View details for ${product.name}`}
       >
         <img
           src={displayImage}
-          alt={product.name}
+          alt={imageAlt}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           loading="lazy"
           onError={(e) => {
@@ -59,6 +69,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            e.preventDefault();
             onQuickView(product);
           }}
           className="sm:hidden absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-zinc-800 z-10 active:scale-90 transition-transform"
@@ -72,6 +83,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onQuickView(product);
             }}
             className="bg-white/95 hover:bg-white text-zinc-900 px-3.5 py-2 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
@@ -89,7 +101,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </span>
           </div>
         )}
-      </div>
+      </a>
 
       {/* Product Content Area */}
       <div className="p-3.5 sm:p-5 flex-1 flex flex-col justify-between">
@@ -101,11 +113,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Product Name */}
-          <h3
-            onClick={() => onQuickView(product)}
-            className="font-bold text-zinc-900 text-xs sm:text-base line-clamp-2 hover:text-emerald-700 transition-colors cursor-pointer mb-1.5 leading-snug"
-          >
-            {product.name}
+          <h3 className="mb-1.5 leading-snug">
+            <a
+              href={productPath}
+              onClick={(e) => {
+                e.preventDefault();
+                onQuickView(product);
+              }}
+              className="font-bold text-zinc-900 text-xs sm:text-base line-clamp-2 hover:text-emerald-700 transition-colors cursor-pointer block"
+            >
+              {product.name}
+            </a>
           </h3>
 
           {/* Stock Indicator */}
