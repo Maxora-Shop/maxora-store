@@ -149,33 +149,47 @@ export default function App() {
   };
 
   // Cart Management
-  const handleAddToCart = (product: Product, quantity = 1) => {
+  const handleAddToCart = (
+    product: Product,
+    quantity = 1,
+    selectedColor?: { name: string; code?: string; image_url?: string }
+  ) => {
     const finalPrice = Math.max(
       0,
       Number(product.selling_price || 0) - Number(product.discount || 0)
     );
 
+    const colorName = selectedColor?.name;
+    const colorCode = selectedColor?.code;
+    const colorImage = selectedColor?.image_url;
+
     setCart((prevCart) => {
-      const existing = prevCart.find((item) => item.product_id === product.id);
-      if (existing) {
+      const existingIndex = prevCart.findIndex(
+        (item) => item.product_id === product.id && (item.selected_color || '') === (colorName || '')
+      );
+
+      if (existingIndex >= 0) {
+        const existing = prevCart[existingIndex];
         const newQty = Math.min(
-          Number(product.stock || 99),
+          Number(existing.stock || product.stock || 99),
           existing.quantity + quantity
         );
-        return prevCart.map((item) =>
-          item.product_id === product.id ? { ...item, quantity: newQty } : item
-        );
+        const updatedCart = [...prevCart];
+        updatedCart[existingIndex] = { ...existing, quantity: newQty };
+        return updatedCart;
       } else {
         return [
           ...prevCart,
           {
             product_id: product.id,
             name: product.name,
-            image_url: product.image_url || (product.images?.[0] || ''),
+            image_url: colorImage || product.image_url || (product.images?.[0] || ''),
             unit_price: finalPrice,
             quantity: Math.min(Number(product.stock || 99), quantity),
             stock: Number(product.stock || 0),
             sku: product.sku,
+            selected_color: colorName,
+            selected_color_code: colorCode,
           },
         ];
       }
@@ -188,8 +202,12 @@ export default function App() {
     setTimeout(() => setRecentlyAddedId(null), 1500);
   };
 
-  const handleBuyNow = (product: Product, quantity = 1) => {
-    handleAddToCart(product, quantity);
+  const handleBuyNow = (
+    product: Product,
+    quantity = 1,
+    selectedColor?: { name: string; code?: string; image_url?: string }
+  ) => {
+    handleAddToCart(product, quantity, selectedColor);
     setIsCartOpen(false);
     openCheckout();
   };
@@ -206,11 +224,12 @@ export default function App() {
     pixelService.trackViewContent(product);
   };
 
-  const handleUpdateQuantity = (productId: string, delta: number) => {
+  const handleUpdateQuantity = (productId: string, delta: number, selectedColor?: string) => {
     setCart((prevCart) => {
       return prevCart
         .map((item) => {
-          if (item.product_id === productId) {
+          const matchColor = selectedColor === undefined || (item.selected_color || '') === (selectedColor || '');
+          if (item.product_id === productId && matchColor) {
             const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: Math.min(item.stock, newQty) } : null;
           }
@@ -220,8 +239,12 @@ export default function App() {
     });
   };
 
-  const handleRemoveItem = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product_id !== productId));
+  const handleRemoveItem = (productId: string, selectedColor?: string) => {
+    setCart((prev) =>
+      prev.filter(
+        (item) => !(item.product_id === productId && (selectedColor === undefined || (item.selected_color || '') === (selectedColor || '')))
+      )
+    );
   };
 
   const handleOrderSuccess = (orderData?: any) => {
@@ -573,8 +596,8 @@ export default function App() {
       <ProductQuickView
         product={quickViewProduct}
         onClose={() => setQuickViewProduct(null)}
-        onAddToCart={(p, qty) => handleAddToCart(p, qty)}
-        onBuyNow={(p, qty) => handleBuyNow(p, qty)}
+        onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
+        onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
       />
 
       <OrderTrackerModal

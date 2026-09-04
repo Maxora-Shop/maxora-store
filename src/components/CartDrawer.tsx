@@ -89,7 +89,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 {cart.map((item) => {
                   const lineTotal = Number(item.unit_price) * Number(item.quantity);
                   return (
-                    <div key={item.product_id} className="flex gap-3.5 py-3 group">
+                    <div key={`${item.product_id}-${item.selected_color || ''}`} className="flex gap-3.5 py-3 group">
                       <div className="w-18 h-18 rounded-xl bg-zinc-100 overflow-hidden shrink-0 border border-zinc-200/80">
                         <img
                           src={item.image_url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80"}
@@ -108,13 +108,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               {item.name}
                             </h4>
                             <button
-                              onClick={() => onRemoveItem(item.product_id)}
+                              onClick={() => onRemoveItem(item.product_id, item.selected_color)}
                               className="text-zinc-400 hover:text-rose-600 transition-colors p-1"
                               title="Remove item"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
+
+                          {/* Selected Color Badge */}
+                          {item.selected_color && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span
+                                className="w-3 h-3 rounded-full border border-zinc-300 inline-block shadow-2xs"
+                                style={{ backgroundColor: item.selected_color_code || '#71717a' }}
+                              />
+                              <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200/60">
+                                Color: {item.selected_color}
+                              </span>
+                            </div>
+                          )}
+
                           <div className="text-xs text-zinc-500 font-semibold mt-0.5">
                             ৳{Number(item.unit_price).toLocaleString('en-BD')} each
                           </div>
@@ -124,7 +138,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           {/* Quantity Counter */}
                           <div className="flex items-center border border-zinc-300 rounded-lg overflow-hidden bg-white">
                             <button
-                              onClick={() => onUpdateQuantity(item.product_id, -1)}
+                              onClick={() => onUpdateQuantity(item.product_id, -1, item.selected_color)}
                               className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:bg-zinc-100 font-bold text-xs"
                             >
                               −
@@ -133,7 +147,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() => onUpdateQuantity(item.product_id, 1)}
+                              onClick={() => onUpdateQuantity(item.product_id, 1, item.selected_color)}
                               className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:bg-zinc-100 font-bold text-xs"
                             >
                               +

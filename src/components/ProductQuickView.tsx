@@ -5,8 +5,8 @@ import { Product } from '../types';
 interface ProductQuickViewProps {
   product: Product | null;
   onClose: () => void;
-  onAddToCart: (product: Product, quantity: number) => void;
-  onBuyNow: (product: Product, quantity: number) => void;
+  onAddToCart: (product: Product, quantity: number, selectedColor?: { name: string; code?: string; image_url?: string }) => void;
+  onBuyNow: (product: Product, quantity: number, selectedColor?: { name: string; code?: string; image_url?: string }) => void;
 }
 
 export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
@@ -18,9 +18,20 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
   if (!product) return null;
 
   const [quantity, setQuantity] = useState(1);
-  const [selectedImage, setSelectedImage] = useState<string>(
-    product.image_url || (product.images && product.images[0]) || ""
+  const [selectedColor, setSelectedColor] = useState<{ name: string; code?: string; stock?: number; image_url?: string } | null>(
+    product.colors && product.colors.length > 0 ? product.colors[0] : null
   );
+  const [selectedImage, setSelectedImage] = useState<string>(
+    (product.colors && product.colors[0]?.image_url) || product.image_url || (product.images && product.images[0]) || ""
+  );
+
+  // When color changes, if the color has a dedicated image, switch to it
+  const handleSelectColor = (col: { name: string; code?: string; stock?: number; image_url?: string }) => {
+    setSelectedColor(col);
+    if (col.image_url) {
+      setSelectedImage(col.image_url);
+    }
+  };
 
   // Dynamic Google SEO tags insertion when product modal opens
   useEffect(() => {
@@ -206,6 +217,48 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
 
           {/* Action buttons */}
           <div>
+            {/* Color Variants Selection */}
+            {Array.isArray(product.colors) && product.colors.length > 0 && (
+              <div className="mb-4 p-3 bg-purple-50/70 rounded-2xl border border-purple-200/80">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-purple-950">
+                    Select Color (কালার পছন্দ করুন):
+                  </span>
+                  {selectedColor && (
+                    <span className="text-xs font-extrabold text-purple-700">
+                      {selectedColor.name} {selectedColor.stock !== undefined && `(${selectedColor.stock} in stock)`}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {product.colors.map((col, idx) => {
+                    const isSelected = selectedColor?.name === col.name;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectColor(col)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-purple-700 text-white border-purple-700 shadow-xs scale-102'
+                            : 'bg-white text-zinc-800 border-zinc-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <span
+                          className={`w-3.5 h-3.5 rounded-full inline-block border ${
+                            isSelected ? 'border-white' : 'border-zinc-300'
+                          }`}
+                          style={{ backgroundColor: col.code || '#71717a' }}
+                        />
+                        <span>{col.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Quantity Selector */}
             {!isOutOfStock && (
               <div className="flex items-center gap-3 mb-4">
@@ -221,14 +274,14 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                     {quantity}
                   </span>
                   <button
-                    onClick={() => setQuantity(Math.min(Number(product.stock || 99), quantity + 1))}
+                    onClick={() => setQuantity(Math.min(Number(selectedColor?.stock ?? product.stock ?? 99), quantity + 1))}
                     className="w-9 h-9 flex items-center justify-center text-zinc-700 hover:bg-zinc-100 font-bold"
                   >
                     +
                   </button>
                 </div>
                 <span className="text-xs text-zinc-600">
-                  ({product.stock} available)
+                  ({selectedColor?.stock !== undefined ? selectedColor.stock : product.stock} available)
                 </span>
               </div>
             )}
@@ -237,7 +290,11 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
               <button
                 disabled={isOutOfStock}
                 onClick={() => {
-                  onAddToCart(product, quantity);
+                  onAddToCart(
+                    product,
+                    quantity,
+                    selectedColor ? { name: selectedColor.name, code: selectedColor.code, image_url: selectedColor.image_url } : undefined
+                  );
                   onClose();
                 }}
                 className="py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
@@ -249,7 +306,11 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
               <button
                 disabled={isOutOfStock}
                 onClick={() => {
-                  onBuyNow(product, quantity);
+                  onBuyNow(
+                    product,
+                    quantity,
+                    selectedColor ? { name: selectedColor.name, code: selectedColor.code, image_url: selectedColor.image_url } : undefined
+                  );
                   onClose();
                 }}
                 className="py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-zinc-950 hover:bg-zinc-800 text-white flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md disabled:opacity-50"

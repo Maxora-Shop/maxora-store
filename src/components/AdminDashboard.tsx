@@ -144,7 +144,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
 
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Filters & Search
   const [productSearch, setProductSearch] = useState('');
@@ -492,7 +492,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     loadTabData(tab);
   };
 
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setStatusMessage({ text, type });
     setTimeout(() => setStatusMessage(null), 3500);
   };
@@ -890,11 +890,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold transition-all animate-bounce ${
             statusMessage.type === 'success'
               ? 'bg-zinc-950 text-white border border-emerald-500/40'
+              : statusMessage.type === 'info'
+              ? 'bg-zinc-900 text-white border border-blue-400/40'
               : 'bg-rose-600 text-white'
           }`}
         >
           {statusMessage.type === 'success' ? (
             <CheckCircle className="w-4 h-4 text-emerald-400" />
+          ) : statusMessage.type === 'info' ? (
+            <Tag className="w-4 h-4 text-blue-400" />
           ) : (
             <AlertTriangle className="w-4 h-4 text-white" />
           )}
