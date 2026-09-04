@@ -375,6 +375,7 @@ export const storeService = {
       sub_category: productData.sub_category || '',
       child_category: productData.child_category || '',
       product_type: productData.product_type || 'Standard Product',
+      colors: productData.colors || [],
       product_link: productData.product_link || '',
       sku: productData.sku || `MX-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       image_url: productData.image_url || images[0],
@@ -513,7 +514,7 @@ export const storeService = {
     address: string;
     delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
     note?: string;
-    items: Array<{ product_id: string; name: string; quantity: number }>;
+    items: Array<{ product_id: string; name: string; quantity: number; selected_color?: string; selected_color_code?: string }>;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     const settings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
@@ -530,6 +531,8 @@ export const storeService = {
       const finalPrice = Math.max(0, price - discount);
       const lineTotal = finalPrice * qty;
 
+      const matchedColor = prod?.colors?.find(c => c.name === item.selected_color);
+
       subtotal += lineTotal;
       orderItems.push({
         id: `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
@@ -541,7 +544,9 @@ export const storeService = {
         unit_price: finalPrice,
         buying_price: Number(prod?.buying_price || 0),
         line_total: lineTotal,
-        image_url: prod?.image_url,
+        image_url: matchedColor?.image_url || prod?.image_url,
+        selected_color: item.selected_color,
+        selected_color_code: item.selected_color_code || matchedColor?.code,
       });
 
       if (prod) {

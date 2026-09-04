@@ -114,6 +114,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           product_id: item.product_id,
           name: item.name,
           quantity: item.quantity,
+          selected_color: item.selected_color,
+          selected_color_code: item.selected_color_code,
         })),
       });
 
@@ -260,11 +262,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
 
                 <div className="max-h-24 overflow-y-auto divide-y divide-zinc-200/60 pr-1 text-xs text-zinc-600">
-                  {cart.map((item) => (
-                    <div key={item.product_id} className="py-1.5 flex justify-between items-center">
-                      <span className="truncate max-w-[280px]">
-                        {item.name} <span className="text-zinc-400 font-mono">x{item.quantity}</span>
-                      </span>
+                  {cart.map((item, idx) => (
+                    <div key={`${item.product_id}-${item.selected_color || idx}`} className="py-1.5 flex justify-between items-center">
+                      <div className="truncate max-w-[280px]">
+                        <span className="font-medium text-zinc-900">{item.name}</span>
+                        {item.selected_color && (
+                          <span className="inline-flex items-center gap-1 ml-1.5 px-1.5 py-0.2 rounded bg-zinc-200/80 text-[10px] font-semibold text-zinc-800">
+                            {item.selected_color_code && (
+                              <span className="w-2 h-2 rounded-full inline-block border border-white" style={{ backgroundColor: item.selected_color_code }} />
+                            )}
+                            {item.selected_color}
+                          </span>
+                        )}
+                        <span className="text-zinc-400 font-mono ml-1.5">x{item.quantity}</span>
+                      </div>
                       <span className="font-semibold text-zinc-800">
                         ৳{(item.unit_price * item.quantity).toLocaleString('en-BD')}
                       </span>

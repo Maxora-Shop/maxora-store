@@ -109,7 +109,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </h3>
 
           {/* Stock Indicator */}
-          <div className="mb-2.5">
+          <div className="mb-2">
             {isOutOfStock ? (
               <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600">
                 Stock Out
@@ -126,6 +126,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </span>
             )}
           </div>
+
+          {/* Color Variants Swatches */}
+          {Array.isArray(product.colors) && product.colors.length > 0 && (
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <div className="flex items-center -space-x-1">
+                {product.colors.slice(0, 5).map((c, i) => (
+                  <span
+                    key={i}
+                    title={c.name}
+                    className="w-3.5 h-3.5 rounded-full border border-white shadow-2xs inline-block"
+                    style={{ backgroundColor: c.code || '#52525b' }}
+                  />
+                ))}
+              </div>
+              <span className="text-[10px] text-zinc-500 font-semibold">
+                {product.colors.length} {product.colors.length === 1 ? 'color' : 'colors'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Pricing & Add to Cart button */}

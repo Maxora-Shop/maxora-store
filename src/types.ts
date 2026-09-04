@@ -1,3 +1,11 @@
+export interface ProductColor {
+  name: string;
+  code?: string;
+  image_url?: string;
+  stock?: number;
+  price?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -6,6 +14,7 @@ export interface Product {
   sub_category?: string;
   child_category?: string;
   product_type?: string;
+  colors?: ProductColor[];
   sku?: string;
   image_url: string;
   images?: string[];
@@ -64,6 +73,8 @@ export interface OrderItem {
   buying_price?: number;
   line_total: number;
   image_url?: string;
+  selected_color?: string;
+  selected_color_code?: string;
 }
 
 export interface Order {
@@ -116,6 +127,7 @@ export interface StoreSettings {
   canonical_url?: string;
   custom_head_code?: string;
   custom_body_code?: string;
+  custom_product_types?: string[];
 }
 
 export interface DailySalesMetric {
@@ -183,4 +195,6 @@ export interface CartItem {
   quantity: number;
   stock: number;
   sku?: string;
+  selected_color?: string;
+  selected_color_code?: string;
 }

@@ -287,6 +287,7 @@ export const storeService = {
       sub_category: productData.sub_category || '',
       child_category: productData.child_category || '',
       product_type: productData.product_type || 'Standard Product',
+      colors: productData.colors || [],
       product_link: productData.product_link || '',
       sku: productData.sku || `MX-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       image_url: productData.image_url || images[0],

@@ -22,6 +22,17 @@ export const INITIAL_SETTINGS: StoreSettings = {
   google_tag_id: "",
   google_ads_id: "",
   tiktok_pixel_id: "",
+  custom_product_types: [
+    "Standard Product",
+    "Variant Product",
+    "Physical Product",
+    "Digital Product",
+    "Combo Offer",
+    "Pre-Order",
+    "Hot Deal",
+    "Exclusive Edition",
+    "Clearance Sale"
+  ],
 };
 
 export const INITIAL_PRODUCTS: Product[] = [
@@ -30,11 +41,17 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Maxora Ultra AMOLED Smartwatch Series 9",
     description: "1.96-inch Always-on AMOLED display, Bluetooth calling, IP68 water resistance, SpO2 & dynamic heart rate monitoring with 10-day battery backup.",
     category: "Smart Gadgets",
+    product_type: "Variant Product",
     sku: "MX-SW-09",
     image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80",
     images: [
       "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80",
       "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [
+      { name: "Space Black", code: "#18181b", stock: 12, image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80" },
+      { name: "Silver Starlight", code: "#e4e4e7", stock: 8, image_url: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80" },
+      { name: "Midnight Navy", code: "#1e3a8a", stock: 4 }
     ],
     buying_price: 1800,
     selling_price: 2850,
@@ -52,10 +69,15 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Acoustic Pro ANC Wireless Earbuds",
     description: "Active Noise Cancellation (ANC) up to 35dB, Quad-mic ENC for crystal-clear phone calls, ultra low latency gaming mode & deep bass drivers.",
     category: "Audio",
+    product_type: "Variant Product",
     sku: "MX-EB-ANC",
     image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80",
     images: [
       "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [
+      { name: "Pearl White", code: "#f8fafc", stock: 20 },
+      { name: "Matte Black", code: "#18181b", stock: 15 }
     ],
     buying_price: 1200,
     selling_price: 1950,
