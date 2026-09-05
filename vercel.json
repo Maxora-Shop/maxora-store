@@ -1,5 +1,5 @@
 {
-  "cleanUrls": true,
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/sitemap.xml",
@@ -8,6 +8,10 @@
     {
       "source": "/robots.txt",
       "destination": "/api/robots"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
       "source": "/(.*)",

@@ -22,11 +22,12 @@ export function generateSlug(text: string): string {
 
 /**
  * Gets a stable, unique, URL-safe slug for a product.
- * Prefers product.slug if present, else generates from product.name, else product.id.
+ * Prefers product.slug if present, else generates from product.name, else product.sku, else product.id.
  */
 export function getProductSlug(product: {
   slug?: string;
   name?: string;
+  sku?: string;
   id?: string | number;
 }): string {
   if (product.slug && product.slug.trim()) {
@@ -37,6 +38,10 @@ export function getProductSlug(product: {
     const cleaned = generateSlug(product.name);
     if (cleaned) return cleaned;
   }
+  if (product.sku && product.sku.trim()) {
+    const cleaned = generateSlug(product.sku);
+    if (cleaned) return cleaned;
+  }
   return String(product.id || 'item');
 }
 
@@ -45,7 +50,7 @@ export function getProductSlug(product: {
  * Example: https://maxora-store-ruby.vercel.app/product/sokany-blender-sk-03067
  */
 export function getProductCanonicalUrl(
-  product: { slug?: string; name?: string; id?: string | number },
+  product: { slug?: string; name?: string; sku?: string; id?: string | number },
   baseUrl = SITE_URL
 ): string {
   const slug = getProductSlug(product);
@@ -60,7 +65,7 @@ export function getHomepageCanonicalUrl(baseUrl = SITE_URL): string {
 }
 
 /**
- * Finds a product in the list by matching slug or id.
+ * Finds a product in the list by matching slug, SKU, name, or id.
  */
 export function findProductBySlugOrId(
   products: Product[],
@@ -77,7 +82,17 @@ export function findProductBySlugOrId(
   const computedSlug = products.find((p) => getProductSlug(p) === target);
   if (computedSlug) return computedSlug;
 
-  // 3. ID match
+  // 3. SKU match (raw or slugified, e.g. MX-SW-09 or mx-sw-09)
+  const skuMatch = products.find(
+    (p) => p.sku && (p.sku.toLowerCase().trim() === target || generateSlug(p.sku) === target)
+  );
+  if (skuMatch) return skuMatch;
+
+  // 4. Name slug match
+  const nameMatch = products.find((p) => p.name && generateSlug(p.name) === target);
+  if (nameMatch) return nameMatch;
+
+  // 5. ID match
   const idMatch = products.find((p) => String(p.id).toLowerCase() === target);
   if (idMatch) return idMatch;
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShoppingBag, Truck, ShieldCheck, Check, ArrowRight, Tag } from 'lucide-react';
+import { X, ShoppingBag, Truck, ShieldCheck, Check, ArrowRight, Tag, Copy, Share2, ExternalLink } from 'lucide-react';
 import { Product } from '../types';
+import { getProductSlug, SITE_URL } from '../utils/seo';
 
 interface ProductQuickViewProps {
   product: Product | null;
@@ -18,6 +19,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
   if (!product) return null;
 
   const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
   const [selectedColor, setSelectedColor] = useState<{ name: string; code?: string; stock?: number; image_url?: string } | null>(
     product.colors && product.colors.length > 0 ? product.colors[0] : null
   );
@@ -30,6 +32,45 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
     setSelectedColor(col);
     if (col.image_url) {
       setSelectedImage(col.image_url);
+    }
+  };
+
+  const productSlug = getProductSlug(product);
+  const productUrl = `${SITE_URL}/product/${productSlug}`;
+
+  const handleCopyLink = async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(productUrl);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = productUrl;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy product link:', err);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: `Check out ${product.name} on Maxora!`,
+          url: productUrl,
+        });
+      } catch {
+        // User cancelled or share failed, fallback to copy
+        handleCopyLink();
+      }
+    } else {
+      handleCopyLink();
     }
   };
 
@@ -168,7 +209,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
             )}
 
             {/* Reassurance points */}
-            <div className="space-y-2 text-xs text-zinc-700 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/60 mb-6">
+            <div className="space-y-2 text-xs text-zinc-700 bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/60 mb-4">
               <div className="flex items-center gap-2">
                 <Truck className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
                 <span>Cash on Delivery available inside & outside Dhaka</span>
@@ -176,6 +217,61 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
                 <span>7 days return & exchange policy</span>
+              </div>
+            </div>
+
+            {/* Share & Copy Link */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-zinc-50 rounded-xl border border-zinc-200/80 mb-6">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  copied
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-200'
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-white" />
+                    <span>Product link copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>Copy Product Link</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-zinc-500">Share:</span>
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`${product.name} - ${productUrl}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                  title="Share on WhatsApp"
+                >
+                  WhatsApp
+                </a>
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(productUrl)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                  title="Share on Facebook"
+                >
+                  Facebook
+                </a>
+                <button
+                  type="button"
+                  onClick={handleNativeShare}
+                  className="p-1 rounded-lg text-xs bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200 transition-colors"
+                  title="Share via device"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>

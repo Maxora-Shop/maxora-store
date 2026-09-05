@@ -14,7 +14,7 @@ import { Product, CartItem, StoreSettings } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId } from './utils/seo';
 
 export default function App() {
@@ -35,6 +35,7 @@ export default function App() {
   // Products State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
 
@@ -50,6 +51,7 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [isProductNotFound, setIsProductNotFound] = useState(false);
 
   // Ref to hold a pending product slug while products are loading
   const pendingSlugRef = useRef<string | null>(
@@ -78,6 +80,7 @@ export default function App() {
       if (path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
         setIsAdminView(true);
         setQuickViewProduct(null);
+        setIsProductNotFound(false);
         return;
       } else {
         setIsAdminView(false);
@@ -99,13 +102,22 @@ export default function App() {
         const found = findProductBySlugOrId(products, productSlug);
         if (found) {
           setQuickViewProduct(found);
+          setIsProductNotFound(false);
           pixelService.trackViewContent(found);
+          pendingSlugRef.current = null;
+        } else if (hasFetchedProducts && !loadingProducts) {
+          // Products fetched and not found
+          setQuickViewProduct(null);
+          setIsProductNotFound(true);
+          pendingSlugRef.current = null;
         } else {
-          // If product not found in current products list yet, remember slug
+          // Still waiting for store products to load
           pendingSlugRef.current = productSlug;
         }
       } else {
         setQuickViewProduct(null);
+        setIsProductNotFound(false);
+        pendingSlugRef.current = null;
       }
     };
 
@@ -119,19 +131,26 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
     };
-  }, [products]);
+  }, [products, hasFetchedProducts, loadingProducts]);
 
-  // Resolve any pending product slug whenever products array changes
+  // Resolve any pending product slug whenever products array or fetch status changes
   useEffect(() => {
-    if (pendingSlugRef.current && products.length > 0) {
-      const found = findProductBySlugOrId(products, pendingSlugRef.current);
+    const currentSlug = pendingSlugRef.current;
+    if (currentSlug) {
+      const found = findProductBySlugOrId(products, currentSlug);
       if (found) {
         setQuickViewProduct(found);
+        setIsProductNotFound(false);
         pixelService.trackViewContent(found);
+        pendingSlugRef.current = null;
+      } else if (hasFetchedProducts && !loadingProducts) {
+        // Checked all database products and slug doesn't exist
+        setQuickViewProduct(null);
+        setIsProductNotFound(true);
         pendingSlugRef.current = null;
       }
     }
-  }, [products]);
+  }, [products, hasFetchedProducts, loadingProducts]);
 
   // Save Cart to LocalStorage
   useEffect(() => {
@@ -207,6 +226,7 @@ export default function App() {
       console.error('Failed to load products:', err);
     } finally {
       setLoadingProducts(false);
+      setHasFetchedProducts(true);
     }
   };
 
@@ -675,6 +695,45 @@ export default function App() {
         onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
         onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
       />
+
+      {/* Product Not Found Modal for Invalid Product URLs */}
+      {isProductNotFound && (
+        <div
+          onClick={() => {
+            setIsProductNotFound(false);
+            if (window.location.pathname.startsWith('/product/')) {
+              window.history.pushState({}, '', '/');
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative bg-white w-full max-w-md rounded-3xl p-6 sm:p-8 text-center shadow-2xl border border-zinc-200 animate-scale-up"
+          >
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-zinc-900 mb-2">
+              Product Not Found
+            </h2>
+            <p className="text-sm text-zinc-600 mb-6 leading-relaxed">
+              The product you are looking for is unavailable, may have been removed, or the link is incorrect.
+            </p>
+            <button
+              onClick={() => {
+                setIsProductNotFound(false);
+                if (window.location.pathname.startsWith('/product/')) {
+                  window.history.pushState({}, '', '/');
+                }
+              }}
+              className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-950 hover:bg-zinc-800 text-white transition-colors cursor-pointer shadow-md"
+            >
+              Browse All Products
+            </button>
+          </div>
+        </div>
+      )}
 
       <OrderTrackerModal
         isOpen={isTrackerOpen}
