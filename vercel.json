@@ -1,5 +1,6 @@
 {
   "framework": "vite",
+  "cleanUrls": false,
   "rewrites": [
     {
       "source": "/sitemap.xml",
