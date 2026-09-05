@@ -6,13 +6,54 @@ export interface ProductColor {
   price?: number;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  image_url?: string;
+  display_order: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SubCategory {
+  id: string;
+  category_id: string;
+  category_slug: string;
+  name: string;
+  slug: string;
+  display_order: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChildCategory {
+  id: string;
+  subcategory_id: string;
+  subcategory_slug: string;
+  name: string;
+  slug: string;
+  display_order?: number;
+  active: boolean | number;
+}
+
 export interface Product {
   id: string;
   name: string;
   description?: string;
   category: string;
+  category_id?: string;
   sub_category?: string;
+  subcategory_id?: string;
   child_category?: string;
+  childcategory_id?: string;
   product_type?: string;
   colors?: ProductColor[];
   sku?: string;

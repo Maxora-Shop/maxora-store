@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -10,12 +10,18 @@ import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Product, CartItem, StoreSettings } from './types';
+import { Product, CartItem, StoreSettings, Category, SubCategory } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
 import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle } from 'lucide-react';
-import { getProductSlug, findProductBySlugOrId } from './utils/seo';
+import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
+import {
+  reconcileCategories,
+  reconcileSubCategories,
+  isProductInCategory,
+  isProductInSubCategory,
+} from './utils/categoryCompatibility';
 
 export default function App() {
   // Admin View State
@@ -32,12 +38,15 @@ export default function App() {
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
-  // Products State
+  // Products & Taxonomy State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
 
   // Modals & Drawers
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -118,6 +127,28 @@ export default function App() {
         setQuickViewProduct(null);
         setIsProductNotFound(false);
         pendingSlugRef.current = null;
+
+        // Category & Subcategory check: /category/:slug or /category/:slug/:subslug
+        if (path.startsWith('/category/')) {
+          const match = path.match(/^\/category\/([^/?#]+)(?:\/([^/?#]+))?/);
+          if (match) {
+            const rawCat = decodeURIComponent(match[1]);
+            const rawSub = match[2] ? decodeURIComponent(match[2]) : '';
+            setSelectedCategory(rawCat);
+            setSelectedSubCategory(rawSub);
+          }
+        } else if (path === '/' && !hash && !search) {
+          setSelectedCategory('');
+          setSelectedSubCategory('');
+        } else if (search) {
+          const searchParams = new URLSearchParams(search);
+          if (searchParams.has('category')) {
+            setSelectedCategory(searchParams.get('category') || '');
+            if (searchParams.has('subcategory')) {
+              setSelectedSubCategory(searchParams.get('subcategory') || '');
+            }
+          }
+        }
       }
     };
 
@@ -168,10 +199,11 @@ export default function App() {
     }
   }, [settings]);
 
-  // Load Settings & Products on startup and listen for live updates
+  // Load Settings, Products & Categories on startup and listen for live updates
   useEffect(() => {
     fetchSettings();
     fetchProducts();
+    fetchCategories();
 
     // Live update listeners
     const handleProductsUpdated = () => {
@@ -182,23 +214,32 @@ export default function App() {
       fetchSettings();
     };
 
+    const handleCategoriesUpdated = () => {
+      fetchCategories();
+    };
+
     // Auto-refresh products when tab becomes active again
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchProducts();
         fetchSettings();
+        fetchCategories();
       }
     };
 
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
     window.addEventListener('maxora_settings_updated', handleSettingsUpdated);
+    window.addEventListener('maxora_categories_updated', handleCategoriesUpdated);
     window.addEventListener('storage', handleProductsUpdated);
+    window.addEventListener('storage', handleCategoriesUpdated);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
       window.removeEventListener('maxora_settings_updated', handleSettingsUpdated);
+      window.removeEventListener('maxora_categories_updated', handleCategoriesUpdated);
       window.removeEventListener('storage', handleProductsUpdated);
+      window.removeEventListener('storage', handleCategoriesUpdated);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
@@ -214,6 +255,19 @@ export default function App() {
       setSettings(data);
     } catch (err) {
       console.error('Failed to load settings:', err);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const [cats, subs] = await Promise.all([
+        storeService.getCategories(),
+        storeService.getSubCategories(),
+      ]);
+      setCategories(cats);
+      setSubCategories(subs);
+    } catch (err) {
+      console.error('Failed to load categories:', err);
     }
   };
 
@@ -315,8 +369,14 @@ export default function App() {
 
   const handleCloseProductDetail = () => {
     setQuickViewProduct(null);
-    if (window.location.pathname.startsWith('/product/')) {
-      window.history.pushState({}, '', '/');
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/product/')) {
+      if (selectedCategory && selectedSubCategory && activeCategoryObj && activeSubCategoryObj) {
+        window.history.pushState({}, '', `/category/${activeCategoryObj.slug}/${activeSubCategoryObj.slug}`);
+      } else if (selectedCategory && activeCategoryObj) {
+        window.history.pushState({}, '', `/category/${activeCategoryObj.slug}`);
+      } else {
+        window.history.pushState({}, '', '/');
+      }
     }
   };
 
@@ -356,23 +416,67 @@ export default function App() {
     productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Filter products by category and search
-  const filteredProducts = products.filter((p) => {
-    const search = searchQuery.toLowerCase().trim();
-    const matchSearch =
-      !search ||
-      p.name.toLowerCase().includes(search) ||
-      (p.description && p.description.toLowerCase().includes(search)) ||
-      (p.sku && p.sku.toLowerCase().includes(search)) ||
-      p.category.toLowerCase().includes(search);
-
-    const matchCategory = !selectedCategory || p.category === selectedCategory;
-    return matchSearch && matchCategory;
-  });
-
-  const uniqueCategories = Array.from(
-    new Set(products.map((p) => p.category).filter(Boolean))
+  // Reconcile categories and subcategories with existing product data
+  const reconciledCategories = useMemo(
+    () => reconcileCategories(categories, products),
+    [categories, products]
   );
+  const reconciledSubCategories = useMemo(
+    () => reconcileSubCategories(subCategories, reconciledCategories, products),
+    [subCategories, reconciledCategories, products]
+  );
+
+  const activeCategoryObj = useMemo(() => {
+    if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') return null;
+    const s = selectedCategory.toLowerCase();
+    return reconciledCategories.find(
+      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase() === s || c.id === selectedCategory
+    );
+  }, [selectedCategory, reconciledCategories]);
+
+  const activeSubCategoryObj = useMemo(() => {
+    if (!selectedSubCategory || selectedSubCategory === 'All' || selectedSubCategory === 'all') return null;
+    const s = selectedSubCategory.toLowerCase();
+    return reconciledSubCategories.find(
+      (sub) => sub.slug?.toLowerCase() === s || sub.name?.toLowerCase() === s || sub.id === selectedSubCategory
+    );
+  }, [selectedSubCategory, reconciledSubCategories]);
+
+  // Filter products by category, subcategory and search with full backward compatibility
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const search = searchQuery.toLowerCase().trim();
+      const matchSearch =
+        !search ||
+        p.name.toLowerCase().includes(search) ||
+        (p.description && p.description.toLowerCase().includes(search)) ||
+        (p.sku && p.sku.toLowerCase().includes(search)) ||
+        (p.category && p.category.toLowerCase().includes(search)) ||
+        (p.sub_category && p.sub_category.toLowerCase().includes(search));
+
+      // Category matching
+      let matchCategory = true;
+      if (selectedCategory && selectedCategory !== 'All' && selectedCategory !== 'all') {
+        if (activeCategoryObj) {
+          matchCategory = isProductInCategory(p, activeCategoryObj);
+        } else {
+          matchCategory = (p.category || '').toLowerCase().trim() === selectedCategory.toLowerCase().trim();
+        }
+      }
+
+      // Subcategory matching
+      let matchSubCategory = true;
+      if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
+        if (activeSubCategoryObj) {
+          matchSubCategory = isProductInSubCategory(p, activeSubCategoryObj);
+        } else {
+          matchSubCategory = (p.sub_category || '').toLowerCase().trim() === selectedSubCategory.toLowerCase().trim();
+        }
+      }
+
+      return matchSearch && matchCategory && matchSubCategory;
+    });
+  }, [products, searchQuery, selectedCategory, selectedSubCategory, activeCategoryObj, activeSubCategoryObj]);
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -389,6 +493,7 @@ export default function App() {
         onSettingsUpdated={() => {
           fetchSettings();
           fetchProducts();
+          fetchCategories();
         }}
       />
     );
@@ -407,6 +512,13 @@ export default function App() {
         onOpenTracker={() => setIsTrackerOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        categories={reconciledCategories}
+        selectedCategory={selectedCategory}
+        onSelectCategory={(slug) => {
+          setSelectedCategory(slug);
+          setSelectedSubCategory('');
+          scrollToProducts();
+        }}
       />
 
       {/* Main Content Area */}
@@ -424,10 +536,17 @@ export default function App() {
 
         {/* Category Selector Filter */}
         <CategoryFilter
-          categories={uniqueCategories}
+          categories={reconciledCategories}
           selectedCategory={selectedCategory}
           onSelectCategory={(cat) => {
             setSelectedCategory(cat);
+            setSelectedSubCategory('');
+            scrollToProducts();
+          }}
+          subCategories={reconciledSubCategories}
+          selectedSubCategory={selectedSubCategory}
+          onSelectSubCategory={(sub) => {
+            setSelectedSubCategory(sub);
             scrollToProducts();
           }}
         />
@@ -436,21 +555,50 @@ export default function App() {
         <section ref={productSectionRef} className="my-8 scroll-mt-24">
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 mb-6">
             <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight">
-                {selectedCategory ? `${selectedCategory}` : searchQuery ? `Search Results for "${searchQuery}"` : "Featured Collections"}
+              <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight flex items-center flex-wrap gap-2">
+                {activeCategoryObj ? (
+                  <>
+                    <span>{activeCategoryObj.name}</span>
+                    {activeSubCategoryObj && (
+                      <>
+                        <span className="text-zinc-400 font-light">/</span>
+                        <span className="text-emerald-600">{activeSubCategoryObj.name}</span>
+                      </>
+                    )}
+                  </>
+                ) : selectedCategory ? (
+                  `${selectedCategory}`
+                ) : searchQuery ? (
+                  `Search Results for "${searchQuery}"`
+                ) : (
+                  "Featured Collections"
+                )}
               </h2>
               <p className="text-xs sm:text-sm text-zinc-500 font-medium">
                 Showing {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} available in stock
               </p>
             </div>
 
-            {selectedCategory && (
-              <button
-                onClick={() => setSelectedCategory('')}
-                className="text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-full transition-colors self-start sm:self-auto cursor-pointer"
-              >
-                Clear Category Filter ✕
-              </button>
+            {(selectedCategory || selectedSubCategory) && (
+              <div className="flex items-center gap-2">
+                {selectedSubCategory && (
+                  <button
+                    onClick={() => setSelectedSubCategory('')}
+                    className="text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-200/80 hover:bg-zinc-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    Clear Subcategory ✕
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedCategory('');
+                    setSelectedSubCategory('');
+                  }}
+                  className="text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                >
+                  Clear Category Filter ✕
+                </button>
+              </div>
             )}
           </div>
 

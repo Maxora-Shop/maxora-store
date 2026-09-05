@@ -28,6 +28,8 @@ interface DBSchema {
   customers: any[];
   orders: any[];
   order_items: any[];
+  categories: any[];
+  subcategories: any[];
 }
 
 const defaultSettings: Record<string, string> = {
@@ -355,12 +357,36 @@ const defaultOrderItems = [
   }
 ];
 
+const defaultCategories = [
+  { id: "cat-smart-gadgets", name: "Smart Gadgets", slug: "smart-gadgets", icon: "Watch", active: 1, display_order: 1 },
+  { id: "cat-audio", name: "Audio", slug: "audio", icon: "Headphones", active: 1, display_order: 2 },
+  { id: "cat-lifestyle-bags", name: "Lifestyle & Bags", slug: "lifestyle-bags", icon: "ShoppingBag", active: 1, display_order: 3 },
+  { id: "cat-home-living", name: "Home & Living", slug: "home-living", icon: "Home", active: 1, display_order: 4 },
+  { id: "cat-accessories", name: "Accessories", slug: "accessories", icon: "Shirt", active: 1, display_order: 5 },
+  { id: "cat-gourmet-food", name: "Gourmet & Food", slug: "gourmet-food", icon: "Coffee", active: 1, display_order: 6 }
+];
+
+const defaultSubCategories = [
+  { id: "subcat-smartwatches", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Smartwatches", slug: "smartwatches", active: 1, display_order: 1 },
+  { id: "subcat-fitness-bands", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Fitness Bands", slug: "fitness-bands", active: 1, display_order: 2 },
+  { id: "subcat-gaming-accessories", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Gaming Accessories", slug: "gaming-accessories", active: 1, display_order: 3 },
+  { id: "subcat-wireless-earbuds", category_id: "cat-audio", category_slug: "audio", name: "Wireless Earbuds", slug: "wireless-earbuds", active: 1, display_order: 1 },
+  { id: "subcat-bluetooth-speakers", category_id: "cat-audio", category_slug: "audio", name: "Bluetooth Speakers", slug: "bluetooth-speakers", active: 1, display_order: 2 },
+  { id: "subcat-anti-theft-backpacks", category_id: "cat-lifestyle-bags", category_slug: "lifestyle-bags", name: "Anti-Theft Backpacks", slug: "anti-theft-backpacks", active: 1, display_order: 1 },
+  { id: "subcat-drinkware-flasks", category_id: "cat-home-living", category_slug: "home-living", name: "Drinkware & Vacuum Flasks", slug: "drinkware-flasks", active: 1, display_order: 1 },
+  { id: "subcat-coffee-gear", category_id: "cat-home-living", category_slug: "home-living", name: "Coffee Gear", slug: "coffee-gear", active: 1, display_order: 2 },
+  { id: "subcat-leather-wallets", category_id: "cat-accessories", category_slug: "accessories", name: "Leather Wallets", slug: "leather-wallets", active: 1, display_order: 1 },
+  { id: "subcat-organic-tea", category_id: "cat-gourmet-food", category_slug: "gourmet-food", name: "Organic Tea", slug: "organic-tea", active: 1, display_order: 1 }
+];
+
 let db: DBSchema = {
   settings: { ...defaultSettings },
   products: [...defaultProducts],
   customers: [...defaultCustomers],
   orders: [...defaultOrders],
-  order_items: [...defaultOrderItems]
+  order_items: [...defaultOrderItems],
+  categories: [...defaultCategories],
+  subcategories: [...defaultSubCategories]
 };
 
 // Load existing db if available
@@ -373,7 +399,9 @@ try {
       products: parsed.products || defaultProducts,
       customers: parsed.customers || defaultCustomers,
       orders: parsed.orders || defaultOrders,
-      order_items: parsed.order_items || defaultOrderItems
+      order_items: parsed.order_items || defaultOrderItems,
+      categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : defaultCategories,
+      subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories
     };
   } else {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -1228,14 +1256,40 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
   });
 });
 
-// GET /sitemap.xml (Dynamic Google XML Sitemap)
-app.get('/sitemap.xml', (req, res) => {
-  const host = req.get('host') || '';
-  const isVercelOrProd = host.includes('maxora-store-ruby.vercel.app') || (!host.includes('localhost') && !host.includes('127.0.0.1'));
-  const baseUrl = isVercelOrProd ? 'https://maxora-store-ruby.vercel.app' : `${req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${host}`;
+// GET /api/categories
+app.get('/api/categories', (req, res) => {
+  const activeOnly = req.query.active !== 'false' && req.query.all !== 'true';
+  const list = (db.categories || defaultCategories).filter(c => !activeOnly || (c.active !== 0 && c.active !== false && String(c.active) !== '0'));
+  res.json({
+    success: true,
+    categories: list
+  });
+});
 
-  const activeProducts = db.products.filter(p => p.active !== 0 && p.active !== false);
+// GET /api/subcategories
+app.get('/api/subcategories', (req, res) => {
+  const categorySlugOrId = req.query.category;
+  const activeOnly = req.query.active !== 'false' && req.query.all !== 'true';
+  let list = (db.subcategories || defaultSubCategories).filter(s => !activeOnly || (s.active !== 0 && s.active !== false && String(s.active) !== '0'));
+  if (categorySlugOrId) {
+    const target = String(categorySlugOrId).toLowerCase().trim();
+    list = list.filter(s => 
+      (s.category_id && String(s.category_id).toLowerCase() === target) ||
+      (s.category_slug && String(s.category_slug).toLowerCase() === target)
+    );
+  }
+  res.json({
+    success: true,
+    subcategories: list
+  });
+});
 
+// Generate dynamic XML sitemap function
+function buildDynamicSitemap(baseUrl: string): string {
+  const today = new Date().toISOString().split('T')[0];
+
+  // 1. Active Products only (removes deleted or inactive)
+  const activeProducts = (db.products || []).filter(p => p.active !== 0 && p.active !== false && String(p.active) !== '0');
   const productUrls = activeProducts.map(p => {
     const slug = p.slug || (p.name ? p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
     const lastMod = (p.updated_at || p.created_at || new Date().toISOString()).split('T')[0];
@@ -1243,20 +1297,59 @@ app.get('/sitemap.xml', (req, res) => {
     <loc>${baseUrl}/product/${slug}</loc>
     <lastmod>${lastMod}</lastmod>
     <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`;
+  }).join('\n');
+
+  // 2. Active Categories only (removes deleted or inactive)
+  const activeCategories = (db.categories || defaultCategories).filter(c => c.active !== 0 && c.active !== false && String(c.active) !== '0');
+  const categoryUrls = activeCategories.map(c => {
+    const slug = c.slug || (c.name ? c.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : c.id);
+    const lastMod = (c.updated_at || c.created_at || new Date().toISOString()).split('T')[0];
+    return `  <url>
+    <loc>${baseUrl}/category/${slug}</loc>
+    <lastmod>${lastMod}</lastmod>
+    <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>`;
   }).join('\n');
 
-  const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+  // 3. Active Subcategories only (removes deleted or inactive)
+  const activeSubCategories = (db.subcategories || defaultSubCategories).filter(s => s.active !== 0 && s.active !== false && String(s.active) !== '0');
+  const subCategoryUrls = activeSubCategories.map(s => {
+    const cat = activeCategories.find(c => c.id === s.category_id || c.slug === s.category_slug);
+    const catSlug = cat ? cat.slug : (s.category_slug || 'category');
+    const subSlug = s.slug || (s.name ? s.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : s.id);
+    const lastMod = (s.updated_at || s.created_at || new Date().toISOString()).split('T')[0];
+    return `  <url>
+    <loc>${baseUrl}/category/${catSlug}/${subSlug}</loc>
+    <lastmod>${lastMod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+  }).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${baseUrl}/</loc>
-    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
+    <lastmod>${today}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+${categoryUrls}
+${subCategoryUrls}
 ${productUrls}
 </urlset>`;
+}
+
+// GET /sitemap.xml (Dynamic Google XML Sitemap)
+app.get(['/sitemap.xml', '/api/sitemap.xml'], (req, res) => {
+  const host = req.get('host') || '';
+  const isVercelOrProd = host.includes('maxora-store-ruby.vercel.app') || (!host.includes('localhost') && !host.includes('127.0.0.1'));
+  const baseUrl = isVercelOrProd ? 'https://maxora-store-ruby.vercel.app' : `${req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${host}`;
+
+  const sitemap = buildDynamicSitemap(baseUrl);
 
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.send(sitemap);

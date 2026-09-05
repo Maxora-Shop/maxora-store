@@ -36,7 +36,10 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
   };
 
   const productSlug = getProductSlug(product);
-  const productUrl = `${SITE_URL}/product/${productSlug}`;
+  const baseDomain = typeof window !== 'undefined' && window.location.origin
+    ? window.location.origin
+    : SITE_URL;
+  const productUrl = `${baseDomain.replace(/\/$/, '')}/product/${productSlug}`;
 
   const handleCopyLink = async () => {
     try {

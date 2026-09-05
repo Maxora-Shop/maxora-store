@@ -47,13 +47,15 @@ import {
   X,
   Tag,
   Hash,
-  Palette
+  Palette,
+  FolderTree
 } from 'lucide-react';
-import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor } from '../types';
+import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
+import { AdminCategories } from './AdminCategories';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -131,7 +133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -139,6 +141,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [bestProducts, setBestProducts] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [dbCategories, setDbCategories] = useState<Category[]>([]);
+  const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
@@ -479,15 +483,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast('Logged out of admin panel', 'success');
   };
 
+  const loadCategories = async () => {
+    try {
+      const [cats, subs] = await Promise.all([
+        storeService.getCategories(),
+        storeService.getSubCategories(),
+      ]);
+      setDbCategories(cats);
+      setDbSubCategories(subs);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const loadTabData = (tab: string, currentPassword = password) => {
     if (tab === 'overview') loadOverview(currentPassword);
-    if (tab === 'products') loadProducts(currentPassword);
+    if (tab === 'products') {
+      loadProducts(currentPassword);
+      loadCategories();
+    }
+    if (tab === 'categories') {
+      loadCategories();
+      loadProducts(currentPassword);
+    }
     if (tab === 'orders') loadOrders(currentPassword);
     if (tab === 'customers') loadCustomers(currentPassword);
     if (tab === 'settings') loadSettings(currentPassword);
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
@@ -952,6 +976,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {products.length > 0 && (
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'products' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                   {products.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('categories')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'categories'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <FolderTree className="w-4 h-4 shrink-0" />
+              <span>🏷️ Categories</span>
+              {dbCategories.length > 0 && (
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {dbCategories.length}
                 </span>
               )}
             </button>
@@ -1796,6 +1837,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ====================================================
+            CATEGORIES & SUBCATEGORIES MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'categories' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminCategories
+              password={password}
+              products={products}
+              onUpdated={() => {
+                loadCategories();
+                loadProducts();
+                onSettingsUpdated();
+              }}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
             3. TAB: ORDERS MANAGEMENT
         ==================================================== */}
         {currentTab === 'orders' && (
@@ -2521,18 +2579,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           required
                           placeholder="e.g. Smart Gadgets"
                           value={editingProduct?.category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matchedCat = dbCategories.find(
+                              (c) => c.name.toLowerCase() === val.toLowerCase() || c.slug === val.toLowerCase()
+                            );
+                            setEditingProduct({
+                              ...editingProduct,
+                              category: val,
+                              category_id: matchedCat?.id || editingProduct?.category_id || '',
+                              category_slug: matchedCat?.slug || editingProduct?.category_slug || '',
+                            });
+                          }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
                         />
                         <datalist id="admin-category-list-root">
-                          <option value="Smart Gadgets" />
-                          <option value="Audio" />
-                          <option value="Computer & Gaming" />
-                          <option value="Mobile Accessories" />
-                          <option value="Lifestyle & Bags" />
-                          <option value="Home & Living" />
-                          <option value="Fashion & Apparel" />
-                          <option value="Watches & Wearables" />
+                          {dbCategories.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name} ({c.slug})
+                            </option>
+                          ))}
+                          {dbCategories.length === 0 && (
+                            <>
+                              <option value="Smart Gadgets" />
+                              <option value="Audio" />
+                              <option value="Computer & Gaming" />
+                              <option value="Mobile Accessories" />
+                              <option value="Lifestyle & Bags" />
+                              <option value="Home & Living" />
+                              <option value="Fashion & Apparel" />
+                              <option value="Watches & Wearables" />
+                            </>
+                          )}
                         </datalist>
                       </div>
 
@@ -2546,21 +2624,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           placeholder="e.g. Smartwatches, Wireless Earbuds"
                           value={editingProduct?.sub_category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, sub_category: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matchedSub = dbSubCategories.find(
+                              (s) => s.name.toLowerCase() === val.toLowerCase() || s.slug === val.toLowerCase()
+                            );
+                            setEditingProduct({
+                              ...editingProduct,
+                              sub_category: val,
+                              subcategory_id: matchedSub?.id || editingProduct?.subcategory_id || '',
+                              subcategory_slug: matchedSub?.slug || editingProduct?.subcategory_slug || '',
+                            });
+                          }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
                         />
                         <datalist id="admin-subcategory-list-root">
-                          <option value="Smartwatches" />
-                          <option value="Fitness Bands" />
-                          <option value="TWS Earbuds" />
-                          <option value="Neckbands" />
-                          <option value="Bluetooth Speakers" />
-                          <option value="Fast Chargers & GaN" />
-                          <option value="Charging Cables" />
-                          <option value="Power Banks" />
-                          <option value="Mechanical Keyboards" />
-                          <option value="Gaming Mouse" />
-                          <option value="Backpacks & Bags" />
+                          {dbSubCategories
+                            .filter((s) => {
+                              if (!editingProduct?.category) return true;
+                              const currentCat = editingProduct.category.toLowerCase().trim();
+                              const parentCat = dbCategories.find((c) => c.id === s.category_id);
+                              return (
+                                s.category_id === editingProduct.category_id ||
+                                s.category_slug === editingProduct.category_slug ||
+                                (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                              );
+                            })
+                            .map((s) => (
+                              <option key={s.id} value={s.name}>
+                                {s.name}
+                              </option>
+                            ))}
+                          {dbSubCategories.length === 0 && (
+                            <>
+                              <option value="Smartwatches" />
+                              <option value="Fitness Bands" />
+                              <option value="TWS Earbuds" />
+                              <option value="Neckbands" />
+                              <option value="Bluetooth Speakers" />
+                              <option value="Fast Chargers & GaN" />
+                              <option value="Charging Cables" />
+                              <option value="Power Banks" />
+                              <option value="Mechanical Keyboards" />
+                              <option value="Gaming Mouse" />
+                              <option value="Backpacks & Bags" />
+                            </>
+                          )}
                         </datalist>
                       </div>
 

@@ -1,20 +1,29 @@
 import React, { useEffect } from 'react';
-import { Product, StoreSettings } from '../types';
+import { Product, StoreSettings, Category, SubCategory } from '../types';
 import {
   SITE_URL,
   STORE_NAME,
   getProductSlug,
   getProductCanonicalUrl,
   getHomepageCanonicalUrl,
+  getCategoryCanonicalUrl,
+  getSubCategoryCanonicalUrl,
   cleanSeoText,
 } from '../utils/seo';
 
 interface SEOHeadProps {
   settings: StoreSettings;
   activeProduct?: Product | null;
+  activeCategory?: Category | null;
+  activeSubCategory?: SubCategory | null;
 }
 
-export const SEOHead: React.FC<SEOHeadProps> = ({ settings, activeProduct }) => {
+export const SEOHead: React.FC<SEOHeadProps> = ({
+  settings,
+  activeProduct,
+  activeCategory,
+  activeSubCategory,
+}) => {
   useEffect(() => {
     const storeBrand = settings.store_name?.trim() || STORE_NAME;
     const defaultOgImage =
@@ -57,6 +66,25 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ settings, activeProduct }) => 
 
       // Phase 6 Canonical URL: https://maxora-store-ruby.vercel.app/product/{slug}
       canonicalUrl = getProductCanonicalUrl(activeProduct, SITE_URL);
+    } else if (activeCategory) {
+      // Category & Subcategory SEO
+      const catTitle = activeSubCategory
+        ? `${activeSubCategory.name} - ${activeCategory.name}`
+        : activeCategory.name;
+
+      pageTitle = activeCategory.meta_title?.trim() || `${catTitle} Price in Bangladesh | ${storeBrand}`;
+
+      pageDescription =
+        activeCategory.meta_description?.trim() ||
+        `Shop authentic ${catTitle} at competitive prices in Bangladesh. Enjoy 100% Cash on Delivery and verified quality from ${storeBrand}.`;
+
+      pageKeywords = `${catTitle.toLowerCase()}, buy ${activeCategory.name.toLowerCase()} bangladesh, cash on delivery, ${storeBrand.toLowerCase()}`;
+
+      ogImage = activeCategory.image_url || defaultOgImage;
+
+      canonicalUrl = activeSubCategory
+        ? getSubCategoryCanonicalUrl(activeCategory, activeSubCategory, SITE_URL)
+        : getCategoryCanonicalUrl(activeCategory, SITE_URL);
     } else {
       // Homepage metadata
       pageTitle =
@@ -253,7 +281,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ settings, activeProduct }) => 
     script.type = 'application/ld+json';
     script.text = JSON.stringify(schemaData);
     document.head.appendChild(script);
-  }, [settings, activeProduct]);
+  }, [settings, activeProduct, activeCategory, activeSubCategory]);
 
   return null;
 };

@@ -1,4 +1,206 @@
-import { Product, StoreSettings, Customer, Order, OrderItem } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory } from '../types';
+
+export const INITIAL_CATEGORIES: Category[] = [
+  {
+    id: "cat-smart-gadgets",
+    name: "Smart Gadgets",
+    slug: "smart-gadgets",
+    icon: "Watch",
+    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    display_order: 1,
+    active: 1,
+    meta_title: "Smart Gadgets & Wearables in Bangladesh | Maxora",
+    meta_description: "Explore smartwatches, fitness bands, and wearable tech with fast Cash on Delivery in Bangladesh."
+  },
+  {
+    id: "cat-audio",
+    name: "Audio",
+    slug: "audio",
+    icon: "Headphones",
+    image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80",
+    display_order: 2,
+    active: 1,
+    meta_title: "Premium Wireless Earbuds & Audio in BD | Maxora",
+    meta_description: "Shop Active Noise Cancelling (ANC) earbuds, headphones, and Bluetooth speakers at best prices in BD."
+  },
+  {
+    id: "cat-computer-gaming",
+    name: "Computer & Gaming",
+    slug: "computer-gaming",
+    icon: "Sparkles",
+    image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400&auto=format&fit=crop&q=80",
+    display_order: 3,
+    active: 1,
+    meta_title: "Mechanical Keyboards & Gaming Gear in BD | Maxora",
+    meta_description: "RGB mechanical keyboards, gaming mice, and desk accessories for gamers and professionals in Bangladesh."
+  },
+  {
+    id: "cat-lifestyle-bags",
+    name: "Lifestyle & Bags",
+    slug: "lifestyle-bags",
+    icon: "ShoppingBag",
+    image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80",
+    display_order: 4,
+    active: 1,
+    meta_title: "Anti-Theft Backpacks & Travel Bags | Maxora BD",
+    meta_description: "Water-repellent anti-theft backpacks, laptop bags, and travel gear delivered across 64 districts."
+  },
+  {
+    id: "cat-home-living",
+    name: "Home & Living",
+    slug: "home-living",
+    icon: "Home",
+    image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80",
+    display_order: 5,
+    active: 1,
+    meta_title: "Home & Living Essentials | Maxora BD",
+    meta_description: "Vacuum insulated flasks, coffee dripper sets, and premium home essentials for everyday comfort."
+  },
+  {
+    id: "cat-accessories",
+    name: "Accessories",
+    slug: "accessories",
+    icon: "Shirt",
+    image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80",
+    display_order: 6,
+    active: 1,
+    meta_title: "Genuine Leather Wallets & Accessories | Maxora BD",
+    meta_description: "Handcrafted 100% genuine BD cowhide leather wallets, cardholders, and everyday accessories."
+  },
+  {
+    id: "cat-mobile-accessories",
+    name: "Mobile Accessories",
+    slug: "mobile-accessories",
+    icon: "Sparkles",
+    image_url: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&auto=format&fit=crop&q=80",
+    display_order: 7,
+    active: 1,
+    meta_title: "Fast GaN Chargers & Cables | Maxora BD",
+    meta_description: "Fast chargers, GaN adapters, heavy-duty braided Type-C cables, and mobile accessories."
+  },
+  {
+    id: "cat-gourmet-food",
+    name: "Gourmet & Food",
+    slug: "gourmet-food",
+    icon: "Coffee",
+    image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&auto=format&fit=crop&q=80",
+    display_order: 8,
+    active: 1,
+    meta_title: "Pure Organic Tea & Artisanal Food | Maxora BD",
+    meta_description: "Single-origin whole-leaf Sylhet Sreemangal black tea and gourmet specialty goods."
+  }
+];
+
+export const INITIAL_SUBCATEGORIES: SubCategory[] = [
+  {
+    id: "subcat-smartwatches",
+    category_id: "cat-smart-gadgets",
+    category_slug: "smart-gadgets",
+    name: "Smartwatches",
+    slug: "smartwatches",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-fitness-bands",
+    category_id: "cat-smart-gadgets",
+    category_slug: "smart-gadgets",
+    name: "Fitness Bands",
+    slug: "fitness-bands",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-tws-earbuds",
+    category_id: "cat-audio",
+    category_slug: "audio",
+    name: "TWS Earbuds",
+    slug: "tws-earbuds",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-bluetooth-speakers",
+    category_id: "cat-audio",
+    category_slug: "audio",
+    name: "Bluetooth Speakers",
+    slug: "bluetooth-speakers",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-mechanical-keyboards",
+    category_id: "cat-computer-gaming",
+    category_slug: "computer-gaming",
+    name: "Mechanical Keyboards",
+    slug: "mechanical-keyboards",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-gaming-mouse",
+    category_id: "cat-computer-gaming",
+    category_slug: "computer-gaming",
+    name: "Gaming Mouse",
+    slug: "gaming-mouse",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-backpacks",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    name: "Backpacks",
+    slug: "backpacks",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-vacuum-flasks",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    name: "Vacuum Flasks",
+    slug: "vacuum-flasks",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-coffee-drippers",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    name: "Coffee Drippers",
+    slug: "coffee-drippers",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-wallets",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    name: "Wallets",
+    slug: "wallets",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-chargers-cables",
+    category_id: "cat-mobile-accessories",
+    category_slug: "mobile-accessories",
+    name: "Chargers & Cables",
+    slug: "chargers-cables",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-organic-tea",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    name: "Organic Tea",
+    slug: "organic-tea",
+    display_order: 1,
+    active: 1
+  }
+];
 
 export const INITIAL_SETTINGS: StoreSettings = {
   store_name: "Maxora",

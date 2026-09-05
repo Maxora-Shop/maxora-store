@@ -65,6 +65,38 @@ export function getHomepageCanonicalUrl(baseUrl = SITE_URL): string {
 }
 
 /**
+ * Gets the canonical category URL.
+ * Example: https://maxora-store-ruby.vercel.app/category/smart-gadgets
+ */
+export function getCategoryCanonicalUrl(
+  category: { slug?: string; name?: string } | string,
+  baseUrl = SITE_URL
+): string {
+  const slug = typeof category === 'string'
+    ? generateSlug(category)
+    : (category.slug || generateSlug(category.name || ''));
+  return `${baseUrl.replace(/\/$/, '')}/category/${slug}`;
+}
+
+/**
+ * Gets the canonical subcategory URL.
+ * Example: https://maxora-store-ruby.vercel.app/category/smart-gadgets/smartwatches
+ */
+export function getSubCategoryCanonicalUrl(
+  category: { slug?: string; name?: string } | string,
+  subCategory: { slug?: string; name?: string } | string,
+  baseUrl = SITE_URL
+): string {
+  const catSlug = typeof category === 'string'
+    ? generateSlug(category)
+    : (category.slug || generateSlug(category.name || ''));
+  const subSlug = typeof subCategory === 'string'
+    ? generateSlug(subCategory)
+    : (subCategory.slug || generateSlug(subCategory.name || ''));
+  return `${baseUrl.replace(/\/$/, '')}/category/${catSlug}/${subSlug}`;
+}
+
+/**
  * Finds a product in the list by matching slug, SKU, name, or id.
  */
 export function findProductBySlugOrId(

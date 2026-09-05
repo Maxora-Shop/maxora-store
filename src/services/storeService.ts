@@ -1,5 +1,7 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus } from '../types';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS } from '../data/initialData';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory } from '../types';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES } from '../data/initialData';
+import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
+import { generateSlug } from '../utils/seo';
 import { db } from '../firebase';
 import {
   collection,
@@ -20,6 +22,8 @@ const SETTINGS_KEY = 'maxora_settings_v1';
 const PRODUCTS_KEY = 'maxora_products_v1';
 const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
+const CATEGORIES_KEY = 'maxora_categories_v1';
+const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
 
 function notifyProductsChanged(): void {
   if (typeof window !== 'undefined') {
@@ -36,6 +40,18 @@ function notifySettingsChanged(): void {
 function notifyOrdersChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+  }
+}
+
+function notifyCategoriesChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+  }
+}
+
+function notifySubCategoriesChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_subcategories_updated'));
   }
 }
 
@@ -72,6 +88,12 @@ export function initLocalStorage(): void {
   }
   if (!localStorage.getItem(CUSTOMERS_KEY)) {
     setLocal(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+  }
+  if (!localStorage.getItem(CATEGORIES_KEY)) {
+    setLocal(CATEGORIES_KEY, INITIAL_CATEGORIES);
+  }
+  if (!localStorage.getItem(SUBCATEGORIES_KEY)) {
+    setLocal(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
   }
 }
 
@@ -120,6 +142,34 @@ export function initRealtimeFirestoreListeners() {
         }
       }
     }, (err) => console.warn('Orders Firestore snapshot warning:', err));
+
+    // 4. Listen for categories changes
+    onSnapshot(collection(db, 'categories'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cats: Category[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as Category;
+          cats.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        cats.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(CATEGORIES_KEY, cats);
+        notifyCategoriesChanged();
+      }
+    }, (err) => console.warn('Categories Firestore snapshot warning:', err));
+
+    // 5. Listen for subcategories changes
+    onSnapshot(collection(db, 'subcategories'), (snapshot) => {
+      if (!snapshot.empty) {
+        const subcats: SubCategory[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as SubCategory;
+          subcats.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        subcats.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(SUBCATEGORIES_KEY, subcats);
+        notifySubCategoriesChanged();
+      }
+    }, (err) => console.warn('Subcategories Firestore snapshot warning:', err));
   } catch (err) {
     console.warn('Realtime listener error:', err);
   }
@@ -267,7 +317,7 @@ export const storeService = {
   },
 
   // 2. PRODUCTS
-  async getProducts(search = '', category = ''): Promise<Product[]> {
+  async getProducts(search = '', category = '', subCategory = ''): Promise<Product[]> {
     let prods: Product[] = [];
     let firestoreLoaded = false;
 
@@ -306,7 +356,21 @@ export const storeService = {
     }
 
     if (category.trim()) {
-      list = list.filter((p) => p.category === category.trim());
+      const catTarget = category.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      list = list.filter((p) => {
+        const pCat = (p.category || '').toLowerCase().trim();
+        const pCatSlug = pCat.replace(/[\s_]+/g, '-');
+        return pCat === category.toLowerCase().trim() || pCatSlug === catTarget;
+      });
+    }
+
+    if (subCategory.trim()) {
+      const subTarget = subCategory.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      list = list.filter((p) => {
+        const pSub = (p.sub_category || '').toLowerCase().trim();
+        const pSubSlug = pSub.replace(/[\s_]+/g, '-');
+        return pSub === subCategory.toLowerCase().trim() || pSubSlug === subTarget;
+      });
     }
 
     list.sort((a, b) => {
@@ -934,5 +998,180 @@ export const storeService = {
       total_expenses: totalExpenses,
       profit: profit,
     };
+  },
+
+  // 6. CATEGORIES
+  async getCategories(): Promise<Category[]> {
+    let cats: Category[] = [];
+    let firestoreSuccess = false;
+    try {
+      const snap = await getDocs(collection(db, 'categories'));
+      if (!snap.empty) {
+        firestoreSuccess = true;
+        snap.forEach((d) => {
+          const item = d.data() as Category;
+          cats.push({ ...item, id: String(item.id || d.id) });
+        });
+        setLocal(CATEGORIES_KEY, cats);
+      }
+    } catch (e) {
+      console.warn('Firestore getCategories error:', e);
+    }
+
+    if (!firestoreSuccess) {
+      cats = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
+    }
+
+    // Always reconcile with products in case there are unindexed categories
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    return reconcileCategories(cats, prods);
+  },
+
+  async saveCategory(catData: Partial<Category>, adminPassword?: string): Promise<{ success: boolean; category: Category }> {
+    const rawName = (catData.name || '').trim();
+    const slug = (catData.slug && catData.slug.trim()) ? generateSlug(catData.slug) : generateSlug(rawName);
+    const id = catData.id || `cat-${slug || Date.now()}`;
+
+    const newCategory: Category = {
+      id,
+      name: rawName || 'Uncategorized',
+      slug: slug || 'uncategorized',
+      icon: catData.icon || 'Sparkles',
+      image_url: catData.image_url || '',
+      display_order: Number(catData.display_order ?? 999),
+      active: catData.active !== undefined ? (catData.active ? 1 : 0) : 1,
+      meta_title: catData.meta_title || '',
+      meta_description: catData.meta_description || '',
+      created_at: catData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'categories', id), newCategory, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveCategory error:', e);
+    }
+
+    // Save to local cache
+    const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
+    const idx = current.findIndex((c) => c.id === id || c.slug === slug);
+    let updated: Category[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newCategory;
+    } else {
+      updated = [...current, newCategory];
+    }
+    setLocal(CATEGORIES_KEY, updated);
+    notifyCategoriesChanged();
+
+    return { success: true, category: newCategory };
+  },
+
+  async deleteCategory(categoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
+    try {
+      await deleteDoc(doc(db, 'categories', categoryId));
+    } catch (e) {
+      console.warn('Firestore deleteCategory error:', e);
+    }
+
+    const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
+    const updated = current.filter((c) => c.id !== categoryId);
+    setLocal(CATEGORIES_KEY, updated);
+    notifyCategoriesChanged();
+
+    return { success: true };
+  },
+
+  // 7. SUBCATEGORIES
+  async getSubCategories(categorySlug?: string): Promise<SubCategory[]> {
+    let subcats: SubCategory[] = [];
+    let firestoreSuccess = false;
+    try {
+      const snap = await getDocs(collection(db, 'subcategories'));
+      if (!snap.empty) {
+        firestoreSuccess = true;
+        snap.forEach((d) => {
+          const item = d.data() as SubCategory;
+          subcats.push({ ...item, id: String(item.id || d.id) });
+        });
+        setLocal(SUBCATEGORIES_KEY, subcats);
+      }
+    } catch (e) {
+      console.warn('Firestore getSubCategories error:', e);
+    }
+
+    if (!firestoreSuccess) {
+      subcats = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    }
+
+    const categories = await this.getCategories();
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let reconciled = reconcileSubCategories(subcats, categories, prods);
+
+    if (categorySlug && categorySlug.trim()) {
+      const cleanSlug = categorySlug.trim().toLowerCase();
+      reconciled = reconciled.filter(
+        (s) => (s.category_slug || '').toLowerCase() === cleanSlug
+      );
+    }
+
+    return reconciled;
+  },
+
+  async saveSubCategory(subData: Partial<SubCategory>, adminPassword?: string): Promise<{ success: boolean; subCategory: SubCategory }> {
+    const rawName = (subData.name || '').trim();
+    const slug = (subData.slug && subData.slug.trim()) ? generateSlug(subData.slug) : generateSlug(rawName);
+    const id = subData.id || `subcat-${slug || Date.now()}`;
+
+    const newSubCategory: SubCategory = {
+      id,
+      category_id: subData.category_id || '',
+      category_slug: subData.category_slug || '',
+      name: rawName || 'General',
+      slug: slug || 'general',
+      display_order: Number(subData.display_order ?? 999),
+      active: subData.active !== undefined ? (subData.active ? 1 : 0) : 1,
+      meta_title: subData.meta_title || '',
+      meta_description: subData.meta_description || '',
+      created_at: subData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(doc(db, 'subcategories', id), newSubCategory, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveSubCategory error:', e);
+    }
+
+    const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    const idx = current.findIndex((s) => s.id === id || s.slug === slug);
+    let updated: SubCategory[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newSubCategory;
+    } else {
+      updated = [...current, newSubCategory];
+    }
+    setLocal(SUBCATEGORIES_KEY, updated);
+    notifySubCategoriesChanged();
+
+    return { success: true, subCategory: newSubCategory };
+  },
+
+  async deleteSubCategory(subCategoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
+    try {
+      await deleteDoc(doc(db, 'subcategories', subCategoryId));
+    } catch (e) {
+      console.warn('Firestore deleteSubCategory error:', e);
+    }
+
+    const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    const updated = current.filter((s) => s.id !== subCategoryId);
+    setLocal(SUBCATEGORIES_KEY, updated);
+    notifySubCategoriesChanged();
+
+    return { success: true };
   },
 };
