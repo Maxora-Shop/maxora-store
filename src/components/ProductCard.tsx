@@ -1,13 +1,16 @@
 import React from 'react';
-import { ShoppingBag, Eye, Check } from 'lucide-react';
-import { Product } from '../types';
+import { ShoppingBag, Eye, Check, Star, Heart } from 'lucide-react';
+import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
 interface ProductCardProps {
   product: Product;
   onAddToCart: (product: Product) => void;
-  onQuickView: (product: Product) => void;
+  onQuickView: (product: Product, initialTab?: 'details' | 'reviews') => void;
   isAdded?: boolean;
+  ratingStats?: ProductRatingStats;
+  isWishlisted?: boolean;
+  onToggleWishlist?: (product: Product) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -15,6 +18,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onAddToCart,
   onQuickView,
   isAdded = false,
+  ratingStats,
+  isWishlisted = false,
+  onToggleWishlist,
 }) => {
   const sellingPrice = Number(product.selling_price || 0);
   const discount = Number(product.discount || 0);
@@ -65,14 +71,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           )}
         </div>
 
-        {/* Mobile Quick View Trigger (visible on mobile) */}
+        {/* Wishlist Heart Toggle Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (onToggleWishlist) {
+              onToggleWishlist(product);
+            }
+          }}
+          className={`absolute top-2.5 right-2.5 w-8 h-8 sm:w-9 sm:h-9 rounded-full shadow-md flex items-center justify-center z-20 transition-all cursor-pointer ${
+            isWishlisted
+              ? 'bg-white text-rose-500 scale-105 border border-rose-200'
+              : 'bg-white/90 hover:bg-white text-zinc-500 hover:text-rose-500 hover:scale-105 border border-zinc-200/70'
+          }`}
+          aria-label={isWishlisted ? "Remove from wishlist" : "Save to wishlist"}
+          title={isWishlisted ? "Remove from Saved Items" : "Save to Wishlist"}
+        >
+          <Heart
+            className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-all ${
+              isWishlisted
+                ? 'fill-rose-500 text-rose-500 scale-110'
+                : 'stroke-[2]'
+            }`}
+          />
+        </button>
+
+        {/* Mobile Quick View Trigger (visible on mobile, positioned below heart) */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
             onQuickView(product);
           }}
-          className="sm:hidden absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-zinc-800 z-10 active:scale-90 transition-transform"
+          className="sm:hidden absolute top-12 right-2.5 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-zinc-800 z-10 active:scale-90 transition-transform"
           aria-label="View Details"
         >
           <Eye className="w-4 h-4" />
@@ -110,6 +143,46 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">
             <span className="truncate">{product.category || "Essentials"}</span>
             {product.sku && <span className="text-zinc-400 font-mono hidden sm:inline">{product.sku}</span>}
+          </div>
+
+          {/* Average Rating Display */}
+          <div className="flex items-center gap-1.5 mb-1.5">
+            {ratingStats && ratingStats.count > 0 ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onQuickView(product, 'reviews');
+                }}
+                className="inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group/rating text-left"
+                title={`${ratingStats.average.toFixed(1)} out of 5 stars (${ratingStats.count} review${ratingStats.count > 1 ? 's' : ''})`}
+              >
+                <div className="flex items-center">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                </div>
+                <span className="text-xs font-black text-zinc-900">
+                  {ratingStats.average.toFixed(1)}
+                </span>
+                <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium group-hover/rating:text-amber-700">
+                  ({ratingStats.count})
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onQuickView(product, 'reviews');
+                }}
+                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-400 hover:text-amber-600 transition-colors cursor-pointer text-left"
+                title="No reviews yet. Be the first to review!"
+              >
+                <Star className="w-3 h-3 text-zinc-300" />
+                <span>No reviews yet</span>
+              </button>
+            )}
           </div>
 
           {/* Product Name */}

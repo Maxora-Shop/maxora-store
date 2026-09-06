@@ -1,8 +1,73 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isValidReview(data) {
+      return data.product_id is string && data.product_id.size() > 0 && data.product_id.size() <= 128
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() > 0 && data.comment.size() <= 1000
+        && (!('user_name' in data) || (data.user_name is string && data.user_name.size() <= 100));
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.selling_price is number && data.selling_price >= 0;
+    }
+
+    function isValidOrder(data) {
+      return data.customer_name is string && data.customer_name.size() > 0 && data.customer_name.size() <= 100
+        && data.customer_phone is string && data.customer_phone.size() > 0 && data.customer_phone.size() <= 30
+        && data.total_amount is number && data.total_amount >= 0;
+    }
+
+    // Products Collection
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update: if isValidId(productId) && isValidProduct(request.resource.data);
+      allow delete: if isValidId(productId);
+    }
+
+    // Customer Reviews Collection
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isValidId(reviewId) && isValidReview(request.resource.data);
+      allow update: if isValidId(reviewId) && isValidReview(request.resource.data);
+      allow delete: if isValidId(reviewId);
+    }
+
+    // Customer Orders Collection
+    match /orders/{orderId} {
+      allow read: if true;
+      allow create: if isValidId(orderId) && isValidOrder(request.resource.data);
+      allow update: if isValidId(orderId);
+      allow delete: if isValidId(orderId);
+    }
+
+    // Categories & Subcategories
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isValidId(categoryId);
+    }
+
+    match /subcategories/{subCategoryId} {
+      allow read: if true;
+      allow write: if isValidId(subCategoryId);
+    }
+
+    // Customers
+    match /customers/{customerId} {
+      allow read: if true;
+      allow write: if isValidId(customerId);
+    }
+
+    // Store Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId);
     }
   }
 }

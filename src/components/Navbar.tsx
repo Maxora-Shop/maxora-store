@@ -1,51 +1,78 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShoppingBag, Search, Truck, Phone, LayoutGrid, ChevronDown, PackageCheck, Sparkles, X } from 'lucide-react';
+import { ShoppingBag, Search, Truck, Phone, LayoutGrid, ChevronDown, PackageCheck, Sparkles, X, Heart } from 'lucide-react';
 import { StoreSettings, Category } from '../types';
+import { TaxonomyCategory, TaxonomyFilterState } from '../utils/taxonomy';
+import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 
 interface NavbarProps {
   settings: StoreSettings;
   cartCount: number;
+  wishlistCount?: number;
   onOpenCart: () => void;
+  onOpenWishlist?: () => void;
   onOpenTracker: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   categories?: Category[];
   selectedCategory?: string;
   onSelectCategory?: (slug: string) => void;
+  taxonomy?: TaxonomyCategory[];
+  currentTaxonomyFilter?: Partial<TaxonomyFilterState>;
+  onSelectTaxonomy?: (filter: {
+    category?: string;
+    subCategory?: string;
+    productType?: string;
+    childCategory?: string;
+  }) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   settings,
   cartCount,
+  wishlistCount = 0,
   onOpenCart,
+  onOpenWishlist,
   onOpenTracker,
   searchQuery,
   onSearchChange,
   categories = [],
   selectedCategory = '',
   onSelectCategory,
+  taxonomy = [],
+  currentTaxonomyFilter = {} as Partial<TaxonomyFilterState>,
+  onSelectTaxonomy,
 }) => {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on click outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setCategoryMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const handleLogoClick = () => {
-    if (onSelectCategory) onSelectCategory('');
+    if (onSelectTaxonomy) {
+      onSelectTaxonomy({
+        category: '',
+        subCategory: '',
+        productType: '',
+        childCategory: '',
+      });
+    } else if (onSelectCategory) {
+      onSelectCategory('');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const activeCategories = categories.filter((c) => c.active !== 0 && c.active !== false);
+  const handleTaxonomySelect = (filter: {
+    category?: string;
+    subCategory?: string;
+    productType?: string;
+    childCategory?: string;
+  }) => {
+    if (onSelectTaxonomy) {
+      onSelectTaxonomy(filter);
+    } else if (onSelectCategory && filter.category) {
+      onSelectCategory(filter.category);
+    }
+    setCategoryMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-xs border-b border-zinc-200/90">
@@ -109,59 +136,39 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Center: Categories Menu Button + Large Search Bar */}
-        <div className="hidden lg:flex items-center flex-1 max-w-2xl mx-2 gap-2.5">
-          {/* Categories Dropdown Trigger */}
-          <div className="relative shrink-0" ref={menuRef}>
+        <div className="hidden lg:flex items-center flex-1 max-w-3xl mx-2 gap-2.5 relative">
+          {/* Categories Hierarchy Menu Trigger */}
+          <div className="shrink-0" ref={menuRef}>
             <button
               type="button"
+              id="navbar-categories-menu-button"
               onClick={() => setCategoryMenuOpen(!categoryMenuOpen)}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-zinc-800 font-bold text-xs sm:text-sm transition-all border border-zinc-200 cursor-pointer shadow-2xs active:scale-98"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all border cursor-pointer shadow-2xs active:scale-98 ${
+                categoryMenuOpen || currentTaxonomyFilter.category
+                  ? 'bg-zinc-950 text-white border-zinc-950 shadow-md'
+                  : 'bg-zinc-100 hover:bg-zinc-200/80 text-zinc-800 border-zinc-200'
+              }`}
             >
-              <LayoutGrid className="w-4 h-4 text-emerald-600" />
-              <span>Categories</span>
-              <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${categoryMenuOpen ? 'rotate-180' : ''}`} />
+              <LayoutGrid className={`w-4 h-4 ${categoryMenuOpen || currentTaxonomyFilter.category ? 'text-emerald-400' : 'text-emerald-600'}`} />
+              <span>
+                {currentTaxonomyFilter.childCategory ||
+                  currentTaxonomyFilter.productType ||
+                  currentTaxonomyFilter.subCategory ||
+                  currentTaxonomyFilter.category ||
+                  'Categories'}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${categoryMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Dropdown Menu */}
+            {/* 4-Tier Dynamic Category Hierarchy Mega Menu */}
             {categoryMenuOpen && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-zinc-200 py-2 z-50 animate-in fade-in-50 zoom-in-95 duration-150">
-                <div className="px-3 py-1.5 border-b border-zinc-100 flex items-center justify-between text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
-                  <span>Browse Categories</span>
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                </div>
-                <div className="max-h-80 overflow-y-auto py-1">
-                  <button
-                    onClick={() => {
-                      if (onSelectCategory) onSelectCategory('');
-                      setCategoryMenuOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs font-bold transition-colors flex items-center justify-between cursor-pointer ${
-                      !selectedCategory ? 'bg-emerald-50 text-emerald-700' : 'text-zinc-700 hover:bg-zinc-50'
-                    }`}
-                  >
-                    <span>All Products</span>
-                    <span className="text-[10px] text-zinc-500 font-normal">View all</span>
-                  </button>
-                  {activeCategories.map((cat) => {
-                    const isSelected = selectedCategory === cat.slug || selectedCategory === cat.name;
-                    return (
-                      <button
-                        key={cat.id || cat.slug}
-                        onClick={() => {
-                          if (onSelectCategory) onSelectCategory(cat.slug);
-                          setCategoryMenuOpen(false);
-                        }}
-                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
-                          isSelected ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-zinc-700 hover:bg-zinc-50'
-                        }`}
-                      >
-                        <span className="truncate">{cat.name}</span>
-                        <span className="text-zinc-500 text-[10px]">›</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <CategoryHierarchyMenu
+                isOpen={categoryMenuOpen}
+                onClose={() => setCategoryMenuOpen(false)}
+                taxonomy={taxonomy}
+                currentFilter={currentTaxonomyFilter}
+                onSelectTaxonomy={handleTaxonomySelect}
+              />
             )}
           </div>
 
@@ -213,8 +220,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Cart & Mobile Search */}
+        {/* Right Actions: Categories (Mobile), Cart & Mobile Search */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Mobile Categories Menu Toggle */}
+          <button
+            type="button"
+            onClick={() => setCategoryMenuOpen(!categoryMenuOpen)}
+            className="lg:hidden px-2.5 py-2 rounded-xl border border-zinc-200 flex items-center gap-1.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 active:scale-95 transition-all cursor-pointer"
+            aria-label="Categories"
+          >
+            <LayoutGrid className="w-4 h-4 text-emerald-600" />
+            <span className="hidden xs:inline">Catalog</span>
+          </button>
+
           {/* Mobile Search Toggle */}
           <button
             onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
@@ -222,6 +240,33 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label="Search"
           >
             <Search className="w-4 h-4" />
+          </button>
+
+          {/* Wishlist / Saved Items Trigger Button */}
+          <button
+            id="wishlist-trigger-button"
+            onClick={onOpenWishlist}
+            className={`relative flex items-center gap-1.5 px-3 sm:px-3.5 py-2.5 rounded-xl border font-bold text-xs sm:text-sm transition-all cursor-pointer active:scale-95 ${
+              wishlistCount > 0
+                ? 'bg-rose-50/80 hover:bg-rose-100 border-rose-200 text-rose-700'
+                : 'bg-white hover:bg-zinc-50 border-zinc-200 text-zinc-700'
+            }`}
+            title="View Saved Items"
+            aria-label="Saved Items"
+          >
+            <Heart
+              className={`w-4 h-4 transition-transform ${
+                wishlistCount > 0
+                  ? 'fill-rose-500 text-rose-500 scale-105'
+                  : 'text-zinc-600'
+              }`}
+            />
+            <span className="hidden md:inline">Saved</span>
+            {wishlistCount > 0 && (
+              <span className="bg-rose-500 text-white font-black text-[10px] sm:text-xs px-1.5 py-0.2 rounded-full min-w-[18px] text-center shadow-2xs">
+                {wishlistCount}
+              </span>
+            )}
           </button>
 
           {/* Cart Trigger Button */}
@@ -238,6 +283,21 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Mobile Categories Floating Menu Container */}
+      {categoryMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex flex-col justify-end sm:justify-center p-0 sm:p-4">
+          <div className="relative w-full max-w-xl mx-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+            <CategoryHierarchyMenu
+              isOpen={categoryMenuOpen}
+              onClose={() => setCategoryMenuOpen(false)}
+              taxonomy={taxonomy}
+              currentFilter={currentTaxonomyFilter}
+              onSelectTaxonomy={handleTaxonomySelect}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Mobile Search Bar Expandable */}
       {mobileSearchOpen && (
@@ -266,3 +326,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

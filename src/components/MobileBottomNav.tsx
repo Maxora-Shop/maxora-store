@@ -1,11 +1,13 @@
 import React from 'react';
-import { Store, Search, Phone, Truck, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Store, Search, Truck, ShoppingBag, ArrowRight, Heart } from 'lucide-react';
 import { StoreSettings, CartItem } from '../types';
 
 interface MobileBottomNavProps {
   settings: StoreSettings;
   cart: CartItem[];
+  wishlistCount?: number;
   onOpenCart: () => void;
+  onOpenWishlist?: () => void;
   onOpenCheckout: () => void;
   onOpenTracker: () => void;
   onHomeClick: () => void;
@@ -15,7 +17,9 @@ interface MobileBottomNavProps {
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   settings,
   cart,
+  wishlistCount = 0,
   onOpenCart,
+  onOpenWishlist,
   onOpenCheckout,
   onOpenTracker,
   onHomeClick,
@@ -62,7 +66,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       )}
 
       {/* Main Bottom Bar */}
-      <nav className="bg-white/95 backdrop-blur-lg border-t border-zinc-200 px-3 py-2 flex items-center justify-around shadow-2xl pointer-events-auto">
+      <nav className="bg-white/95 backdrop-blur-lg border-t border-zinc-200 px-2 py-2 flex items-center justify-around shadow-2xl pointer-events-auto">
         {/* Home */}
         <button
           onClick={onHomeClick}
@@ -81,18 +85,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <span className="text-[10px] font-bold">Search</span>
         </button>
 
-        {/* Helpline Phone */}
-        {settings.phone ? (
-          <a
-            href={`tel:${settings.phone}`}
-            className="flex flex-col items-center justify-center gap-1 py-1 px-2 text-zinc-600 active:scale-95 transition-transform"
-          >
-            <Phone className="w-5 h-5 text-emerald-600" />
-            <span className="text-[10px] font-bold">Helpline</span>
-          </a>
-        ) : (
-          <div className="w-8" />
-        )}
+        {/* Saved Items */}
+        <button
+          onClick={onOpenWishlist}
+          className="relative flex flex-col items-center justify-center gap-1 py-1 px-2 text-zinc-700 active:scale-95 transition-transform"
+        >
+          <div className="relative">
+            <Heart className={`w-5 h-5 ${wishlistCount > 0 ? 'fill-rose-500 text-rose-500' : 'text-zinc-700'}`} />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center border border-white">
+                {wishlistCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-bold">Saved</span>
+        </button>
 
         {/* Track Order */}
         <button
@@ -122,3 +129,4 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     </div>
   );
 };
+

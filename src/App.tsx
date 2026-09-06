@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { CategoryFilter } from './components/CategoryFilter';
+import { PriceFilter, PriceRange } from './components/PriceFilter';
+import { FloatingSupportButton } from './components/FloatingSupportButton';
 import { ProductCard } from './components/ProductCard';
 import { ProductQuickView } from './components/ProductQuickView';
 import { CartDrawer } from './components/CartDrawer';
@@ -10,18 +12,25 @@ import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Product, CartItem, StoreSettings, Category, SubCategory } from './types';
+import { Product, CartItem, StoreSettings, Category, SubCategory, Review } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
+import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
+import { SavedItemsDrawer } from './components/SavedItemsDrawer';
 import {
   reconcileCategories,
   reconcileSubCategories,
   isProductInCategory,
   isProductInSubCategory,
 } from './utils/categoryCompatibility';
+import {
+  buildTaxonomyTree,
+  matchesTaxonomyField,
+  TaxonomyFilterState,
+} from './utils/taxonomy';
 
 export default function App() {
   // Admin View State
@@ -38,7 +47,7 @@ export default function App() {
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
-  // Products & Taxonomy State
+  // Products & 4-Tier Taxonomy State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
@@ -47,6 +56,12 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [selectedProductType, setSelectedProductType] = useState('');
+  const [selectedChildCategory, setSelectedChildCategory] = useState('');
+
+  // Price Filter State
+  const [priceRange, setPriceRange] = useState<PriceRange>({ min: 0, max: 50000 });
+  const [selectedPricePreset, setSelectedPricePreset] = useState<string>('all');
 
   // Modals & Drawers
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -60,7 +75,35 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [quickViewInitialTab, setQuickViewInitialTab] = useState<'details' | 'reviews'>('details');
   const [isProductNotFound, setIsProductNotFound] = useState(false);
+
+  // Wishlist / Saved Items State (persisted in localStorage)
+  const [wishlistIds, setWishlistIds] = useState<string[]>(() => getStoredWishlist());
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+
+  // Sync wishlist across storage events and windows
+  useEffect(() => {
+    const handleWishlistChange = () => {
+      setWishlistIds(getStoredWishlist());
+    };
+    window.addEventListener('maxora_wishlist_updated', handleWishlistChange);
+    return () => window.removeEventListener('maxora_wishlist_updated', handleWishlistChange);
+  }, []);
+
+  const handleToggleWishlist = (product: Product) => {
+    const { ids } = toggleWishlistProduct(product.id);
+    setWishlistIds(ids);
+  };
+
+  // Reviews and Ratings State
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  // Computed Rating Stats per Product for ProductCard and Catalog views
+  const ratingStatsMap = useMemo(() => {
+    return storeService.getAllProductRatingStats(reviews);
+  }, [reviews]);
 
   // Ref to hold a pending product slug while products are loading
   const pendingSlugRef = useRef<string | null>(
@@ -244,10 +287,17 @@ export default function App() {
     };
   }, []);
 
-  // Re-fetch products when category or search or view changes
+  // Re-fetch products when category, subcategory, product type, child category, search, or view changes
   useEffect(() => {
     fetchProducts();
-  }, [searchQuery, selectedCategory, isAdminView]);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedSubCategory,
+    selectedProductType,
+    selectedChildCategory,
+    isAdminView,
+  ]);
 
   const fetchSettings = async () => {
     try {
@@ -274,7 +324,13 @@ export default function App() {
   const fetchProducts = async () => {
     setLoadingProducts(true);
     try {
-      const data = await storeService.getProducts(searchQuery, selectedCategory);
+      const data = await storeService.getProducts(
+        searchQuery,
+        selectedCategory,
+        selectedSubCategory,
+        selectedProductType,
+        selectedChildCategory
+      );
       setProducts(data);
     } catch (err) {
       console.error('Failed to load products:', err);
@@ -354,8 +410,32 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  const handleOpenProductDetail = (product: Product, updateHistory = true) => {
+  // Fetch reviews initially and listen to reviews update events
+  const loadReviewsData = async () => {
+    try {
+      const data = await storeService.getReviews();
+      setReviews(data);
+    } catch (err) {
+      console.warn('Error loading reviews in App:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadReviewsData();
+    const handler = () => {
+      loadReviewsData();
+    };
+    window.addEventListener('maxora_reviews_updated', handler);
+    return () => window.removeEventListener('maxora_reviews_updated', handler);
+  }, []);
+
+  const handleOpenProductDetail = (
+    product: Product,
+    updateHistory = true,
+    initialTab: 'details' | 'reviews' = 'details'
+  ) => {
     setQuickViewProduct(product);
+    setQuickViewInitialTab(initialTab);
     if (updateHistory) {
       const slug = getProductSlug(product);
       const newPath = `/product/${slug}`;
@@ -426,6 +506,16 @@ export default function App() {
     [subCategories, reconciledCategories, products]
   );
 
+  // Dynamic 4-Tier Taxonomy Hierarchy Tree (Category -> Subcategory -> Product Type -> Child Category)
+  const taxonomyTree = useMemo(() => {
+    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories);
+  }, [products, reconciledCategories, reconciledSubCategories]);
+
+  // Saved / Wishlisted products list
+  const savedProducts = useMemo(() => {
+    return products.filter((p) => wishlistIds.includes(p.id));
+  }, [products, wishlistIds]);
+
   const activeCategoryObj = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') return null;
     const s = selectedCategory.toLowerCase();
@@ -442,41 +532,130 @@ export default function App() {
     );
   }, [selectedSubCategory, reconciledSubCategories]);
 
-  // Filter products by category, subcategory and search with full backward compatibility
+  // Max product price calculation for budget slider
+  const maxStorePrice = useMemo(() => {
+    let max = 10000;
+    products.forEach((p) => {
+      const price = Number(p.selling_price || 0);
+      if (price > max) max = price;
+    });
+    return Math.max(10000, max);
+  }, [products]);
+
+  // Unified Taxonomy Selection Handler across Navbar and Catalog components
+  const handleTaxonomySelect = (filter: {
+    category?: string;
+    subCategory?: string;
+    productType?: string;
+    childCategory?: string;
+  }) => {
+    setSelectedCategory(filter.category || '');
+    setSelectedSubCategory(filter.subCategory || '');
+    setSelectedProductType(filter.productType || '');
+    setSelectedChildCategory(filter.childCategory || '');
+    scrollToProducts();
+  };
+
+  const handleClearAllTaxonomy = () => {
+    setSelectedCategory('');
+    setSelectedSubCategory('');
+    setSelectedProductType('');
+    setSelectedChildCategory('');
+  };
+
+  // Price Filter Handlers
+  const handlePriceRangeChange = (range: PriceRange) => {
+    setPriceRange(range);
+    setSelectedPricePreset('custom');
+  };
+
+  const handleSelectPricePreset = (presetId: string, range: PriceRange) => {
+    setSelectedPricePreset(presetId);
+    setPriceRange(range);
+  };
+
+  const handleResetPrice = () => {
+    setSelectedPricePreset('all');
+    setPriceRange({ min: 0, max: 50000 });
+  };
+
+  // Filter products by search, 4-tier taxonomy, and budget price range
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      const search = searchQuery.toLowerCase().trim();
-      const matchSearch =
-        !search ||
-        p.name.toLowerCase().includes(search) ||
-        (p.description && p.description.toLowerCase().includes(search)) ||
-        (p.sku && p.sku.toLowerCase().includes(search)) ||
-        (p.category && p.category.toLowerCase().includes(search)) ||
-        (p.sub_category && p.sub_category.toLowerCase().includes(search));
+      // 0. Wishlist filter if user selected "Saved Items" section view
+      if (showSavedOnly && !wishlistIds.includes(p.id)) {
+        return false;
+      }
 
-      // Category matching
-      let matchCategory = true;
+      // 1. Search filter
+      const search = searchQuery.toLowerCase().trim();
+      if (search) {
+        const matchSearch =
+          p.name.toLowerCase().includes(search) ||
+          (p.description && p.description.toLowerCase().includes(search)) ||
+          (p.sku && p.sku.toLowerCase().includes(search)) ||
+          (p.category && p.category.toLowerCase().includes(search)) ||
+          (p.sub_category && p.sub_category.toLowerCase().includes(search)) ||
+          (p.product_type && p.product_type.toLowerCase().includes(search)) ||
+          (p.child_category && p.child_category.toLowerCase().includes(search));
+        if (!matchSearch) return false;
+      }
+
+      // 2. Category matching
       if (selectedCategory && selectedCategory !== 'All' && selectedCategory !== 'all') {
         if (activeCategoryObj) {
-          matchCategory = isProductInCategory(p, activeCategoryObj);
-        } else {
-          matchCategory = (p.category || '').toLowerCase().trim() === selectedCategory.toLowerCase().trim();
+          if (!isProductInCategory(p, activeCategoryObj)) return false;
+        } else if (!matchesTaxonomyField(p.category, selectedCategory)) {
+          return false;
         }
       }
 
-      // Subcategory matching
-      let matchSubCategory = true;
+      // 3. Subcategory matching
       if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
         if (activeSubCategoryObj) {
-          matchSubCategory = isProductInSubCategory(p, activeSubCategoryObj);
-        } else {
-          matchSubCategory = (p.sub_category || '').toLowerCase().trim() === selectedSubCategory.toLowerCase().trim();
+          if (!isProductInSubCategory(p, activeSubCategoryObj)) return false;
+        } else if (!matchesTaxonomyField(p.sub_category, selectedSubCategory)) {
+          return false;
         }
       }
 
-      return matchSearch && matchCategory && matchSubCategory;
+      // 4. Product Type matching
+      if (selectedProductType && selectedProductType !== 'All' && selectedProductType !== 'all') {
+        if (!matchesTaxonomyField(p.product_type, selectedProductType)) {
+          return false;
+        }
+      }
+
+      // 5. Child Category matching
+      if (selectedChildCategory && selectedChildCategory !== 'All' && selectedChildCategory !== 'all') {
+        if (!matchesTaxonomyField(p.child_category, selectedChildCategory)) {
+          return false;
+        }
+      }
+
+      // 6. Price Range Filter
+      const discount = Number(p.discount || 0);
+      const price = Number(p.selling_price || 0);
+      const finalPrice = Math.max(0, price - discount);
+
+      if (finalPrice < priceRange.min) return false;
+      if (priceRange.max < 50000 && finalPrice > priceRange.max) return false;
+
+      return true;
     });
-  }, [products, searchQuery, selectedCategory, selectedSubCategory, activeCategoryObj, activeSubCategoryObj]);
+  }, [
+    products,
+    searchQuery,
+    selectedCategory,
+    selectedSubCategory,
+    selectedProductType,
+    selectedChildCategory,
+    activeCategoryObj,
+    activeSubCategoryObj,
+    priceRange,
+    showSavedOnly,
+    wishlistIds,
+  ]);
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -504,21 +683,29 @@ export default function App() {
       {/* Dynamic SEO & Google SERP JSON-LD schema injection */}
       <SEOHead settings={settings} activeProduct={quickViewProduct} />
 
-      {/* Sticky Top Navbar */}
+      {/* Sticky Top Navbar with 4-Tier Hierarchy Menu */}
       <Navbar
         settings={settings}
         cartCount={totalCartCount}
+        wishlistCount={wishlistIds.length}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         categories={reconciledCategories}
         selectedCategory={selectedCategory}
         onSelectCategory={(slug) => {
-          setSelectedCategory(slug);
-          setSelectedSubCategory('');
-          scrollToProducts();
+          handleTaxonomySelect({ category: slug, subCategory: '', productType: '', childCategory: '' });
         }}
+        taxonomy={taxonomyTree}
+        currentTaxonomyFilter={{
+          category: selectedCategory,
+          subCategory: selectedSubCategory,
+          productType: selectedProductType,
+          childCategory: selectedChildCategory,
+        }}
+        onSelectTaxonomy={handleTaxonomySelect}
       />
 
       {/* Main Content Area */}
@@ -534,35 +721,102 @@ export default function App() {
           />
         )}
 
-        {/* Category Selector Filter */}
+        {/* 4-Tier Category Hierarchy & Filter Showcase */}
         <CategoryFilter
           categories={reconciledCategories}
           selectedCategory={selectedCategory}
           onSelectCategory={(cat) => {
-            setSelectedCategory(cat);
-            setSelectedSubCategory('');
-            scrollToProducts();
+            handleTaxonomySelect({ category: cat, subCategory: '', productType: '', childCategory: '' });
           }}
           subCategories={reconciledSubCategories}
           selectedSubCategory={selectedSubCategory}
           onSelectSubCategory={(sub) => {
-            setSelectedSubCategory(sub);
-            scrollToProducts();
+            handleTaxonomySelect({ category: selectedCategory, subCategory: sub, productType: '', childCategory: '' });
           }}
+          selectedProductType={selectedProductType}
+          onSelectProductType={(type) => {
+            handleTaxonomySelect({ category: selectedCategory, subCategory: selectedSubCategory, productType: type, childCategory: '' });
+          }}
+          selectedChildCategory={selectedChildCategory}
+          onSelectChildCategory={(child) => {
+            handleTaxonomySelect({ category: selectedCategory, subCategory: selectedSubCategory, productType: selectedProductType, childCategory: child });
+          }}
+          taxonomy={taxonomyTree}
+          products={products}
+          onSelectTaxonomy={handleTaxonomySelect}
         />
 
         {/* Product Grid Section */}
-        <section ref={productSectionRef} className="my-8 scroll-mt-24">
-          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2 mb-6">
+        <section ref={productSectionRef} className="my-8 scroll-mt-24" id="products-catalog-section">
+          {/* Budget & Price Range Filter */}
+          <PriceFilter
+            priceRange={priceRange}
+            maxProductPrice={maxStorePrice}
+            onPriceRangeChange={handlePriceRangeChange}
+            selectedPreset={selectedPricePreset}
+            onSelectPreset={handleSelectPricePreset}
+            onResetPrice={handleResetPrice}
+          />
+
+          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 mb-6">
             <div>
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSavedOnly(false)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    !showSavedOnly
+                      ? 'bg-zinc-950 text-white shadow-xs'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                  }`}
+                >
+                  All Products ({products.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSavedOnly(true)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    showSavedOnly
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60'
+                  }`}
+                >
+                  <Heart
+                    className={`w-3.5 h-3.5 ${
+                      showSavedOnly ? 'fill-white text-white' : 'fill-rose-500 text-rose-500'
+                    }`}
+                  />
+                  <span>Saved Items ({wishlistIds.length})</span>
+                </button>
+              </div>
+
               <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight flex items-center flex-wrap gap-2">
-                {activeCategoryObj ? (
+                {showSavedOnly ? (
+                  <span className="flex items-center gap-2 text-rose-600">
+                    <Heart className="w-6 h-6 fill-rose-500 text-rose-500 inline" />
+                    Saved Items / Wishlist
+                  </span>
+                ) : activeCategoryObj ? (
                   <>
                     <span>{activeCategoryObj.name}</span>
                     {activeSubCategoryObj && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
                         <span className="text-emerald-600">{activeSubCategoryObj.name}</span>
+                      </>
+                    )}
+                    {selectedProductType && (
+                      <>
+                        <span className="text-zinc-400 font-light">/</span>
+                        <span className="text-zinc-700">{selectedProductType}</span>
+                      </>
+                    )}
+                    {selectedChildCategory && (
+                      <>
+                        <span className="text-zinc-400 font-light">/</span>
+                        <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg text-lg sm:text-xl font-black">
+                          {selectedChildCategory}
+                        </span>
                       </>
                     )}
                   </>
@@ -575,29 +829,62 @@ export default function App() {
                 )}
               </h2>
               <p className="text-xs sm:text-sm text-zinc-500 font-medium">
-                Showing {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} available in stock
+                {showSavedOnly
+                  ? `Showing ${filteredProducts.length} saved item${filteredProducts.length === 1 ? '' : 's'}`
+                  : `Showing ${filteredProducts.length} ${filteredProducts.length === 1 ? 'product' : 'products'} matching your criteria`}
               </p>
             </div>
 
-            {(selectedCategory || selectedSubCategory) && (
-              <div className="flex items-center gap-2">
-                {selectedSubCategory && (
+            {/* Active Filters Badges & Clear Controls */}
+            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
+              <div className="flex items-center flex-wrap gap-2">
+                {selectedChildCategory && (
                   <button
-                    onClick={() => setSelectedSubCategory('')}
-                    className="text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-200/80 hover:bg-zinc-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                    onClick={() => setSelectedChildCategory('')}
+                    className="text-xs font-bold text-emerald-950 bg-emerald-200/90 hover:bg-emerald-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Clear Subcategory ✕
+                    Child Category: {selectedChildCategory} ✕
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setSelectedCategory('');
-                    setSelectedSubCategory('');
-                  }}
-                  className="text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
-                >
-                  Clear Category Filter ✕
-                </button>
+                {selectedProductType && (
+                  <button
+                    onClick={() => {
+                      setSelectedProductType('');
+                      setSelectedChildCategory('');
+                    }}
+                    className="text-xs font-bold text-zinc-800 bg-zinc-200 hover:bg-zinc-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    Type: {selectedProductType} ✕
+                  </button>
+                )}
+                {selectedSubCategory && (
+                  <button
+                    onClick={() => {
+                      setSelectedSubCategory('');
+                      setSelectedProductType('');
+                      setSelectedChildCategory('');
+                    }}
+                    className="text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-200/80 hover:bg-zinc-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    Subcategory: {activeSubCategoryObj?.name || selectedSubCategory} ✕
+                  </button>
+                )}
+                {selectedCategory && (
+                  <button
+                    onClick={handleClearAllTaxonomy}
+                    className="text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    Category: {activeCategoryObj?.name || selectedCategory} ✕
+                  </button>
+                )}
+                {(selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
+                  <button
+                    onClick={handleResetPrice}
+                    className="text-xs font-bold text-amber-900 hover:text-amber-950 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
+                  >
+                    Budget: {priceRange.min} - {priceRange.max >= 50000 ? 'Any' : `${priceRange.max} TK`} ✕
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -620,31 +907,42 @@ export default function App() {
                 <ProductCard
                   key={product.id}
                   product={product}
+                  ratingStats={ratingStatsMap[product.id]}
+                  isWishlisted={wishlistIds.includes(product.id)}
+                  onToggleWishlist={handleToggleWishlist}
                   onAddToCart={(p) => handleAddToCart(p, 1)}
-                  onQuickView={(p) => handleOpenProductDetail(p)}
+                  onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
                   isAdded={recentlyAddedId === product.id}
                 />
               ))}
             </div>
           ) : (
             <div className="bg-white rounded-3xl border border-zinc-200 p-12 text-center max-w-lg mx-auto shadow-xs">
-              <div className="w-16 h-16 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 mx-auto mb-4">
-                <ShoppingBag className="w-8 h-8" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                showSavedOnly ? 'bg-rose-50 text-rose-500' : 'bg-zinc-100 text-zinc-400'
+              }`}>
+                {showSavedOnly ? <Heart className="w-8 h-8 fill-rose-500" /> : <ShoppingBag className="w-8 h-8" />}
               </div>
               <h3 className="text-lg font-bold text-zinc-900 mb-1">
-                No Products Found
+                {showSavedOnly ? 'Your Wishlist is Empty' : 'No Products Found'}
               </h3>
               <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                We couldn't find any products matching your search or category criteria.
+                {showSavedOnly
+                  ? "You haven't saved any items yet. Tap the heart icon on any product in the store to save it here!"
+                  : "We couldn't find any products matching your search or category criteria."}
               </p>
               <button
                 onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('');
+                  if (showSavedOnly) {
+                    setShowSavedOnly(false);
+                  } else {
+                    setSearchQuery('');
+                    setSelectedCategory('');
+                  }
                 }}
                 className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
               >
-                Reset Search & Filters
+                {showSavedOnly ? 'Browse All Products' : 'Reset Search & Filters'}
               </button>
             </div>
           )}
@@ -799,7 +1097,9 @@ export default function App() {
       <MobileBottomNav
         settings={settings}
         cart={cart}
+        wishlistCount={wishlistIds.length}
         onOpenCart={() => setIsCartOpen(true)}
+        onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenCheckout={() => {
           setIsCartOpen(false);
           setIsCheckoutOpen(true);
@@ -839,9 +1139,36 @@ export default function App() {
 
       <ProductQuickView
         product={quickViewProduct}
+        initialTab={quickViewInitialTab}
         onClose={handleCloseProductDetail}
         onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
         onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
+        onReviewSubmitted={loadReviewsData}
+        isWishlisted={quickViewProduct ? wishlistIds.includes(quickViewProduct.id) : false}
+        onToggleWishlist={handleToggleWishlist}
+      />
+
+      {/* Saved Items / Wishlist Slide-Over Drawer */}
+      <SavedItemsDrawer
+        isOpen={isWishlistOpen}
+        onClose={() => setIsWishlistOpen(false)}
+        savedProducts={savedProducts}
+        onAddToCart={(p) => handleAddToCart(p, 1)}
+        onRemoveFromWishlist={(id) => {
+          const { ids } = toggleWishlistProduct(id);
+          setWishlistIds(ids);
+        }}
+        onClearWishlist={() => {
+          clearStoredWishlist();
+          setWishlistIds([]);
+        }}
+        onQuickView={(p) => handleOpenProductDetail(p)}
+        onAddAllToCart={() => {
+          savedProducts
+            .filter((p) => Number(p.stock || 0) > 0)
+            .forEach((p) => handleAddToCart(p, 1));
+        }}
+        ratingStatsMap={ratingStatsMap}
       />
 
       {/* Product Not Found Modal for Invalid Product URLs */}
@@ -887,6 +1214,9 @@ export default function App() {
         isOpen={isTrackerOpen}
         onClose={() => setIsTrackerOpen(false)}
       />
+
+      {/* Floating WhatsApp / Live Chat Support Button */}
+      <FloatingSupportButton settings={settings} />
     </div>
   );
 }

@@ -1,13 +1,24 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, Review } from '../types';
 
 export const INITIAL_CATEGORIES: Category[] = [
+  {
+    id: "cat-electronics",
+    name: "Electronics",
+    slug: "electronics",
+    icon: "Cpu",
+    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    display_order: 1,
+    active: 1,
+    meta_title: "Electronics & Smart Tech in Bangladesh | Maxora",
+    meta_description: "Explore smart gadgets, smartwatches, audio devices, and computer accessories with fast Cash on Delivery in Bangladesh."
+  },
   {
     id: "cat-smart-gadgets",
     name: "Smart Gadgets",
     slug: "smart-gadgets",
     icon: "Watch",
     image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
-    display_order: 1,
+    display_order: 2,
     active: 1,
     meta_title: "Smart Gadgets & Wearables in Bangladesh | Maxora",
     meta_description: "Explore smartwatches, fitness bands, and wearable tech with fast Cash on Delivery in Bangladesh."
@@ -18,7 +29,7 @@ export const INITIAL_CATEGORIES: Category[] = [
     slug: "audio",
     icon: "Headphones",
     image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80",
-    display_order: 2,
+    display_order: 3,
     active: 1,
     meta_title: "Premium Wireless Earbuds & Audio in BD | Maxora",
     meta_description: "Shop Active Noise Cancelling (ANC) earbuds, headphones, and Bluetooth speakers at best prices in BD."
@@ -242,8 +253,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: "prod-001",
     name: "Maxora Ultra AMOLED Smartwatch Series 9",
     description: "1.96-inch Always-on AMOLED display, Bluetooth calling, IP68 water resistance, SpO2 & dynamic heart rate monitoring with 10-day battery backup.",
-    category: "Smart Gadgets",
-    product_type: "Variant Product",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Smartwatch",
+    child_category: "AMOLED",
     sku: "MX-SW-09",
     image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -267,11 +280,41 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_at: new Date().toISOString()
   },
   {
+    id: "prod-009",
+    name: "Maxora Pulse Bluetooth Calling Smartwatch",
+    description: "Built-in HD speaker & microphone for Bluetooth phone calls, 1.85-inch vibrant curved screen, 100+ sports tracking modes & IP68 waterproof rating.",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Smartwatch",
+    child_category: "Calling",
+    sku: "MX-SW-CALL",
+    image_url: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80",
+    images: [
+      "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [
+      { name: "Matte Black", code: "#18181b", stock: 10 },
+      { name: "Silver Grey", code: "#e4e4e7", stock: 8 }
+    ],
+    buying_price: 1600,
+    selling_price: 2450,
+    discount: 250,
+    final_price: 2200,
+    stock: 18,
+    badge: "BT CALLING",
+    featured: 1,
+    active: 1,
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
     id: "prod-002",
     name: "Acoustic Pro ANC Wireless Earbuds",
     description: "Active Noise Cancellation (ANC) up to 35dB, Quad-mic ENC for crystal-clear phone calls, ultra low latency gaming mode & deep bass drivers.",
-    category: "Audio",
-    product_type: "Variant Product",
+    category: "Electronics",
+    sub_category: "Audio",
+    product_type: "Wireless Earbuds",
+    child_category: "Active Noise Cancelling (ANC)",
     sku: "MX-EB-ANC",
     image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -297,6 +340,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Urban Explorer Anti-Theft Water-Repellent Backpack",
     description: "High-density Oxford fabric, concealed zipper security pockets, integrated USB charging port, fits 15.6-inch laptops with breathable orthopedic lumbar back cushion.",
     category: "Lifestyle & Bags",
+    sub_category: "Backpacks",
+    product_type: "Travel Backpack",
+    child_category: "Anti-Theft",
     sku: "MX-BP-URBAN",
     image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -318,6 +364,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "ThermoGrip Double-Wall Vacuum Insulated Flask 750ml",
     description: "Medical-grade 316 stainless steel interior, maintains drinks hot for 18h / chilled for 24h, 100% leakproof cap with removable fine tea infuser.",
     category: "Home & Living",
+    sub_category: "Kitchen & Dining",
+    product_type: "Vacuum Flask",
+    child_category: "Stainless Steel",
     sku: "MX-BOT-750",
     image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -339,6 +388,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Classic Full-Grain Genuine Leather Bi-Fold Wallet",
     description: "100% genuine BD cowhide leather, RFID blocking shield lining, 8 card slots, dual currency compartments, durable handcrafted waxed stitching.",
     category: "Accessories",
+    sub_category: "Wallets",
+    product_type: "Leather Wallet",
+    child_category: "Bi-Fold RFID",
     sku: "MX-WL-LEA",
     image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -359,7 +411,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: "prod-006",
     name: "MechWave RGB Mechanical Gaming Keyboard 75%",
     description: "Compact 75% layout, hot-swappable tactile red linear switches, dynamic per-key RGB backlight with 18 effects, Type-C detachable braided cable.",
-    category: "Smart Gadgets",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Mechanical Keyboard",
+    child_category: "RGB Hot-swap",
     sku: "MX-KB-RGB",
     image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -381,6 +436,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Nordic Ceramic Pour-Over Coffee Dripper Set",
     description: "Handcrafted matte ceramic dripper with wooden heat collar, 600ml borosilicate glass server, and 40 reusable Japanese paper filter sheets.",
     category: "Home & Living",
+    sub_category: "Kitchen & Dining",
+    product_type: "Coffee Maker",
+    child_category: "Pour-Over Dripper",
     sku: "MX-COF-SET",
     image_url: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -402,6 +460,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Pure Organic Sylhet Sreemangal Whole-Leaf Black Tea 500g",
     description: "Single-origin premium BOP orthodox whole-leaf tea from highland Sreemangal gardens. Rich natural aroma, robust malt liquor flavour.",
     category: "Gourmet & Food",
+    sub_category: "Organic Tea",
+    product_type: "Black Tea",
+    child_category: "Whole-Leaf BOP",
     sku: "MX-TEA-500",
     image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -553,5 +614,80 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     total_spent: 2080,
     created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 6).toISOString()
+  }
+];
+
+export const INITIAL_REVIEWS: Review[] = [
+  {
+    id: "rev-001",
+    product_id: "prod-001",
+    rating: 5,
+    comment: "The AMOLED display is stunning and responsive! Battery easily lasts a week. Excellent build quality for this price.",
+    user_name: "Tanvir Ahmed",
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-002",
+    product_id: "prod-001",
+    rating: 5,
+    comment: "Very smooth Bluetooth calling and accurate step tracking. Delivery was fast inside Dhaka.",
+    user_name: "Mahmudul Hasan",
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-003",
+    product_id: "prod-001",
+    rating: 4,
+    comment: "Good watch overall. Premium feel and straps are comfortable. Heart rate sensor is decently accurate.",
+    user_name: "Nusrat Jahan",
+    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-004",
+    product_id: "prod-009",
+    rating: 5,
+    comment: "Calling speaker is crisp and loud. Pairs instantly with my Android phone. Very happy with the purchase!",
+    user_name: "Sajjad Hossain",
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-005",
+    product_id: "prod-009",
+    rating: 4,
+    comment: "Nice curved screen and lots of watch faces to choose from. Worth every taka.",
+    user_name: "Rafiqul Islam",
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-006",
+    product_id: "prod-002",
+    rating: 5,
+    comment: "Active Noise Cancellation works surprisingly well in traffic! Deep punchy bass and long playtime.",
+    user_name: "Farhana Yasmin",
+    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-007",
+    product_id: "prod-003",
+    rating: 5,
+    comment: "Typing feel is clicky and tactile. The RGB lighting modes look awesome on my gaming desk.",
+    user_name: "Zubair Rahman",
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-008",
+    product_id: "prod-004",
+    rating: 5,
+    comment: "Waterproof fabric and hidden zipper give peace of mind while traveling. Comfortable straps too.",
+    user_name: "Imtiaz Karim",
+    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+    verified_purchase: true
   }
 ];

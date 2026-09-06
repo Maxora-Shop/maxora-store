@@ -34,14 +34,35 @@ export interface SubCategory {
   updated_at?: string;
 }
 
-export interface ChildCategory {
+export interface ProductType {
   id: string;
-  subcategory_id: string;
-  subcategory_slug: string;
+  category_id?: string;
+  category_slug?: string;
+  subcategory_id?: string;
+  subcategory_slug?: string;
   name: string;
   slug: string;
   display_order?: number;
   active: boolean | number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChildCategory {
+  id: string;
+  category_id?: string;
+  category_slug?: string;
+  subcategory_id?: string;
+  subcategory_slug?: string;
+  product_type_id?: string;
+  product_type_slug?: string;
+  product_type_name?: string;
+  name: string;
+  slug: string;
+  display_order?: number;
+  active: boolean | number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Product {
@@ -238,4 +259,19 @@ export interface CartItem {
   sku?: string;
   selected_color?: string;
   selected_color_code?: string;
+}
+
+export interface Review {
+  id: string;
+  product_id: string;
+  rating: number; // 1 to 5
+  comment: string;
+  user_name: string;
+  created_at: string;
+  verified_purchase?: boolean;
+}
+
+export interface ProductRatingStats {
+  average: number;
+  count: number;
 }

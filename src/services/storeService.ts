@@ -1,5 +1,5 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory } from '../types';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES } from '../data/initialData';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, Review, ProductRatingStats } from '../types';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug } from '../utils/seo';
 import { db } from '../firebase';
@@ -24,6 +24,7 @@ const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
 const CATEGORIES_KEY = 'maxora_categories_v1';
 const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
+const REVIEWS_KEY = 'maxora_reviews_v1';
 
 function notifyProductsChanged(): void {
   if (typeof window !== 'undefined') {
@@ -52,6 +53,12 @@ function notifyCategoriesChanged(): void {
 function notifySubCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_subcategories_updated'));
+  }
+}
+
+function notifyReviewsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
   }
 }
 
@@ -94,6 +101,9 @@ export function initLocalStorage(): void {
   }
   if (!localStorage.getItem(SUBCATEGORIES_KEY)) {
     setLocal(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+  }
+  if (!localStorage.getItem(REVIEWS_KEY)) {
+    setLocal(REVIEWS_KEY, INITIAL_REVIEWS);
   }
 }
 
@@ -170,6 +180,20 @@ export function initRealtimeFirestoreListeners() {
         notifySubCategoriesChanged();
       }
     }, (err) => console.warn('Subcategories Firestore snapshot warning:', err));
+
+    // 6. Listen for reviews changes
+    onSnapshot(collection(db, 'reviews'), (snapshot) => {
+      if (!snapshot.empty) {
+        const revs: Review[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as Review;
+          revs.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        revs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        setLocal(REVIEWS_KEY, revs);
+        notifyReviewsChanged();
+      }
+    }, (err) => console.warn('Reviews Firestore snapshot warning:', err));
   } catch (err) {
     console.warn('Realtime listener error:', err);
   }
@@ -250,6 +274,17 @@ async function seedInitialDataIfNeeded() {
       console.log('Seeded initial products to Firestore');
     }
 
+    const revSnap = await getDocs(collection(db, 'reviews'));
+    if (revSnap.empty) {
+      const batch = writeBatch(db);
+      for (const r of INITIAL_REVIEWS) {
+        const ref = doc(db, 'reviews', String(r.id));
+        batch.set(ref, r);
+      }
+      await batch.commit();
+      console.log('Seeded initial reviews to Firestore');
+    }
+
     await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
   } catch (e) {
     console.warn('Firestore seeding check error:', e);
@@ -317,7 +352,13 @@ export const storeService = {
   },
 
   // 2. PRODUCTS
-  async getProducts(search = '', category = '', subCategory = ''): Promise<Product[]> {
+  async getProducts(
+    search = '',
+    category = '',
+    subCategory = '',
+    productType = '',
+    childCategory = ''
+  ): Promise<Product[]> {
     let prods: Product[] = [];
     let firestoreLoaded = false;
 
@@ -348,14 +389,15 @@ export const storeService = {
           p.name.toLowerCase().includes(q) ||
           (p.description && p.description.toLowerCase().includes(q)) ||
           (p.sku && p.sku.toLowerCase().includes(q)) ||
-          p.category.toLowerCase().includes(q) ||
+          (p.category && p.category.toLowerCase().includes(q)) ||
           (p.sub_category && p.sub_category.toLowerCase().includes(q)) ||
+          (p.product_type && p.product_type.toLowerCase().includes(q)) ||
           (p.child_category && p.child_category.toLowerCase().includes(q)) ||
           (p.meta_keywords && p.meta_keywords.toLowerCase().includes(q))
       );
     }
 
-    if (category.trim()) {
+    if (category.trim() && category.toLowerCase() !== 'all') {
       const catTarget = category.toLowerCase().trim().replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
         const pCat = (p.category || '').toLowerCase().trim();
@@ -364,12 +406,37 @@ export const storeService = {
       });
     }
 
-    if (subCategory.trim()) {
+    if (subCategory.trim() && subCategory.toLowerCase() !== 'all') {
       const subTarget = subCategory.toLowerCase().trim().replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
         const pSub = (p.sub_category || '').toLowerCase().trim();
         const pSubSlug = pSub.replace(/[\s_]+/g, '-');
         return pSub === subCategory.toLowerCase().trim() || pSubSlug === subTarget;
+      });
+    }
+
+    if (productType.trim() && productType.toLowerCase() !== 'all') {
+      const typeTarget = productType.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      list = list.filter((p) => {
+        const pType = (p.product_type || '').toLowerCase().trim();
+        const pTypeSlug = pType.replace(/[\s_]+/g, '-');
+        return pType === productType.toLowerCase().trim() || pTypeSlug === typeTarget;
+      });
+    }
+
+    if (childCategory.trim() && childCategory.toLowerCase() !== 'all') {
+      const childTarget = childCategory.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      list = list.filter((p) => {
+        const pChild = (p.child_category || '').toLowerCase().trim();
+        const pChildSlug = pChild.replace(/[\s_]+/g, '-');
+        if (pChild.includes(',') || pChild.includes('/')) {
+          const parts = pChild.split(/[,/]+/).map((s) => s.trim().toLowerCase());
+          return (
+            parts.includes(childCategory.toLowerCase().trim()) ||
+            parts.some((part) => part.replace(/[\s_]+/g, '-') === childTarget)
+          );
+        }
+        return pChild === childCategory.toLowerCase().trim() || pChildSlug === childTarget;
       });
     }
 
@@ -1173,5 +1240,144 @@ export const storeService = {
     notifySubCategoriesChanged();
 
     return { success: true };
+  },
+
+  // 7. REVIEWS & RATINGS
+  async getReviews(productId?: string): Promise<Review[]> {
+    const local = getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+
+    try {
+      let q = query(collection(db, 'reviews'));
+      if (productId) {
+        q = query(collection(db, 'reviews'), where('product_id', '==', productId));
+      }
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const firestoreRevs: Review[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as Review;
+          firestoreRevs.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        firestoreRevs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        
+        // Merge with local to preserve immediate writes
+        const map = new Map<string, Review>();
+        local.forEach((r) => map.set(r.id, r));
+        firestoreRevs.forEach((r) => map.set(r.id, r));
+        const merged = Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+        setLocal(REVIEWS_KEY, merged);
+        return productId ? merged.filter((r) => r.product_id === productId) : merged;
+      }
+    } catch (e) {
+      console.warn('Firestore getReviews error, falling back to local:', e);
+    }
+
+    // Try REST API fallback if available
+    try {
+      const url = productId ? `/api/reviews?product_id=${encodeURIComponent(productId)}` : '/api/reviews';
+      const apiResult = await tryApi<{ success: boolean; reviews: Review[] }>(url);
+      if (apiResult.success && Array.isArray(apiResult.data?.reviews)) {
+        return apiResult.data.reviews;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    if (productId) {
+      return local.filter((r) => r.product_id === productId);
+    }
+    return local;
+  },
+
+  async addReview(reviewData: {
+    product_id: string;
+    rating: number;
+    comment: string;
+    user_name?: string;
+  }): Promise<{ success: boolean; review: Review; error?: string }> {
+    if (!reviewData.product_id) {
+      return { success: false, error: 'Product ID is required.', review: null as any };
+    }
+    const cleanRating = Math.max(1, Math.min(5, Math.round(Number(reviewData.rating) || 5)));
+    const cleanComment = String(reviewData.comment || '').trim();
+    if (!cleanComment) {
+      return { success: false, error: 'Please enter a review comment.', review: null as any };
+    }
+    const cleanName = String(reviewData.user_name || '').trim() || 'Verified Customer';
+
+    const newReview: Review = {
+      id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      product_id: reviewData.product_id,
+      rating: cleanRating,
+      comment: cleanComment,
+      user_name: cleanName,
+      created_at: new Date().toISOString(),
+      verified_purchase: true,
+    };
+
+    // 1. Optimistically update local storage
+    const current = getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+    const updated = [newReview, ...current];
+    setLocal(REVIEWS_KEY, updated);
+    notifyReviewsChanged();
+
+    // 2. Persist to Firestore
+    try {
+      await setDoc(doc(db, 'reviews', newReview.id), newReview);
+    } catch (e) {
+      console.warn('Firestore saveReview error:', e);
+    }
+
+    // 3. Sync with backend API if available
+    try {
+      await tryApi('/api/reviews', {
+        method: 'POST',
+        body: JSON.stringify(newReview),
+      });
+    } catch (e) {
+      // non-blocking
+    }
+
+    return { success: true, review: newReview };
+  },
+
+  getProductRatingStats(productId: string, reviewsList?: Review[]): ProductRatingStats {
+    const reviews = reviewsList || getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+    const productReviews = reviews.filter((r) => r.product_id === productId);
+    if (!productReviews.length) {
+      return { average: 0, count: 0 };
+    }
+    const sum = productReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    const avg = Number((sum / productReviews.length).toFixed(1));
+    return {
+      average: avg,
+      count: productReviews.length,
+    };
+  },
+
+  getAllProductRatingStats(reviewsList?: Review[]): Record<string, ProductRatingStats> {
+    const reviews = reviewsList || getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+    const map: Record<string, { sum: number; count: number }> = {};
+
+    for (const r of reviews) {
+      if (!r.product_id) continue;
+      if (!map[r.product_id]) {
+        map[r.product_id] = { sum: 0, count: 0 };
+      }
+      map[r.product_id].sum += Number(r.rating) || 0;
+      map[r.product_id].count += 1;
+    }
+
+    const result: Record<string, ProductRatingStats> = {};
+    for (const pid in map) {
+      const { sum, count } = map[pid];
+      result[pid] = {
+        average: count > 0 ? Number((sum / count).toFixed(1)) : 0,
+        count,
+      };
+    }
+    return result;
   },
 };

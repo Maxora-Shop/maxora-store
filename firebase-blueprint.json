@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "E-commerce store product with pricing, variants, and stock information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "sub_category": { "type": "string" },
+        "product_type": { "type": "string" },
+        "child_category": { "type": "string" },
+        "selling_price": { "type": "number" },
+        "discount": { "type": "number" },
+        "stock": { "type": "number" },
+        "image_url": { "type": "string" }
+      },
+      "required": ["id", "name", "category", "selling_price", "stock"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer product review with 1-5 star rating and short text feedback",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "product_id": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "user_name": { "type": "string" },
+        "created_at": { "type": "string" },
+        "verified_purchase": { "type": "boolean" }
+      },
+      "required": ["id", "product_id", "rating", "comment"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order with shipping and payment status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "order_number": { "type": "string" },
+        "customer_name": { "type": "string" },
+        "customer_phone": { "type": "string" },
+        "total_amount": { "type": "number" },
+        "order_status": { "type": "string" }
+      },
+      "required": ["id", "order_number", "customer_name", "customer_phone", "total_amount"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Store configuration, delivery fees, and contact info",
+      "type": "object",
+      "properties": {
+        "store_name": { "type": "string" },
+        "delivery_inside_dhaka": { "type": "number" },
+        "delivery_outside_dhaka": { "type": "number" }
+      },
+      "required": ["store_name"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of products in the store"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Collection of customer product reviews and ratings"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of customer orders"
+    },
+    "/settings/{settingId}": {
+      "schema": "StoreSettings",
+      "description": "Store level settings document"
+    }
+  }
+}
