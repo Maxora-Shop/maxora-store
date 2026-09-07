@@ -1,5 +1,5 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, Review, ProductRatingStats } from '../types';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats } from '../types';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug } from '../utils/seo';
 import { db } from '../firebase';
@@ -24,6 +24,8 @@ const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
 const CATEGORIES_KEY = 'maxora_categories_v1';
 const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
+const PRODUCT_TYPES_KEY = 'maxora_product_types_v1';
+const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
 
 function notifyProductsChanged(): void {
@@ -53,6 +55,18 @@ function notifyCategoriesChanged(): void {
 function notifySubCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_subcategories_updated'));
+  }
+}
+
+function notifyProductTypesChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_product_types_updated'));
+  }
+}
+
+function notifyChildCategoriesChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_child_categories_updated'));
   }
 }
 
@@ -101,6 +115,12 @@ export function initLocalStorage(): void {
   }
   if (!localStorage.getItem(SUBCATEGORIES_KEY)) {
     setLocal(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+  }
+  if (!localStorage.getItem(PRODUCT_TYPES_KEY)) {
+    setLocal(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+  }
+  if (!localStorage.getItem(CHILD_CATEGORIES_KEY)) {
+    setLocal(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
   }
   if (!localStorage.getItem(REVIEWS_KEY)) {
     setLocal(REVIEWS_KEY, INITIAL_REVIEWS);
@@ -181,7 +201,35 @@ export function initRealtimeFirestoreListeners() {
       }
     }, (err) => console.warn('Subcategories Firestore snapshot warning:', err));
 
-    // 6. Listen for reviews changes
+    // 6. Listen for product_types changes
+    onSnapshot(collection(db, 'product_types'), (snapshot) => {
+      if (!snapshot.empty) {
+        const types: ProductType[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as ProductType;
+          types.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        types.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(PRODUCT_TYPES_KEY, types);
+        notifyProductTypesChanged();
+      }
+    }, (err) => console.warn('ProductTypes Firestore snapshot warning:', err));
+
+    // 7. Listen for child_categories changes
+    onSnapshot(collection(db, 'child_categories'), (snapshot) => {
+      if (!snapshot.empty) {
+        const children: ChildCategory[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as ChildCategory;
+          children.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        children.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(CHILD_CATEGORIES_KEY, children);
+        notifyChildCategoriesChanged();
+      }
+    }, (err) => console.warn('ChildCategories Firestore snapshot warning:', err));
+
+    // 8. Listen for reviews changes
     onSnapshot(collection(db, 'reviews'), (snapshot) => {
       if (!snapshot.empty) {
         const revs: Review[] = [];
@@ -1238,6 +1286,285 @@ export const storeService = {
     const updated = current.filter((s) => s.id !== subCategoryId);
     setLocal(SUBCATEGORIES_KEY, updated);
     notifySubCategoriesChanged();
+
+    return { success: true };
+  },
+
+  // 6b. PRODUCT TYPES (Tier 3)
+  async getProductTypes(subcategorySlugOrId?: string, activeOnly: boolean = false): Promise<ProductType[]> {
+    const local = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+
+    try {
+      const snapshot = await getDocs(collection(db, 'product_types'));
+      if (!snapshot.empty) {
+        const firestoreTypes: ProductType[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as ProductType;
+          firestoreTypes.push({
+            ...d,
+            id: String(d.id || docSnap.id),
+          });
+        });
+
+        // Merge with local/initial
+        const existingIds = new Set(firestoreTypes.map((t) => t.id));
+        const merged = [
+          ...firestoreTypes,
+          ...local.filter((l) => !existingIds.has(l.id)),
+        ];
+        merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(PRODUCT_TYPES_KEY, merged);
+
+        let result = merged;
+        if (activeOnly) {
+          result = result.filter((t) => t.active !== 0 && t.active !== false && String(t.active) !== '0');
+        }
+        if (subcategorySlugOrId) {
+          const target = subcategorySlugOrId.toLowerCase().trim();
+          result = result.filter((t) =>
+            (t.subcategory_id && t.subcategory_id.toLowerCase() === target) ||
+            (t.subcategory_slug && t.subcategory_slug.toLowerCase() === target)
+          );
+        }
+        return result;
+      }
+    } catch (e) {
+      console.warn('Firestore getProductTypes error:', e);
+    }
+
+    let result = local;
+    if (activeOnly) {
+      result = result.filter((t) => t.active !== 0 && t.active !== false && String(t.active) !== '0');
+    }
+    if (subcategorySlugOrId) {
+      const target = subcategorySlugOrId.toLowerCase().trim();
+      result = result.filter((t) =>
+        (t.subcategory_id && t.subcategory_id.toLowerCase() === target) ||
+        (t.subcategory_slug && t.subcategory_slug.toLowerCase() === target)
+      );
+    }
+    return result.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+  },
+
+  async saveProductType(typeData: Partial<ProductType>, adminPassword?: string): Promise<{ success: boolean; productType: ProductType }> {
+    const slug = typeData.slug ? generateSlug(typeData.slug) : generateSlug(typeData.name || `type-${Date.now()}`);
+    const id = typeData.id || `pt-${slug || Date.now()}`;
+
+    const newType: ProductType = {
+      id,
+      category_id: typeData.category_id || '',
+      category_slug: typeData.category_slug || '',
+      subcategory_id: typeData.subcategory_id || '',
+      subcategory_slug: typeData.subcategory_slug || '',
+      name: typeData.name || 'Untitled Product Type',
+      slug,
+      image_url: typeData.image_url || '',
+      display_order: Number(typeData.display_order ?? 1),
+      active: typeData.active !== undefined ? (typeData.active ? 1 : 0) : 1,
+      meta_title: typeData.meta_title || '',
+      meta_description: typeData.meta_description || '',
+      created_at: typeData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(doc(db, 'product_types', id), newType, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveProductType error:', e);
+    }
+
+    // Also attempt server sync if running full-stack
+    try {
+      fetch('/api/admin/product-types', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newType),
+      }).catch(() => {});
+    } catch {
+      // safe ignore
+    }
+
+    const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+    const idx = current.findIndex((t) => t.id === id || t.slug === slug);
+    let updated: ProductType[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newType;
+    } else {
+      updated = [...current, newType];
+    }
+    setLocal(PRODUCT_TYPES_KEY, updated);
+    notifyProductTypesChanged();
+
+    return { success: true, productType: newType };
+  },
+
+  async deleteProductType(typeId: string, adminPassword?: string): Promise<{ success: boolean }> {
+    try {
+      await deleteDoc(doc(db, 'product_types', typeId));
+    } catch (e) {
+      console.warn('Firestore deleteProductType error:', e);
+    }
+
+    try {
+      fetch(`/api/admin/product-types/${typeId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+      }).catch(() => {});
+    } catch {
+      // safe ignore
+    }
+
+    const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+    const updated = current.filter((t) => t.id !== typeId);
+    setLocal(PRODUCT_TYPES_KEY, updated);
+    notifyProductTypesChanged();
+
+    return { success: true };
+  },
+
+  // 6c. CHILD CATEGORIES (Tier 4)
+  async getChildCategories(productTypeSlugOrId?: string, activeOnly: boolean = false): Promise<ChildCategory[]> {
+    const local = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+
+    try {
+      const snapshot = await getDocs(collection(db, 'child_categories'));
+      if (!snapshot.empty) {
+        const firestoreChildren: ChildCategory[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as ChildCategory;
+          firestoreChildren.push({
+            ...d,
+            id: String(d.id || docSnap.id),
+          });
+        });
+
+        // Merge with local/initial
+        const existingIds = new Set(firestoreChildren.map((c) => c.id));
+        const merged = [
+          ...firestoreChildren,
+          ...local.filter((l) => !existingIds.has(l.id)),
+        ];
+        merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(CHILD_CATEGORIES_KEY, merged);
+
+        let result = merged;
+        if (activeOnly) {
+          result = result.filter((c) => c.active !== 0 && c.active !== false && String(c.active) !== '0');
+        }
+        if (productTypeSlugOrId) {
+          const target = productTypeSlugOrId.toLowerCase().trim();
+          result = result.filter((c) =>
+            (c.product_type_id && c.product_type_id.toLowerCase() === target) ||
+            (c.product_type_slug && c.product_type_slug.toLowerCase() === target)
+          );
+        }
+        return result;
+      }
+    } catch (e) {
+      console.warn('Firestore getChildCategories error:', e);
+    }
+
+    let result = local;
+    if (activeOnly) {
+      result = result.filter((c) => c.active !== 0 && c.active !== false && String(c.active) !== '0');
+    }
+    if (productTypeSlugOrId) {
+      const target = productTypeSlugOrId.toLowerCase().trim();
+      result = result.filter((c) =>
+        (c.product_type_id && c.product_type_id.toLowerCase() === target) ||
+        (c.product_type_slug && c.product_type_slug.toLowerCase() === target)
+      );
+    }
+    return result.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+  },
+
+  async saveChildCategory(childData: Partial<ChildCategory>, adminPassword?: string): Promise<{ success: boolean; childCategory: ChildCategory }> {
+    const slug = childData.slug ? generateSlug(childData.slug) : generateSlug(childData.name || `child-${Date.now()}`);
+    const id = childData.id || `child-${slug || Date.now()}`;
+
+    const newChild: ChildCategory = {
+      id,
+      category_id: childData.category_id || '',
+      category_slug: childData.category_slug || '',
+      subcategory_id: childData.subcategory_id || '',
+      subcategory_slug: childData.subcategory_slug || '',
+      product_type_id: childData.product_type_id || '',
+      product_type_slug: childData.product_type_slug || '',
+      product_type_name: childData.product_type_name || '',
+      name: childData.name || 'Untitled Child Category',
+      slug,
+      image_url: childData.image_url || '',
+      display_order: Number(childData.display_order ?? 1),
+      active: childData.active !== undefined ? (childData.active ? 1 : 0) : 1,
+      meta_title: childData.meta_title || '',
+      meta_description: childData.meta_description || '',
+      created_at: childData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(doc(db, 'child_categories', id), newChild, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveChildCategory error:', e);
+    }
+
+    // Also attempt server sync if running full-stack
+    try {
+      fetch('/api/admin/child-categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newChild),
+      }).catch(() => {});
+    } catch {
+      // safe ignore
+    }
+
+    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+    const idx = current.findIndex((c) => c.id === id || c.slug === slug);
+    let updated: ChildCategory[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newChild;
+    } else {
+      updated = [...current, newChild];
+    }
+    setLocal(CHILD_CATEGORIES_KEY, updated);
+    notifyChildCategoriesChanged();
+
+    return { success: true, childCategory: newChild };
+  },
+
+  async deleteChildCategory(childId: string, adminPassword?: string): Promise<{ success: boolean }> {
+    try {
+      await deleteDoc(doc(db, 'child_categories', childId));
+    } catch (e) {
+      console.warn('Firestore deleteChildCategory error:', e);
+    }
+
+    try {
+      fetch(`/api/admin/child-categories/${childId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+      }).catch(() => {});
+    } catch {
+      // safe ignore
+    }
+
+    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+    const updated = current.filter((c) => c.id !== childId);
+    setLocal(CHILD_CATEGORIES_KEY, updated);
+    notifyChildCategoriesChanged();
 
     return { success: true };
   },

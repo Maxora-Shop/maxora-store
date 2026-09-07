@@ -30,6 +30,8 @@ interface DBSchema {
   order_items: any[];
   categories: any[];
   subcategories: any[];
+  product_types?: any[];
+  child_categories?: any[];
 }
 
 const defaultSettings: Record<string, string> = {
@@ -1288,7 +1290,7 @@ app.get('/api/subcategories', (req, res) => {
 function buildDynamicSitemap(baseUrl: string): string {
   const today = new Date().toISOString().split('T')[0];
 
-  // 1. Active Products only (removes deleted or inactive)
+  // 1. Active Products only (strictly excludes deleted or inactive products)
   const activeProducts = (db.products || []).filter(p => p.active !== 0 && p.active !== false && String(p.active) !== '0');
   const productUrls = activeProducts.map(p => {
     const slug = p.slug || (p.name ? p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
@@ -1301,7 +1303,7 @@ function buildDynamicSitemap(baseUrl: string): string {
   </url>`;
   }).join('\n');
 
-  // 2. Active Categories only (removes deleted or inactive)
+  // 2. Tier 1: Active Categories only (excludes deleted or inactive)
   const activeCategories = (db.categories || defaultCategories).filter(c => c.active !== 0 && c.active !== false && String(c.active) !== '0');
   const categoryUrls = activeCategories.map(c => {
     const slug = c.slug || (c.name ? c.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : c.id);
@@ -1314,7 +1316,7 @@ function buildDynamicSitemap(baseUrl: string): string {
   </url>`;
   }).join('\n');
 
-  // 3. Active Subcategories only (removes deleted or inactive)
+  // 3. Tier 2: Active Subcategories only (excludes deleted or inactive)
   const activeSubCategories = (db.subcategories || defaultSubCategories).filter(s => s.active !== 0 && s.active !== false && String(s.active) !== '0');
   const subCategoryUrls = activeSubCategories.map(s => {
     const cat = activeCategories.find(c => c.id === s.category_id || c.slug === s.category_slug);
@@ -1329,6 +1331,59 @@ function buildDynamicSitemap(baseUrl: string): string {
   </url>`;
   }).join('\n');
 
+  // 4. Tier 3: Active Product Types (from db or dynamically aggregated from active products)
+  const rawProductTypes = new Set<string>();
+  if (db.product_types && Array.isArray(db.product_types)) {
+    db.product_types.forEach(pt => {
+      if (pt.active !== 0 && pt.active !== false && String(pt.active) !== '0' && pt.slug) {
+        rawProductTypes.add(pt.slug);
+      }
+    });
+  }
+  activeProducts.forEach(p => {
+    if (p.product_type) {
+      const typeSlug = p.product_type.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      if (typeSlug) rawProductTypes.add(typeSlug);
+    }
+  });
+  const productTypeUrls = Array.from(rawProductTypes).map(slug => {
+    return `  <url>
+    <loc>${baseUrl}/type/${slug}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+  }).join('\n');
+
+  // 5. Tier 4: Active Child Categories (from db or dynamically aggregated from active products)
+  const rawChildCategories = new Set<string>();
+  if (db.child_categories && Array.isArray(db.child_categories)) {
+    db.child_categories.forEach(ch => {
+      if (ch.active !== 0 && ch.active !== false && String(ch.active) !== '0' && ch.slug) {
+        rawChildCategories.add(ch.slug);
+      }
+    });
+  }
+  activeProducts.forEach(p => {
+    if (p.child_category) {
+      const parts = p.child_category.includes(',') || p.child_category.includes('/')
+        ? p.child_category.split(/[,/]+/).map((s: string) => s.trim()).filter(Boolean)
+        : [p.child_category.trim()];
+      parts.forEach((part: string) => {
+        const childSlug = part.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        if (childSlug) rawChildCategories.add(childSlug);
+      });
+    }
+  });
+  const childCategoryUrls = Array.from(rawChildCategories).map(slug => {
+    return `  <url>
+    <loc>${baseUrl}/child/${slug}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`;
+  }).join('\n');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -1337,8 +1392,16 @@ function buildDynamicSitemap(baseUrl: string): string {
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+  <url>
+    <loc>${baseUrl}/track</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
 ${categoryUrls}
 ${subCategoryUrls}
+${productTypeUrls}
+${childCategoryUrls}
 ${productUrls}
 </urlset>`;
 }

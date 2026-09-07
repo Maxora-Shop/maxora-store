@@ -1,13 +1,15 @@
-import { Product, Category, SubCategory } from '../types';
+import { Product, Category, SubCategory, ProductType, ChildCategory } from '../types';
 import { generateSlug } from './seo';
 
 export interface TaxonomyChildCategory {
+  id?: string;
   name: string;
   slug: string;
   count: number;
 }
 
 export interface TaxonomyProductType {
+  id?: string;
   name: string;
   slug: string;
   count: number;
@@ -82,9 +84,11 @@ export function matchesTaxonomyField(actual?: string, target?: string): boolean 
 export function buildTaxonomyTree(
   products: Product[] = [],
   registeredCategories: Category[] = [],
-  registeredSubCategories: SubCategory[] = []
+  registeredSubCategories: SubCategory[] = [],
+  registeredProductTypes: ProductType[] = [],
+  registeredChildCategories: ChildCategory[] = []
 ): TaxonomyCategory[] {
-  const activeProducts = products.filter((p) => p.active !== 0 && p.active !== false);
+  const activeProducts = products.filter((p) => p.active !== 0 && p.active !== false && String(p.active) !== '0');
 
   // Map of registered category metadata by normalized name or slug
   const regCatMap = new Map<string, Category>();
@@ -102,13 +106,17 @@ export function buildTaxonomyTree(
 
   // Intermediate nested structure
   interface RawChild {
+    id?: string;
     name: string;
     slug: string;
+    display_order?: number;
     count: number;
   }
   interface RawType {
+    id?: string;
     name: string;
     slug: string;
+    display_order?: number;
     count: number;
     children: Map<string, RawChild>;
   }
@@ -116,6 +124,7 @@ export function buildTaxonomyTree(
     name: string;
     slug: string;
     id?: string;
+    display_order?: number;
     count: number;
     types: Map<string, RawType>;
   }
@@ -174,6 +183,7 @@ export function buildTaxonomyTree(
           name: sub.name.trim(),
           slug: sub.slug || generateSlug(sub.name),
           id: sub.id,
+          display_order: sub.display_order ?? 99,
           count: 0,
           types: new Map(),
         });
@@ -181,7 +191,64 @@ export function buildTaxonomyTree(
     }
   });
 
-  // 3. Populate and enrich dynamically from existing product fields
+  // 3. Seed registered product types
+  registeredProductTypes.forEach((pt) => {
+    if (!pt.name || pt.active === 0 || pt.active === false || String(pt.active) === '0') return;
+    const targetSubSlug = pt.subcategory_slug ? normalizeKey(pt.subcategory_slug) : '';
+    const targetSubId = pt.subcategory_id;
+
+    for (const catObj of categoryMap.values()) {
+      for (const [subKey, subObj] of catObj.subs.entries()) {
+        if (
+          (targetSubSlug && (subKey === targetSubSlug || subObj.slug === targetSubSlug)) ||
+          (targetSubId && subObj.id === targetSubId)
+        ) {
+          const typeKey = normalizeKey(pt.name);
+          if (!subObj.types.has(typeKey)) {
+            subObj.types.set(typeKey, {
+              name: pt.name.trim(),
+              slug: pt.slug || generateSlug(pt.name),
+              id: pt.id,
+              display_order: pt.display_order ?? 99,
+              count: 0,
+              children: new Map(),
+            });
+          }
+        }
+      }
+    }
+  });
+
+  // 4. Seed registered child categories
+  registeredChildCategories.forEach((ch) => {
+    if (!ch.name || ch.active === 0 || ch.active === false || String(ch.active) === '0') return;
+    const targetTypeSlug = ch.product_type_slug ? normalizeKey(ch.product_type_slug) : (ch.product_type_name ? normalizeKey(ch.product_type_name) : '');
+    const targetTypeId = ch.product_type_id;
+
+    for (const catObj of categoryMap.values()) {
+      for (const subObj of catObj.subs.values()) {
+        for (const [typeKey, typeObj] of subObj.types.entries()) {
+          if (
+            (targetTypeSlug && (typeKey === targetTypeSlug || typeObj.slug === targetTypeSlug)) ||
+            (targetTypeId && typeObj.id === targetTypeId)
+          ) {
+            const childKey = normalizeKey(ch.name);
+            if (!typeObj.children.has(childKey)) {
+              typeObj.children.set(childKey, {
+                name: ch.name.trim(),
+                slug: ch.slug || generateSlug(ch.name),
+                id: ch.id,
+                display_order: ch.display_order ?? 99,
+                count: 0,
+              });
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // 5. Populate and enrich dynamically from existing product fields
   activeProducts.forEach((p) => {
     const rawCatName = (p.category || '').trim();
     if (!rawCatName) return;
@@ -273,15 +340,22 @@ export function buildTaxonomyTree(
           const productTypes: TaxonomyProductType[] = Array.from(s.types.values())
             .map((t) => {
               const childCategories: TaxonomyChildCategory[] = Array.from(t.children.values())
-                .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+                .sort((a, b) => (a.display_order ?? 99) - (b.display_order ?? 99) || b.count - a.count || a.name.localeCompare(b.name))
+                .map((ch) => ({
+                  id: ch.id,
+                  name: ch.name,
+                  slug: ch.slug,
+                  count: ch.count,
+                }));
               return {
+                id: t.id,
                 name: t.name,
                 slug: t.slug,
                 count: t.count,
                 childCategories,
               };
             })
-            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+            .sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || b.count - a.count || a.name.localeCompare(b.name));
 
           return {
             id: s.id,

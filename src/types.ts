@@ -42,6 +42,9 @@ export interface ProductType {
   subcategory_slug?: string;
   name: string;
   slug: string;
+  image_url?: string;
+  meta_title?: string;
+  meta_description?: string;
   display_order?: number;
   active: boolean | number;
   created_at?: string;
@@ -59,6 +62,9 @@ export interface ChildCategory {
   product_type_name?: string;
   name: string;
   slug: string;
+  image_url?: string;
+  meta_title?: string;
+  meta_description?: string;
   display_order?: number;
   active: boolean | number;
   created_at?: string;

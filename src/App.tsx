@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { CategoryFilter } from './components/CategoryFilter';
 import { PriceFilter, PriceRange } from './components/PriceFilter';
 import { FloatingSupportButton } from './components/FloatingSupportButton';
 import { ProductCard } from './components/ProductCard';
@@ -12,7 +11,7 @@ import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Product, CartItem, StoreSettings, Category, SubCategory, Review } from './types';
+import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
@@ -51,6 +50,8 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,9 +181,17 @@ export default function App() {
             setSelectedCategory(rawCat);
             setSelectedSubCategory(rawSub);
           }
+        } else if (path.startsWith('/type/')) {
+          const rawType = decodeURIComponent(path.replace('/type/', '').replace(/\/$/, '').trim());
+          setSelectedProductType(rawType);
+        } else if (path.startsWith('/child/')) {
+          const rawChild = decodeURIComponent(path.replace('/child/', '').replace(/\/$/, '').trim());
+          setSelectedChildCategory(rawChild);
         } else if (path === '/' && !hash && !search) {
           setSelectedCategory('');
           setSelectedSubCategory('');
+          setSelectedProductType('');
+          setSelectedChildCategory('');
         } else if (search) {
           const searchParams = new URLSearchParams(search);
           if (searchParams.has('category')) {
@@ -190,6 +199,12 @@ export default function App() {
             if (searchParams.has('subcategory')) {
               setSelectedSubCategory(searchParams.get('subcategory') || '');
             }
+          }
+          if (searchParams.has('type')) {
+            setSelectedProductType(searchParams.get('type') || '');
+          }
+          if (searchParams.has('child')) {
+            setSelectedChildCategory(searchParams.get('child') || '');
           }
         }
       }
@@ -310,12 +325,16 @@ export default function App() {
 
   const fetchCategories = async () => {
     try {
-      const [cats, subs] = await Promise.all([
+      const [cats, subs, types, childs] = await Promise.all([
         storeService.getCategories(),
         storeService.getSubCategories(),
+        storeService.getProductTypes(),
+        storeService.getChildCategories(),
       ]);
       setCategories(cats);
       setSubCategories(subs);
+      setProductTypes(types);
+      setChildCategories(childs);
     } catch (err) {
       console.error('Failed to load categories:', err);
     }
@@ -508,8 +527,8 @@ export default function App() {
 
   // Dynamic 4-Tier Taxonomy Hierarchy Tree (Category -> Subcategory -> Product Type -> Child Category)
   const taxonomyTree = useMemo(() => {
-    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories);
-  }, [products, reconciledCategories, reconciledSubCategories]);
+    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories, productTypes, childCategories);
+  }, [products, reconciledCategories, reconciledSubCategories, productTypes, childCategories]);
 
   // Saved / Wishlisted products list
   const savedProducts = useMemo(() => {
@@ -720,31 +739,6 @@ export default function App() {
             onAddToCart={(p) => handleAddToCart(p, 1)}
           />
         )}
-
-        {/* 4-Tier Category Hierarchy & Filter Showcase */}
-        <CategoryFilter
-          categories={reconciledCategories}
-          selectedCategory={selectedCategory}
-          onSelectCategory={(cat) => {
-            handleTaxonomySelect({ category: cat, subCategory: '', productType: '', childCategory: '' });
-          }}
-          subCategories={reconciledSubCategories}
-          selectedSubCategory={selectedSubCategory}
-          onSelectSubCategory={(sub) => {
-            handleTaxonomySelect({ category: selectedCategory, subCategory: sub, productType: '', childCategory: '' });
-          }}
-          selectedProductType={selectedProductType}
-          onSelectProductType={(type) => {
-            handleTaxonomySelect({ category: selectedCategory, subCategory: selectedSubCategory, productType: type, childCategory: '' });
-          }}
-          selectedChildCategory={selectedChildCategory}
-          onSelectChildCategory={(child) => {
-            handleTaxonomySelect({ category: selectedCategory, subCategory: selectedSubCategory, productType: selectedProductType, childCategory: child });
-          }}
-          taxonomy={taxonomyTree}
-          products={products}
-          onSelectTaxonomy={handleTaxonomySelect}
-        />
 
         {/* Product Grid Section */}
         <section ref={productSectionRef} className="my-8 scroll-mt-24" id="products-catalog-section">

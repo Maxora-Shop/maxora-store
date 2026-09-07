@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, Review } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review } from '../types';
 
 export const INITIAL_CATEGORIES: Category[] = [
   {
@@ -208,6 +208,226 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "gourmet-food",
     name: "Organic Tea",
     slug: "organic-tea",
+    display_order: 1,
+    active: 1
+  }
+];
+
+export const INITIAL_PRODUCT_TYPES: ProductType[] = [
+  {
+    id: "pt-smartwatch",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    name: "Smartwatch",
+    slug: "smartwatch",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-wireless-earbuds",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-audio",
+    subcategory_slug: "audio",
+    name: "Wireless Earbuds",
+    slug: "wireless-earbuds",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-mechanical-keyboard",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    name: "Mechanical Keyboard",
+    slug: "mechanical-keyboard",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "pt-travel-backpack",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    subcategory_id: "subcat-backpacks",
+    subcategory_slug: "backpacks",
+    name: "Travel Backpack",
+    slug: "travel-backpack",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-vacuum-flask",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    name: "Vacuum Flask",
+    slug: "vacuum-flask",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-coffee-maker",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    name: "Coffee Maker",
+    slug: "coffee-maker",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "pt-leather-wallet",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    subcategory_id: "subcat-wallets",
+    subcategory_slug: "wallets",
+    name: "Leather Wallet",
+    slug: "leather-wallet",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-black-tea",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    subcategory_id: "subcat-organic-tea",
+    subcategory_slug: "organic-tea",
+    name: "Black Tea",
+    slug: "black-tea",
+    display_order: 1,
+    active: 1
+  }
+];
+
+export const INITIAL_CHILD_CATEGORIES: ChildCategory[] = [
+  {
+    id: "child-amoled",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-smartwatch",
+    product_type_slug: "smartwatch",
+    product_type_name: "Smartwatch",
+    name: "AMOLED",
+    slug: "amoled",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-calling",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-smartwatch",
+    product_type_slug: "smartwatch",
+    product_type_name: "Smartwatch",
+    name: "Calling",
+    slug: "calling",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "child-anc",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-audio",
+    subcategory_slug: "audio",
+    product_type_id: "pt-wireless-earbuds",
+    product_type_slug: "wireless-earbuds",
+    product_type_name: "Wireless Earbuds",
+    name: "Active Noise Cancelling (ANC)",
+    slug: "active-noise-cancelling-anc",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-rgb-hotswap",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-mechanical-keyboard",
+    product_type_slug: "mechanical-keyboard",
+    product_type_name: "Mechanical Keyboard",
+    name: "RGB Hot-swap",
+    slug: "rgb-hot-swap",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-anti-theft",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    subcategory_id: "subcat-backpacks",
+    subcategory_slug: "backpacks",
+    product_type_id: "pt-travel-backpack",
+    product_type_slug: "travel-backpack",
+    product_type_name: "Travel Backpack",
+    name: "Anti-Theft",
+    slug: "anti-theft",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-stainless-steel",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    product_type_id: "pt-vacuum-flask",
+    product_type_slug: "vacuum-flask",
+    product_type_name: "Vacuum Flask",
+    name: "Stainless Steel",
+    slug: "stainless-steel",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-pourover",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    product_type_id: "pt-coffee-maker",
+    product_type_slug: "coffee-maker",
+    product_type_name: "Coffee Maker",
+    name: "Pour-Over Dripper",
+    slug: "pour-over-dripper",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-bifold-rfid",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    subcategory_id: "subcat-wallets",
+    subcategory_slug: "wallets",
+    product_type_id: "pt-leather-wallet",
+    product_type_slug: "leather-wallet",
+    product_type_name: "Leather Wallet",
+    name: "Bi-Fold RFID",
+    slug: "bi-fold-rfid",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-whole-leaf",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    subcategory_id: "subcat-organic-tea",
+    subcategory_slug: "organic-tea",
+    product_type_id: "pt-black-tea",
+    product_type_slug: "black-tea",
+    product_type_name: "Black Tea",
+    name: "Whole-Leaf BOP",
+    slug: "whole-leaf-bop",
     display_order: 1,
     active: 1
   }
