@@ -2573,45 +2573,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           Category (ক্যাটেগরি) *
                         </label>
-                        <input
-                          list="admin-category-list-root"
-                          type="text"
+                        <select
                           required
-                          placeholder="e.g. Smart Gadgets"
-                          value={editingProduct?.category || ''}
+                          value={
+                            dbCategories.some(
+                              (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                            )
+                              ? dbCategories.find(
+                                  (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                                )?.name
+                              : editingProduct?.category || ''
+                          }
                           onChange={(e) => {
                             const val = e.target.value;
+                            if (val === '__custom__') {
+                              const customName = prompt('Enter custom category name:');
+                              if (customName && customName.trim()) {
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  category: customName.trim(),
+                                  category_id: '',
+                                  category_slug: customName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                });
+                              }
+                              return;
+                            }
                             const matchedCat = dbCategories.find(
-                              (c) => c.name.toLowerCase() === val.toLowerCase() || c.slug === val.toLowerCase()
+                              (c) => c.name === val || c.id === val || c.slug === val
                             );
                             setEditingProduct({
                               ...editingProduct,
-                              category: val,
-                              category_id: matchedCat?.id || editingProduct?.category_id || '',
-                              category_slug: matchedCat?.slug || editingProduct?.category_slug || '',
+                              category: matchedCat ? matchedCat.name : val,
+                              category_id: matchedCat?.id || '',
+                              category_slug: matchedCat?.slug || '',
                             });
                           }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-category-list-root">
+                        >
+                          <option value="">-- Select Category --</option>
                           {dbCategories.map((c) => (
                             <option key={c.id} value={c.name}>
-                              {c.name} ({c.slug})
+                              {c.name}
                             </option>
                           ))}
                           {dbCategories.length === 0 && (
                             <>
-                              <option value="Smart Gadgets" />
-                              <option value="Audio" />
-                              <option value="Computer & Gaming" />
-                              <option value="Mobile Accessories" />
-                              <option value="Lifestyle & Bags" />
-                              <option value="Home & Living" />
-                              <option value="Fashion & Apparel" />
-                              <option value="Watches & Wearables" />
+                              <option value="Smart Gadgets">Smart Gadgets</option>
+                              <option value="Audio">Audio</option>
+                              <option value="Computer & Gaming">Computer & Gaming</option>
+                              <option value="Mobile Accessories">Mobile Accessories</option>
+                              <option value="Lifestyle & Bags">Lifestyle & Bags</option>
+                              <option value="Home & Living">Home & Living</option>
+                              <option value="Fashion & Apparel">Fashion & Apparel</option>
+                              <option value="Watches & Wearables">Watches & Wearables</option>
                             </>
                           )}
-                        </datalist>
+                          <option value="__custom__">+ Add Custom Category...</option>
+                        </select>
                       </div>
 
                       {/* 2. Sub Category */}
@@ -2619,26 +2637,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           Sub Category (সাব ক্যাটেগরি)
                         </label>
-                        <input
-                          list="admin-subcategory-list-root"
-                          type="text"
-                          placeholder="e.g. Smartwatches, Wireless Earbuds"
-                          value={editingProduct?.sub_category || ''}
+                        <select
+                          value={
+                            dbSubCategories.some(
+                              (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                            )
+                              ? dbSubCategories.find(
+                                  (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                                )?.name
+                              : editingProduct?.sub_category || ''
+                          }
                           onChange={(e) => {
                             const val = e.target.value;
+                            if (val === '__custom__') {
+                              const customSub = prompt('Enter custom subcategory name:');
+                              if (customSub && customSub.trim()) {
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  sub_category: customSub.trim(),
+                                  subcategory_id: '',
+                                  subcategory_slug: customSub.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                });
+                              }
+                              return;
+                            }
                             const matchedSub = dbSubCategories.find(
-                              (s) => s.name.toLowerCase() === val.toLowerCase() || s.slug === val.toLowerCase()
+                              (s) => s.name === val || s.id === val || s.slug === val
                             );
                             setEditingProduct({
                               ...editingProduct,
-                              sub_category: val,
-                              subcategory_id: matchedSub?.id || editingProduct?.subcategory_id || '',
-                              subcategory_slug: matchedSub?.slug || editingProduct?.subcategory_slug || '',
+                              sub_category: matchedSub ? matchedSub.name : val,
+                              subcategory_id: matchedSub?.id || '',
+                              subcategory_slug: matchedSub?.slug || '',
                             });
                           }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-subcategory-list-root">
+                        >
+                          <option value="">-- Select Sub Category (Optional) --</option>
                           {dbSubCategories
                             .filter((s) => {
                               if (!editingProduct?.category) return true;
@@ -2655,22 +2690,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {s.name}
                               </option>
                             ))}
-                          {dbSubCategories.length === 0 && (
-                            <>
-                              <option value="Smartwatches" />
-                              <option value="Fitness Bands" />
-                              <option value="TWS Earbuds" />
-                              <option value="Neckbands" />
-                              <option value="Bluetooth Speakers" />
-                              <option value="Fast Chargers & GaN" />
-                              <option value="Charging Cables" />
-                              <option value="Power Banks" />
-                              <option value="Mechanical Keyboards" />
-                              <option value="Gaming Mouse" />
-                              <option value="Backpacks & Bags" />
-                            </>
-                          )}
-                        </datalist>
+                          <option value="__custom__">+ Add Custom Subcategory...</option>
+                        </select>
                       </div>
 
                       {/* 3. Child Category */}

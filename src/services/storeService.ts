@@ -139,14 +139,21 @@ export function initRealtimeFirestoreListeners() {
   try {
     // 1. Listen for product changes
     onSnapshot(collection(db, 'products'), (snapshot) => {
+      if (snapshot.empty) {
+        // If Firestore products is empty, don't clear local cache! Trigger background seeding.
+        seedInitialDataIfNeeded().catch(() => {});
+        return;
+      }
       const prods: Product[] = [];
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
         prods.push({ ...d, id: String(d.id || docSnap.id) });
       });
-      prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setLocal(PRODUCTS_KEY, prods);
-      notifyProductsChanged();
+      if (prods.length > 0) {
+        prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
     }, (err) => console.warn('Products Firestore snapshot warning:', err));
 
     // 2. Listen for settings changes
@@ -160,16 +167,23 @@ export function initRealtimeFirestoreListeners() {
 
     // 3. Listen for orders changes
     onSnapshot(collection(db, 'orders'), (snapshot) => {
-      if (!snapshot.empty) {
-        const orders: Order[] = [];
-        snapshot.forEach((docSnap) => {
-          orders.push(docSnap.data() as Order);
+      const orders: Order[] = [];
+      snapshot.forEach((docSnap) => {
+        const o = docSnap.data() as Order;
+        orders.push({
+          ...o,
+          id: String(o.id || docSnap.id),
+          phone: o.phone || (o as any).customer_phone || '',
+          customer_phone: o.phone || (o as any).customer_phone || '',
+          total: o.total !== undefined ? o.total : (o as any).total_amount || 0,
+          total_amount: o.total !== undefined ? o.total : (o as any).total_amount || 0,
+          status: (o.status || (o as any).order_status || 'Pending') as OrderStatus,
         });
-        if (orders.length > 0) {
-          orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          setLocal(ORDERS_KEY, orders);
-          notifyOrdersChanged();
-        }
+      });
+      if (orders.length > 0) {
+        orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        setLocal(ORDERS_KEY, orders);
+        notifyOrdersChanged();
       }
     }, (err) => console.warn('Orders Firestore snapshot warning:', err));
 
@@ -300,19 +314,15 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
   }
 }
 
-// Seed initial products to Firestore if empty
+// Seed initial products and multi-tier taxonomy to Firestore if empty
 let isSeeding = false;
-async function seedInitialDataIfNeeded() {
+export async function seedInitialDataIfNeeded() {
   if (isSeeding) return;
+  isSeeding = true;
   try {
-    const settingsDoc = await getDoc(doc(db, 'settings', 'store_settings'));
-    if (settingsDoc.exists() && (settingsDoc.data() as any)?.seeded_v1) {
-      return; // Already seeded, never re-seed to avoid bringing back deleted products
-    }
-
+    // 1. Seed Products if empty
     const prodSnap = await getDocs(collection(db, 'products'));
     if (prodSnap.empty) {
-      isSeeding = true;
       const batch = writeBatch(db);
       for (const p of INITIAL_PRODUCTS) {
         const ref = doc(db, 'products', String(p.id));
@@ -320,8 +330,70 @@ async function seedInitialDataIfNeeded() {
       }
       await batch.commit();
       console.log('Seeded initial products to Firestore');
+      const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      if (!local || local.length === 0) {
+        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      }
+      notifyProductsChanged();
     }
 
+    // 2. Seed Categories if empty
+    const catSnap = await getDocs(collection(db, 'categories'));
+    if (catSnap.empty) {
+      const batch = writeBatch(db);
+      for (const c of INITIAL_CATEGORIES) {
+        const ref = doc(db, 'categories', c.id);
+        batch.set(ref, c);
+      }
+      await batch.commit();
+      console.log('Seeded initial categories to Firestore');
+      setLocal(CATEGORIES_KEY, INITIAL_CATEGORIES);
+      notifyCategoriesChanged();
+    }
+
+    // 3. Seed Subcategories if empty
+    const subSnap = await getDocs(collection(db, 'subcategories'));
+    if (subSnap.empty) {
+      const batch = writeBatch(db);
+      for (const s of INITIAL_SUBCATEGORIES) {
+        const ref = doc(db, 'subcategories', s.id);
+        batch.set(ref, s);
+      }
+      await batch.commit();
+      console.log('Seeded initial subcategories to Firestore');
+      setLocal(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+      notifySubCategoriesChanged();
+    }
+
+    // 4. Seed Product Types (Tier 3) if empty
+    const typeSnap = await getDocs(collection(db, 'product_types'));
+    if (typeSnap.empty) {
+      const batch = writeBatch(db);
+      for (const t of INITIAL_PRODUCT_TYPES) {
+        const ref = doc(db, 'product_types', t.id);
+        batch.set(ref, t);
+      }
+      await batch.commit();
+      console.log('Seeded initial product types to Firestore');
+      setLocal(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+      notifyProductTypesChanged();
+    }
+
+    // 5. Seed Child Categories (Tier 4) if empty
+    const childSnap = await getDocs(collection(db, 'child_categories'));
+    if (childSnap.empty) {
+      const batch = writeBatch(db);
+      for (const ch of INITIAL_CHILD_CATEGORIES) {
+        const ref = doc(db, 'child_categories', ch.id);
+        batch.set(ref, ch);
+      }
+      await batch.commit();
+      console.log('Seeded initial child categories to Firestore');
+      setLocal(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+      notifyChildCategoriesChanged();
+    }
+
+    // 6. Seed Reviews if empty
     const revSnap = await getDocs(collection(db, 'reviews'));
     if (revSnap.empty) {
       const batch = writeBatch(db);
@@ -331,9 +403,15 @@ async function seedInitialDataIfNeeded() {
       }
       await batch.commit();
       console.log('Seeded initial reviews to Firestore');
+      setLocal(REVIEWS_KEY, INITIAL_REVIEWS);
+      notifyReviewsChanged();
     }
 
-    await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
+    // 7. Store Settings
+    const settingsDoc = await getDoc(doc(db, 'settings', 'store_settings'));
+    if (!settingsDoc.exists()) {
+      await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
+    }
   } catch (e) {
     console.warn('Firestore seeding check error:', e);
   } finally {
@@ -413,19 +491,29 @@ export const storeService = {
     // 1. Try Firestore directly
     try {
       const snap = await getDocs(collection(db, 'products'));
-      firestoreLoaded = true;
-      snap.forEach((d) => {
-        const item = d.data() as Product;
-        prods.push({ ...item, id: String(item.id || d.id) });
-      });
-      setLocal(PRODUCTS_KEY, prods);
+      if (!snap.empty) {
+        firestoreLoaded = true;
+        snap.forEach((d) => {
+          const item = d.data() as Product;
+          prods.push({ ...item, id: String(item.id || d.id) });
+        });
+        if (prods.length > 0) {
+          setLocal(PRODUCTS_KEY, prods);
+        }
+      }
     } catch (e) {
       console.warn('Firestore getProducts error, falling back to cache:', e);
     }
 
-    // 2. Fallback to cached local storage only if Firestore network failed
-    if (!firestoreLoaded) {
+    // 2. Fallback to cached local storage or INITIAL_PRODUCTS
+    if (prods.length === 0) {
       prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      if (!prods || prods.length === 0) {
+        prods = INITIAL_PRODUCTS;
+      }
+      setLocal(PRODUCTS_KEY, prods);
+      // Trigger background seed so Firestore gets populated
+      seedInitialDataIfNeeded().catch(() => {});
     }
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
@@ -794,11 +882,19 @@ export const storeService = {
     };
 
     // 1. SAVE TO FIRESTORE DIRECTLY (Cloud DB)
+    const firestoreOrder = {
+      ...newOrder,
+      customer_phone: orderPayload.phone,
+      total_amount: total,
+      order_status: 'Pending',
+    };
+
     try {
-      await setDoc(doc(db, 'orders', orderId), newOrder);
+      await setDoc(doc(db, 'orders', orderId), firestoreOrder);
       await setDoc(doc(db, 'customers', customerId), customerData, { merge: true });
+      console.log('Order successfully synced to Firestore:', orderId);
     } catch (e) {
-      console.warn('Firestore createOrder error:', e);
+      console.error('Firestore createOrder write failed:', e);
     }
 
     // 2. Also forward to API
@@ -883,8 +979,24 @@ export const storeService = {
     try {
       const snap = await getDocs(collection(db, 'orders'));
       if (!snap.empty) {
-        snap.forEach((d) => orders.push(d.data() as Order));
+        snap.forEach((d) => {
+          const o = d.data() as any;
+          orders.push({
+            ...o,
+            id: String(o.id || d.id),
+            customer_name: o.customer_name || 'Customer',
+            phone: o.phone || o.customer_phone || '',
+            customer_phone: o.phone || o.customer_phone || '',
+            total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+            total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+            status: (o.status || o.order_status || 'Pending') as OrderStatus,
+            order_number: o.order_number || `MX-${String(o.id || d.id).slice(-6)}`,
+            items: Array.isArray(o.items) ? o.items : [],
+            created_at: o.created_at || new Date().toISOString(),
+          });
+        });
         if (orders.length > 0) {
+          orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
           setLocal(ORDERS_KEY, orders);
         }
       }
@@ -911,7 +1023,8 @@ export const storeService = {
     }
 
     if (statusFilter) {
-      orders = orders.filter((o) => o.status === statusFilter);
+      const filterLower = statusFilter.toLowerCase().trim();
+      orders = orders.filter((o) => (o.status || '').toLowerCase().trim() === filterLower);
     }
     return [...orders].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
@@ -1168,8 +1281,51 @@ export const storeService = {
       console.warn('Firestore saveCategory error:', e);
     }
 
-    // Save to local cache
+    // Save to local cache & cascade rename if existing category was edited
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
+    const existing = current.find((c) => c.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newCategory.name || oldSlug !== newCategory.slug)) {
+      // 1. Cascade update subcategories
+      const subcats = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+      let subcatsChanged = false;
+      subcats.forEach((s) => {
+        if (s.category_id === id || (oldSlug && s.category_slug === oldSlug)) {
+          s.category_id = newCategory.id;
+          s.category_slug = newCategory.slug;
+          subcatsChanged = true;
+          setDoc(doc(db, 'subcategories', s.id), s, { merge: true }).catch(() => {});
+        }
+      });
+      if (subcatsChanged) {
+        setLocal(SUBCATEGORIES_KEY, subcats);
+        notifySubCategoriesChanged();
+      }
+
+      // 2. Cascade update products
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.category_id === id ||
+          (oldSlug && p.category_slug === oldSlug) ||
+          (oldName && p.category && p.category.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.category = newCategory.name;
+          p.category_id = newCategory.id;
+          p.category_slug = newCategory.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+    }
+
     const idx = current.findIndex((c) => c.id === id || c.slug === slug);
     let updated: Category[];
     if (idx >= 0) {
@@ -1261,6 +1417,49 @@ export const storeService = {
     }
 
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    const existing = current.find((s) => s.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newSubCategory.name || oldSlug !== newSubCategory.slug)) {
+      // 1. Cascade update products with this subcategory
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.subcategory_id === id ||
+          (oldSlug && p.subcategory_slug === oldSlug) ||
+          (oldName && p.sub_category && p.sub_category.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.sub_category = newSubCategory.name;
+          p.subcategory_id = newSubCategory.id;
+          p.subcategory_slug = newSubCategory.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+
+      // 2. Cascade update product types
+      const types = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+      let typesChanged = false;
+      types.forEach((t) => {
+        if (t.subcategory_id === id || (oldSlug && t.subcategory_slug === oldSlug)) {
+          t.subcategory_id = newSubCategory.id;
+          t.subcategory_slug = newSubCategory.slug;
+          typesChanged = true;
+          setDoc(doc(db, 'product_types', t.id), t, { merge: true }).catch(() => {});
+        }
+      });
+      if (typesChanged) {
+        setLocal(PRODUCT_TYPES_KEY, types);
+        notifyProductTypesChanged();
+      }
+    }
+
     const idx = current.findIndex((s) => s.id === id || s.slug === slug);
     let updated: SubCategory[];
     if (idx >= 0) {

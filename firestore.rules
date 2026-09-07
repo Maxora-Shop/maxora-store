@@ -20,8 +20,14 @@ service cloud.firestore {
 
     function isValidOrder(data) {
       return data.customer_name is string && data.customer_name.size() > 0 && data.customer_name.size() <= 100
-        && data.customer_phone is string && data.customer_phone.size() > 0 && data.customer_phone.size() <= 30
-        && data.total_amount is number && data.total_amount >= 0;
+        && (
+          (data.phone is string && data.phone.size() > 0 && data.phone.size() <= 30) ||
+          (data.customer_phone is string && data.customer_phone.size() > 0 && data.customer_phone.size() <= 30)
+        )
+        && (
+          (data.total is number && data.total >= 0) ||
+          (data.total_amount is number && data.total_amount >= 0)
+        );
     }
 
     // Products Collection
@@ -56,6 +62,18 @@ service cloud.firestore {
     match /subcategories/{subCategoryId} {
       allow read: if true;
       allow write: if isValidId(subCategoryId);
+    }
+
+    // Product Types (Tier 3)
+    match /product_types/{productTypeId} {
+      allow read: if true;
+      allow write: if isValidId(productTypeId);
+    }
+
+    // Child Categories (Tier 4)
+    match /child_categories/{childCategoryId} {
+      allow read: if true;
+      allow write: if isValidId(childCategoryId);
     }
 
     // Customers

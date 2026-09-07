@@ -77,11 +77,15 @@ export interface Product {
   description?: string;
   category: string;
   category_id?: string;
+  category_slug?: string;
   sub_category?: string;
   subcategory_id?: string;
+  subcategory_slug?: string;
   child_category?: string;
   childcategory_id?: string;
+  childcategory_slug?: string;
   product_type?: string;
+  product_type_slug?: string;
   colors?: ProductColor[];
   sku?: string;
   image_url: string;
@@ -160,7 +164,10 @@ export interface Order {
   delivery_charge: number;
   subtotal: number;
   total: number;
+  total_amount?: number;
   status: OrderStatus;
+  order_status?: string;
+  customer_phone?: string;
   payment_method: string;
   note?: string;
   created_at: string;

@@ -42,11 +42,60 @@
         "id": { "type": "string" },
         "order_number": { "type": "string" },
         "customer_name": { "type": "string" },
+        "phone": { "type": "string" },
         "customer_phone": { "type": "string" },
+        "total": { "type": "number" },
         "total_amount": { "type": "number" },
-        "order_status": { "type": "string" }
+        "status": { "type": "string" }
       },
-      "required": ["id", "order_number", "customer_name", "customer_phone", "total_amount"]
+      "required": ["id", "order_number", "customer_name"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Root Category taxonomy tier 1",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["id", "name", "slug"]
+    },
+    "SubCategory": {
+      "title": "SubCategory",
+      "description": "Sub Category taxonomy tier 2",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category_id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["id", "category_id", "name", "slug"]
+    },
+    "ProductType": {
+      "title": "ProductType",
+      "description": "Product Type taxonomy tier 3",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subcategory_id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["id", "subcategory_id", "name", "slug"]
+    },
+    "ChildCategory": {
+      "title": "ChildCategory",
+      "description": "Child Category taxonomy tier 4",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "product_type_id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["id", "product_type_id", "name", "slug"]
     },
     "StoreSettings": {
       "title": "StoreSettings",
@@ -72,6 +121,22 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "description": "Collection of customer orders"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Root categories"
+    },
+    "/subcategories/{subCategoryId}": {
+      "schema": "SubCategory",
+      "description": "Subcategories"
+    },
+    "/product_types/{productTypeId}": {
+      "schema": "ProductType",
+      "description": "Product types"
+    },
+    "/child_categories/{childCategoryId}": {
+      "schema": "ChildCategory",
+      "description": "Child categories"
     },
     "/settings/{settingId}": {
       "schema": "StoreSettings",
