@@ -46,13 +46,18 @@ import {
   Camera,
   X,
   Tag,
-  Hash
+  Hash,
+  Palette,
+  FolderTree
 } from 'lucide-react';
-import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus } from '../types';
+import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
+import { AdminCategories } from './AdminCategories';
+import { generateSlug } from '../utils/seo';
+import { isProductInCategory } from '../utils/categoryCompatibility';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -120,18 +125,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Auth state
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState(
-    () => (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') || '' : '')
+    () => localStorage.getItem('maxora_admin_password') || '123456'
   );
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window === 'undefined') return false;
     return !!localStorage.getItem('maxora_admin_token') || !!localStorage.getItem('maxora_admin_password');
   });
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -139,12 +143,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [bestProducts, setBestProducts] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [dbCategories, setDbCategories] = useState<Category[]>([]);
+  const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
 
   const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Filters & Search
   const [productSearch, setProductSearch] = useState('');
@@ -159,8 +165,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [productModalTab, setProductModalTab] = useState<'general' | 'seo'>('general');
+  const [productModalTab, setProductModalTab] = useState<'general' | 'variants' | 'seo'>('general');
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
+
+  // Color Variant management states
+  const [newColorName, setNewColorName] = useState('');
+  const [newColorCode, setNewColorCode] = useState('#18181b');
+  const [newColorStock, setNewColorStock] = useState<number>(10);
+  const [newColorImageUrl, setNewColorImageUrl] = useState('');
+  const [isUploadingColorImage, setIsUploadingColorImage] = useState(false);
+
+  // Custom Product Types management
+  const DEFAULT_PRODUCT_TYPES = [
+    'Standard Product',
+    'Variant Product',
+    'Physical Product',
+    'Digital Product',
+    'Combo Offer',
+    'Pre-Order',
+    'Hot Deal',
+    'Exclusive Edition',
+    'Clearance Sale'
+  ];
+
+  const [availableProductTypes, setAvailableProductTypes] = useState<string[]>(() => {
+    if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
+      return globalSettings.custom_product_types;
+    }
+    const saved = localStorage.getItem('maxora_custom_product_types');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return DEFAULT_PRODUCT_TYPES;
+  });
+
+  const [productTypeFilter, setProductTypeFilter] = useState('');
+  const [showAddTypeInput, setShowAddTypeInput] = useState(false);
+  const [newProductTypeInput, setNewProductTypeInput] = useState('');
+  const [isManageTypesModalOpen, setIsManageTypesModalOpen] = useState(false);
+
+  // Sync settings custom_product_types
+  useEffect(() => {
+    if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
+      setAvailableProductTypes(globalSettings.custom_product_types);
+    }
+  }, [globalSettings.custom_product_types]);
 
   // Image & Product Link States
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -208,7 +260,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   };
 
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'marketing'>('general');
+  // Handlers for Custom Product Types
+  const handleAddNewProductType = async (customName?: string) => {
+    const val = (customName || newProductTypeInput).trim();
+    if (!val) {
+      showToast('টাইপের নাম লিখুন (Please enter product type name)', 'error');
+      return;
+    }
+    if (availableProductTypes.some(t => t.toLowerCase() === val.toLowerCase())) {
+      showToast(`"${val}" প্রোডাক্ট টাইপ ইতিমধ্যে বিদ্যমান রয়েছে!`, 'info');
+      setEditingProduct(prev => prev ? { ...prev, product_type: val } : prev);
+      setShowAddTypeInput(false);
+      setNewProductTypeInput('');
+      return;
+    }
+
+    const updatedTypes = [...availableProductTypes, val];
+    setAvailableProductTypes(updatedTypes);
+    localStorage.setItem('maxora_custom_product_types', JSON.stringify(updatedTypes));
+
+    if (editingProduct) {
+      setEditingProduct({ ...editingProduct, product_type: val });
+    }
+
+    setShowAddTypeInput(false);
+    setNewProductTypeInput('');
+
+    try {
+      const newSettings = { ...settingsForm, custom_product_types: updatedTypes };
+      setSettingsForm(newSettings);
+      await storeService.updateSettings(newSettings, password);
+      onSettingsUpdated();
+      showToast(`"${val}" প্রোডাক্ট টাইপ সফলভাবে তৈরি হয়েছে!`, 'success');
+    } catch {
+      showToast(`"${val}" প্রোডাক্ট টাইপ যুক্ত হয়েছে!`, 'success');
+    }
+  };
+
+  const handleDeleteProductType = async (typeToDelete: string) => {
+    if (availableProductTypes.length <= 1) {
+      showToast('At least one product type must exist.', 'error');
+      return;
+    }
+    const updatedTypes = availableProductTypes.filter(t => t !== typeToDelete);
+    setAvailableProductTypes(updatedTypes);
+    localStorage.setItem('maxora_custom_product_types', JSON.stringify(updatedTypes));
+
+    if (editingProduct && editingProduct.product_type === typeToDelete) {
+      setEditingProduct({ ...editingProduct, product_type: updatedTypes[0] });
+    }
+
+    try {
+      const newSettings = { ...settingsForm, custom_product_types: updatedTypes };
+      setSettingsForm(newSettings);
+      await storeService.updateSettings(newSettings, password);
+      onSettingsUpdated();
+      showToast(`"${typeToDelete}" ডিলিট করা হয়েছে!`, 'info');
+    } catch {
+      showToast(`"${typeToDelete}" ডিলিট করা হয়েছে!`, 'info');
+    }
+  };
+
+  // Handlers for Color Variants
+  const handleAddColorVariant = () => {
+    if (!newColorName.trim()) {
+      showToast('কালারের নাম লিখুন (Please enter a color name)', 'error');
+      return;
+    }
+
+    const newColor: ProductColor = {
+      name: newColorName.trim(),
+      code: newColorCode,
+      stock: Math.max(0, Number(newColorStock || 0)),
+      image_url: newColorImageUrl.trim() || undefined,
+    };
+
+    const currentColors = editingProduct?.colors || [];
+    if (currentColors.some(c => c.name.toLowerCase() === newColor.name.toLowerCase())) {
+      showToast(`"${newColor.name}" কালার ইতিমধ্যে যুক্ত আছে!`, 'error');
+      return;
+    }
+
+    const updatedColors = [...currentColors, newColor];
+    setEditingProduct(prev => prev ? {
+      ...prev,
+      colors: updatedColors,
+      product_type: prev.product_type === 'Standard Product' ? 'Variant Product' : prev.product_type
+    } : prev);
+
+    setNewColorName('');
+    setNewColorImageUrl('');
+    showToast(`"${newColor.name}" কালার ভ্যারিয়েন্ট সফলভাবে যোগ হয়েছে!`, 'success');
+  };
+
+  const handleRemoveColorVariant = (index: number) => {
+    const currentColors = editingProduct?.colors || [];
+    const removedColor = currentColors[index];
+    const updatedColors = currentColors.filter((_, i) => i !== index);
+    setEditingProduct(prev => prev ? { ...prev, colors: updatedColors } : prev);
+    showToast(`"${removedColor?.name || 'Color'}" সরানো হয়েছে!`, 'info');
+  };
+
+  const handleUploadColorImage = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      setIsUploadingColorImage(true);
+      const dataUrl = await compressAndReadImage(file);
+      setNewColorImageUrl(dataUrl);
+      showToast('কালার ছবি আপলোড সফল হয়েছে!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Image upload failed', 'error');
+    } finally {
+      setIsUploadingColorImage(false);
+    }
+  };
+
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing'>('general');
+  const [isCategoryEditModalOpen, setIsCategoryEditModalOpen] = useState(false);
+  const [categoryToEdit, setCategoryToEdit] = useState<Partial<Category> | null>(null);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categorySearchInSettings, setCategorySearchInSettings] = useState('');
 
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -218,12 +389,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Check auth on load
   useEffect(() => {
-    const savedToken = localStorage.getItem('maxora_admin_token');
-    const savedPass = localStorage.getItem('maxora_admin_password');
-    if (savedToken || savedPass) {
-      verifyAdminAuth(savedPass || '123456');
-    }
+    verifyAdminAuth();
   }, []);
+
+  // Listen for live order, product, and settings updates & auto-poll
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleOrdersUpdated = () => {
+      loadTabData(currentTab);
+    };
+
+    const handleProductsUpdated = () => {
+      if (currentTab === 'products' || currentTab === 'overview') {
+        loadTabData(currentTab);
+      }
+    };
+
+    // Listen for custom events and storage events
+    window.addEventListener('maxora_orders_updated', handleOrdersUpdated);
+    window.addEventListener('maxora_products_updated', handleProductsUpdated);
+    window.addEventListener('storage', handleOrdersUpdated);
+
+    // Auto-refresh orders every 10 seconds for real-time order tracking
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadTabData(currentTab);
+      }
+    }, 10000);
+
+    return () => {
+      window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
+      window.removeEventListener('maxora_products_updated', handleProductsUpdated);
+      window.removeEventListener('storage', handleOrdersUpdated);
+      clearInterval(pollInterval);
+    };
+  }, [isAuthenticated, currentTab]);
 
   useEffect(() => {
     if (globalSettings) {
@@ -234,36 +435,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const verifyAdminAuth = async (passToTry?: string, userToTry?: string) => {
     const p = passToTry !== undefined ? passToTry : password;
     const u = userToTry !== undefined ? userToTry : username;
-    
-    if (!p) {
-      setIsAuthenticated(false);
-      return;
-    }
-
     setAuthLoading(true);
     setAuthError('');
     try {
       // 1. Try modern login API
       try {
-        const defaultBackend = 'https://ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
-        const apiBase = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
-          ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
-          : (typeof window !== 'undefined' && localStorage.getItem('maxora_backend_url')) || defaultBackend;
-        
-        if (apiBase) {
-          const res = await fetch(`${apiBase}/api/admin/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: u, password: p }),
-          });
-          const data = await res.json();
-          if (data.success && data.token) {
-            localStorage.setItem('maxora_admin_token', data.token);
-            localStorage.setItem('maxora_admin_password', p);
-            setIsAuthenticated(true);
-            loadTabData(currentTab, p);
-            return;
-          }
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p }),
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('maxora_admin_token', data.token);
+          localStorage.setItem('maxora_admin_password', p);
+          setIsAuthenticated(true);
+          loadTabData(currentTab, p);
+          return;
         }
       } catch {
         // Local fallback
@@ -289,7 +477,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     verifyAdminAuth(password, username);
@@ -302,20 +489,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showToast('Logged out of admin panel', 'success');
   };
 
-  const loadTabData = (tab: string, currentPassword = password) => {
-    if (tab === 'overview') loadOverview(currentPassword);
-    if (tab === 'products') loadProducts(currentPassword);
-    if (tab === 'orders') loadOrders(currentPassword);
-    if (tab === 'customers') loadCustomers(currentPassword);
-    if (tab === 'settings') loadSettings(currentPassword);
+  const loadCategories = async () => {
+    try {
+      const [cats, subs] = await Promise.all([
+        storeService.getCategories(),
+        storeService.getSubCategories(),
+      ]);
+      setDbCategories(cats);
+      setDbSubCategories(subs);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'orders' | 'customers' | 'settings') => {
+  const loadTabData = (tab: string, currentPassword = password) => {
+    if (tab === 'overview') loadOverview(currentPassword);
+    if (tab === 'products') {
+      loadProducts(currentPassword);
+      loadCategories();
+    }
+    if (tab === 'categories') {
+      loadCategories();
+      loadProducts(currentPassword);
+    }
+    if (tab === 'orders') loadOrders(currentPassword);
+    if (tab === 'customers') loadCustomers(currentPassword);
+    if (tab === 'settings') {
+      loadSettings(currentPassword);
+      loadCategories();
+      loadProducts(currentPassword);
+    }
+  };
+
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
 
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setStatusMessage({ text, type });
     setTimeout(() => setStatusMessage(null), 3500);
   };
@@ -413,6 +624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setIsProductModalOpen(false);
       setEditingProduct(null);
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to save product: ' + err.message, 'error');
     } finally {
@@ -429,6 +641,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await storeService.deleteProduct(id, password);
       showToast('Product deleted', 'success');
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to delete product: ' + err.message, 'error');
     } finally {
@@ -446,6 +659,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         'success'
       );
       loadProducts();
+      onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to update featured status: ' + err.message, 'error');
     }
@@ -515,6 +729,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Category Edit Handlers for Settings & Management
+  const handleOpenCategoryEditModal = (cat: Category) => {
+    setCategoryToEdit({
+      ...cat,
+      name: cat.name || '',
+      slug: cat.slug || generateSlug(cat.name || ''),
+      active: cat.active !== undefined ? Number(cat.active) : 1,
+      display_order: cat.display_order ?? 1,
+      icon: cat.icon || '',
+    });
+    setIsCategoryEditModalOpen(true);
+  };
+
+  const handleToggleCategoryStatus = async (cat: Category) => {
+    try {
+      const newStatus = cat.active === 0 ? 1 : 0;
+      const res = await storeService.saveCategory({ ...cat, active: newStatus }, password);
+      if (res.success) {
+        showToast(`Category "${cat.name}" is now ${newStatus ? 'Active' : 'Hidden'}!`, 'success');
+        await loadCategories();
+        onSettingsUpdated();
+      } else {
+        showToast('Failed to update category status', 'error');
+      }
+    } catch (err: any) {
+      showToast('Failed to update status: ' + err.message, 'error');
+    }
+  };
+
+  const handleSaveCategoryEditModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryToEdit || !categoryToEdit.name?.trim()) {
+      showToast('Category name is required', 'error');
+      return;
+    }
+
+    try {
+      setIsSavingCategory(true);
+      const name = categoryToEdit.name.trim();
+      const slug = (categoryToEdit.slug?.trim() || generateSlug(name)).toLowerCase();
+      const catData: Partial<Category> = {
+        ...categoryToEdit,
+        name,
+        slug,
+        active: Number(categoryToEdit.active) === 1 ? 1 : 0,
+        display_order: Number(categoryToEdit.display_order) || 1,
+        icon: categoryToEdit.icon?.trim() || '',
+      };
+
+      const res = await storeService.saveCategory(catData, password);
+      if (res.success) {
+        showToast(`Category "${name}" updated & saved to Firestore!`, 'success');
+        setIsCategoryEditModalOpen(false);
+        setCategoryToEdit(null);
+        await loadCategories();
+        await loadProducts(password);
+        onSettingsUpdated();
+      } else {
+        showToast('Failed to update category', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error saving category to Firestore:', err);
+      showToast('Error saving category: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
   // Helper status color classes
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -546,14 +828,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.product_type && p.product_type.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.meta_keywords && p.meta_keywords.toLowerCase().includes(productSearch.toLowerCase()));
+      (p.meta_keywords && p.meta_keywords.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (Array.isArray(p.colors) && p.colors.some((c) => c.name.toLowerCase().includes(productSearch.toLowerCase())));
     const matchesCategory =
       productCategoryFilter === '' || p.category === productCategoryFilter;
+    const matchesProductType =
+      productTypeFilter === '' || p.product_type === productTypeFilter;
     const matchesStatus =
       productStatusFilter === 'all' ||
       (productStatusFilter === 'active' && p.active !== 0) ||
       (productStatusFilter === 'hidden' && p.active === 0);
-    return matchesSearch && matchesCategory && matchesStatus;
+    return matchesSearch && matchesCategory && matchesProductType && matchesStatus;
   });
 
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
@@ -594,6 +879,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       c.phone.includes(customerSearch) ||
       (c.district && c.district.toLowerCase().includes(customerSearch.toLowerCase())) ||
       (c.area && c.area.toLowerCase().includes(customerSearch.toLowerCase()))
+    );
+  });
+
+  // Filtered Categories for Settings & Taxonomy
+  const filteredCategoriesInSettings = dbCategories.filter((cat) => {
+    if (!categorySearchInSettings.trim()) return true;
+    const q = categorySearchInSettings.toLowerCase().trim();
+    return (
+      cat.name.toLowerCase().includes(q) ||
+      cat.slug.toLowerCase().includes(q) ||
+      (cat.id && cat.id.toLowerCase().includes(q))
     );
   });
 
@@ -707,11 +1003,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-bold transition-all animate-bounce ${
             statusMessage.type === 'success'
               ? 'bg-zinc-950 text-white border border-emerald-500/40'
+              : statusMessage.type === 'info'
+              ? 'bg-zinc-900 text-white border border-blue-400/40'
               : 'bg-rose-600 text-white'
           }`}
         >
           {statusMessage.type === 'success' ? (
             <CheckCircle className="w-4 h-4 text-emerald-400" />
+          ) : statusMessage.type === 'info' ? (
+            <Tag className="w-4 h-4 text-blue-400" />
           ) : (
             <AlertTriangle className="w-4 h-4 text-white" />
           )}
@@ -765,6 +1065,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {products.length > 0 && (
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'products' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                   {products.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('categories')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'categories'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <FolderTree className="w-4 h-4 shrink-0" />
+              <span>🏷️ Categories</span>
+              {dbCategories.length > 0 && (
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {dbCategories.length}
                 </span>
               )}
             </button>
@@ -1247,41 +1564,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => {
-                  setEditingProduct({
-                    name: '',
-                    category: 'Smart Gadgets',
-                    sub_category: '',
-                    child_category: '',
-                    product_type: 'Standard Product',
-                    sku: '',
-                    buying_price: 0,
-                    selling_price: 0,
-                    discount: 0,
-                    stock: 10,
-                    badge: 'NEW',
-                    image_url: '',
-                    images: [],
-                    product_link: '',
-                    description: '',
-                    featured: 0,
-                    active: 1,
-                    meta_title: '',
-                    meta_description: '',
-                    meta_keywords: '',
-                    slug: '',
-                    brand: 'Maxora',
-                    og_image: '',
-                  });
-                  setProductModalTab('general');
-                  setIsProductModalOpen(true);
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add New Product</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManageTypesModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 font-bold text-xs sm:text-sm hover:bg-zinc-50 shadow-xs transition-all cursor-pointer"
+                  title="Manage custom product types (প্রোডাক্ট টাইপসমূহ)"
+                >
+                  <SettingsIcon className="w-4 h-4 text-zinc-600" />
+                  <span>Product Types ({availableProductTypes.length})</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingProduct({
+                      name: '',
+                      category: 'Smart Gadgets',
+                      sub_category: '',
+                      child_category: '',
+                      product_type: availableProductTypes[0] || 'Standard Product',
+                      sku: '',
+                      buying_price: 0,
+                      selling_price: 0,
+                      discount: 0,
+                      stock: 10,
+                      badge: 'NEW',
+                      image_url: '',
+                      images: [],
+                      colors: [],
+                      product_link: '',
+                      description: '',
+                      featured: 0,
+                      active: 1,
+                      meta_title: '',
+                      meta_description: '',
+                      meta_keywords: '',
+                      slug: '',
+                      brand: 'Maxora',
+                      og_image: '',
+                    });
+                    setProductModalTab('general');
+                    setIsProductModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add New Product</span>
+                </button>
+              </div>
             </div>
 
             {/* Product Filters Toolbar */}
@@ -1289,7 +1618,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="relative flex-1 min-w-[240px]">
                 <input
                   type="text"
-                  placeholder="Search product by name, SKU or category..."
+                  placeholder="Search product by name, SKU, color or category..."
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
@@ -1307,6 +1636,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {categoriesList.map((c) => (
                     <option key={c} value={c}>
                       {c}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={productTypeFilter}
+                  onChange={(e) => setProductTypeFilter(e.target.value)}
+                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
+                >
+                  <option value="">All Types ({availableProductTypes.length})</option>
+                  {availableProductTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
                     </option>
                   ))}
                 </select>
@@ -1381,6 +1723,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-zinc-100 text-zinc-700 rounded text-[10px] font-semibold w-fit border border-zinc-200">
                                   {p.product_type}
                                 </span>
+                              )}
+                              {Array.isArray(p.colors) && p.colors.length > 0 && (
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <div className="flex items-center -space-x-1">
+                                    {p.colors.slice(0, 4).map((c, i) => (
+                                      <span
+                                        key={i}
+                                        title={`${c.name} (Stock: ${c.stock ?? 'Available'})`}
+                                        className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs inline-block"
+                                        style={{ backgroundColor: c.code || '#71717a' }}
+                                      />
+                                    ))}
+                                  </div>
+                                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200/70">
+                                    {p.colors.length} {p.colors.length > 1 ? 'Colors' : 'Color'}
+                                  </span>
+                                </div>
                               )}
                               {p.meta_keywords && (
                                 <span
@@ -1461,9 +1820,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     ...p,
                                     sub_category: p.sub_category || '',
                                     child_category: p.child_category || '',
-                                    product_type: p.product_type || 'Standard Product',
+                                    product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
                                     product_link: p.product_link || '',
                                     images: p.images || [],
+                                    colors: p.colors || [],
+                                    meta_title: p.meta_title || '',
+                                    meta_description: p.meta_description || '',
+                                    meta_keywords: p.meta_keywords || '',
+                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    brand: p.brand || 'Maxora',
+                                    og_image: p.og_image || p.image_url || '',
+                                  });
+                                  setProductModalTab('variants');
+                                  setIsProductModalOpen(true);
+                                }}
+                                className={`px-2 py-1 ${
+                                  p.colors && p.colors.length > 0
+                                    ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/80'
+                                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                                } rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1 cursor-pointer`}
+                                title={p.colors && p.colors.length > 0 ? `${p.colors.length} Colors: ${p.colors.map(c => c.name).join(', ')}` : 'Add color variants for this product (কালার ভ্যারিয়েন্ট যোগ করুন)'}
+                              >
+                                <Palette className="w-3.5 h-3.5" />
+                                <span>Colors {p.colors && p.colors.length > 0 ? `(${p.colors.length})` : ''}</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProduct({
+                                    ...p,
+                                    sub_category: p.sub_category || '',
+                                    child_category: p.child_category || '',
+                                    product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
+                                    product_link: p.product_link || '',
+                                    images: p.images || [],
+                                    colors: p.colors || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
@@ -1490,9 +1880,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     ...p,
                                     sub_category: p.sub_category || '',
                                     child_category: p.child_category || '',
-                                    product_type: p.product_type || 'Standard Product',
+                                    product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
                                     product_link: p.product_link || '',
                                     images: p.images || [],
+                                    colors: p.colors || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
@@ -1531,6 +1922,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ====================================================
+            CATEGORIES & SUBCATEGORIES MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'categories' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminCategories
+              password={password}
+              products={products}
+              onUpdated={() => {
+                loadCategories();
+                loadProducts();
+                onSettingsUpdated();
+              }}
+            />
           </div>
         )}
 
@@ -1855,7 +2263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Settings Sub-tabs */}
-              <div className="flex items-center gap-1 bg-zinc-200/80 p-1 rounded-2xl">
+              <div className="flex items-center gap-1 bg-zinc-200/80 p-1 rounded-2xl flex-wrap">
                 <button
                   type="button"
                   onClick={() => setSettingsSubTab('general')}
@@ -1866,6 +2274,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   🏢 Store & Delivery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsSubTab('categories');
+                    loadCategories();
+                    loadProducts(password);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    settingsSubTab === 'categories'
+                      ? 'bg-white text-zinc-950 shadow-xs font-black'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <FolderTree className="w-3.5 h-3.5 text-emerald-600" />
+                  Categories & Status
+                  {dbCategories.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-200 text-zinc-800 font-extrabold">
+                      {dbCategories.length}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -1882,7 +2311,167 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
+            {/* Settings Sub-tab: Categories */}
+            {settingsSubTab === 'categories' ? (
+              <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-zinc-900 flex items-center gap-2">
+                      <FolderTree className="w-5 h-5 text-emerald-600" />
+                      <span>Categories Management & Status</span>
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Edit category names, slugs, or toggle active/hidden status. Updates persist directly to Firestore.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => loadCategories()}
+                      title="Refresh categories from Firestore"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-600 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange('categories')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-all cursor-pointer"
+                      title="Open full taxonomy manager with Subcategories, Product Types & Child Categories"
+                    >
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <span>Full Hierarchy Tree</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategoryToEdit({
+                          id: `cat-${Date.now()}`,
+                          name: '',
+                          slug: '',
+                          active: 1,
+                          display_order: dbCategories.length + 1,
+                        });
+                        setIsCategoryEditModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Category</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search categories bar */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search categories by name or slug..."
+                    value={categorySearchInSettings}
+                    onChange={(e) => setCategorySearchInSettings(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 text-xs sm:text-sm rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900"
+                  />
+                </div>
+
+                {/* Category Items List */}
+                {filteredCategoriesInSettings.length === 0 ? (
+                  <div className="p-8 bg-zinc-50 rounded-2xl border border-dashed border-zinc-300 text-center">
+                    <FolderTree className="w-10 h-10 text-zinc-300 mx-auto mb-2" />
+                    <p className="text-xs sm:text-sm font-bold text-zinc-700">No categories match your search</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategorySearchInSettings('');
+                        loadCategories();
+                      }}
+                      className="mt-2 text-xs text-emerald-600 font-bold hover:underline"
+                    >
+                      Reset Filter
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-50 rounded-2xl border border-zinc-200 overflow-hidden divide-y divide-zinc-200">
+                    {filteredCategoriesInSettings.map((cat) => {
+                      const catProdCount = products.filter((p) => isProductInCategory(p, cat)).length;
+                      const isActive = cat.active !== 0;
+
+                      return (
+                        <div
+                          key={cat.id || cat.slug}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/80 transition-colors"
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs">
+                              <FolderTree className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-black text-zinc-900">
+                                  {cat.name}
+                                </h4>
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                    isActive
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-zinc-200 text-zinc-600 border-zinc-300'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isActive ? 'bg-emerald-500' : 'bg-zinc-400'
+                                    }`}
+                                  />
+                                  {isActive ? 'Active (প্রদর্শিত)' : 'Hidden (লুকানো)'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2.5 text-xs text-zinc-500 mt-0.5 flex-wrap">
+                                <span className="font-mono text-zinc-600">/{cat.slug || generateSlug(cat.name)}</span>
+                                <span>•</span>
+                                <span className="font-semibold text-zinc-700">
+                                  {catProdCount} {catProdCount === 1 ? 'Product' : 'Products'}
+                                </span>
+                                {cat.display_order && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-zinc-400">Order: {cat.display_order}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCategoryStatus(cat)}
+                              title={isActive ? 'Click to hide category from website' : 'Click to show category on website'}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                isActive
+                                  ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-300'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                              }`}
+                            >
+                              {isActive ? 'Hide' : 'Activate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCategoryEditModal(cat)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
               {settingsSubTab === 'general' ? (
                 <>
                   <div className="space-y-4">
@@ -2032,6 +2621,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
                   </div>
+
+                  {/* Store Categories in General Settings with Edit Buttons */}
+                  <div className="pt-6 border-t border-zinc-200 space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                          <FolderTree className="w-4 h-4 text-emerald-600" />
+                          <span>Store Categories & Status ({dbCategories.length})</span>
+                        </h3>
+                        <p className="text-xs text-zinc-500">
+                          Edit category names or toggle active/hidden status. Updates persist directly to Firestore.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettingsSubTab('categories');
+                            loadCategories();
+                            loadProducts(password);
+                          }}
+                          className="text-xs text-emerald-600 font-bold hover:underline cursor-pointer"
+                        >
+                          Manage in Categories Tab
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategoryToEdit({
+                              id: `cat-${Date.now()}`,
+                              name: '',
+                              slug: '',
+                              active: 1,
+                              display_order: dbCategories.length + 1,
+                            });
+                            setIsCategoryEditModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Category</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {dbCategories.length === 0 ? (
+                      <div className="p-6 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200 text-center">
+                        <p className="text-xs text-zinc-500 font-medium">No categories found in store.</p>
+                      </div>
+                    ) : (
+                      <div className="bg-zinc-50 rounded-2xl border border-zinc-200 divide-y divide-zinc-200 overflow-hidden">
+                        {dbCategories.map((cat) => {
+                          const catProdCount = products.filter((p) => isProductInCategory(p, cat)).length;
+                          const isActive = cat.active !== 0;
+
+                          return (
+                            <div
+                              key={cat.id || cat.slug}
+                              className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/70 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                                  <FolderTree className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-xs sm:text-sm font-black text-zinc-900 truncate">
+                                      {cat.name}
+                                    </h4>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                        isActive
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : 'bg-zinc-200 text-zinc-600 border-zinc-300'
+                                      }`}
+                                    >
+                                      {isActive ? 'Active' : 'Hidden'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                                    /{cat.slug || generateSlug(cat.name)} • {catProdCount} {catProdCount === 1 ? 'product' : 'products'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCategoryStatus(cat)}
+                                  title={isActive ? 'Click to hide category from website' : 'Click to show category on website'}
+                                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                    isActive
+                                      ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                                  }`}
+                                >
+                                  {isActive ? 'Hide' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCategoryEditModal(cat)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 /* Marketing Sub-tab */
@@ -2158,6 +2861,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+            )}
           </div>
         )}
       </main>
@@ -2187,6 +2891,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setProductModalTab('variants')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      productModalTab === 'variants'
+                        ? 'bg-white text-zinc-950 shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900'
+                    }`}
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>Colors ({editingProduct?.colors?.length || 0})</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setProductModalTab('seo')}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                       productModalTab === 'seo'
@@ -2210,7 +2926,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
-              {productModalTab === 'general' ? (
+              {productModalTab === 'general' && (
                 <>
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 mb-1">
@@ -2242,25 +2958,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           Category (ক্যাটেগরি) *
                         </label>
-                        <input
-                          list="admin-category-list"
-                          type="text"
+                        <select
                           required
-                          placeholder="e.g. Smart Gadgets"
-                          value={editingProduct?.category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                          value={
+                            dbCategories.some(
+                              (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                            )
+                              ? dbCategories.find(
+                                  (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                                )?.name
+                              : editingProduct?.category || ''
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              const customName = prompt('Enter custom category name:');
+                              if (customName && customName.trim()) {
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  category: customName.trim(),
+                                  category_id: '',
+                                  category_slug: customName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                });
+                              }
+                              return;
+                            }
+                            const matchedCat = dbCategories.find(
+                              (c) => c.name === val || c.id === val || c.slug === val
+                            );
+                            setEditingProduct({
+                              ...editingProduct,
+                              category: matchedCat ? matchedCat.name : val,
+                              category_id: matchedCat?.id || '',
+                              category_slug: matchedCat?.slug || '',
+                            });
+                          }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-category-list">
-                          <option value="Smart Gadgets" />
-                          <option value="Audio" />
-                          <option value="Computer & Gaming" />
-                          <option value="Mobile Accessories" />
-                          <option value="Lifestyle & Bags" />
-                          <option value="Home & Living" />
-                          <option value="Fashion & Apparel" />
-                          <option value="Watches & Wearables" />
-                        </datalist>
+                        >
+                          <option value="">-- Select Category --</option>
+                          {dbCategories.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                          {dbCategories.length === 0 && (
+                            <>
+                              <option value="Smart Gadgets">Smart Gadgets</option>
+                              <option value="Audio">Audio</option>
+                              <option value="Computer & Gaming">Computer & Gaming</option>
+                              <option value="Mobile Accessories">Mobile Accessories</option>
+                              <option value="Lifestyle & Bags">Lifestyle & Bags</option>
+                              <option value="Home & Living">Home & Living</option>
+                              <option value="Fashion & Apparel">Fashion & Apparel</option>
+                              <option value="Watches & Wearables">Watches & Wearables</option>
+                            </>
+                          )}
+                          <option value="__custom__">+ Add Custom Category...</option>
+                        </select>
                       </div>
 
                       {/* 2. Sub Category */}
@@ -2268,27 +3022,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           Sub Category (সাব ক্যাটেগরি)
                         </label>
-                        <input
-                          list="admin-subcategory-list"
-                          type="text"
-                          placeholder="e.g. Smartwatches, Wireless Earbuds"
-                          value={editingProduct?.sub_category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, sub_category: e.target.value })}
+                        <select
+                          value={
+                            dbSubCategories.some(
+                              (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                            )
+                              ? dbSubCategories.find(
+                                  (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                                )?.name
+                              : editingProduct?.sub_category || ''
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              const customSub = prompt('Enter custom subcategory name:');
+                              if (customSub && customSub.trim()) {
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  sub_category: customSub.trim(),
+                                  subcategory_id: '',
+                                  subcategory_slug: customSub.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                });
+                              }
+                              return;
+                            }
+                            const matchedSub = dbSubCategories.find(
+                              (s) => s.name === val || s.id === val || s.slug === val
+                            );
+                            setEditingProduct({
+                              ...editingProduct,
+                              sub_category: matchedSub ? matchedSub.name : val,
+                              subcategory_id: matchedSub?.id || '',
+                              subcategory_slug: matchedSub?.slug || '',
+                            });
+                          }}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-subcategory-list">
-                          <option value="Smartwatches" />
-                          <option value="Fitness Bands" />
-                          <option value="TWS Earbuds" />
-                          <option value="Neckbands" />
-                          <option value="Bluetooth Speakers" />
-                          <option value="Fast Chargers & GaN" />
-                          <option value="Charging Cables" />
-                          <option value="Power Banks" />
-                          <option value="Mechanical Keyboards" />
-                          <option value="Gaming Mouse" />
-                          <option value="Backpacks & Bags" />
-                        </datalist>
+                        >
+                          <option value="">-- Select Sub Category (Optional) --</option>
+                          {dbSubCategories
+                            .filter((s) => {
+                              if (!editingProduct?.category) return true;
+                              const currentCat = editingProduct.category.toLowerCase().trim();
+                              const parentCat = dbCategories.find((c) => c.id === s.category_id);
+                              return (
+                                s.category_id === editingProduct.category_id ||
+                                s.category_slug === editingProduct.category_slug ||
+                                (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                              );
+                            })
+                            .map((s) => (
+                              <option key={s.id} value={s.name}>
+                                {s.name}
+                              </option>
+                            ))}
+                          <option value="__custom__">+ Add Custom Subcategory...</option>
+                        </select>
                       </div>
 
                       {/* 3. Child Category */}
@@ -2297,14 +3085,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           Child Category (চাইল্ড ক্যাটেগরি)
                         </label>
                         <input
-                          list="admin-childcategory-list"
+                          list="admin-childcategory-list-root"
                           type="text"
                           placeholder="e.g. AMOLED Display, ANC Earbuds"
                           value={editingProduct?.child_category || ''}
                           onChange={(e) => setEditingProduct({ ...editingProduct, child_category: e.target.value })}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
                         />
-                        <datalist id="admin-childcategory-list">
+                        <datalist id="admin-childcategory-list-root">
                           <option value="AMOLED Calling" />
                           <option value="Waterproof IP68" />
                           <option value="Active Noise Cancelling (ANC)" />
@@ -2317,22 +3105,75 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {/* 4. Product Type */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Product Type (প্রোডাক্ট টাইপ)
-                        </label>
-                        <select
-                          value={editingProduct?.product_type || 'Standard Product'}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, product_type: e.target.value })}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        >
-                          <option value="Standard Product">Standard / Simple Product (সাধারণ প্রোডাক্ট)</option>
-                          <option value="Variant Product">Variant / Multi-Choice (ভ্যারিয়েন্ট - কালার/সাইজ)</option>
-                          <option value="Combo Offer">Combo / Bundle Offer (কম্বো বান্ডেল)</option>
-                          <option value="Physical Product">Physical Product (ফিজিক্যাল ডেলিভারি)</option>
-                          <option value="Digital Product">Digital Product (ডিজিটাল ডাউনলোড/কোড)</option>
-                          <option value="Pre-Order">Pre-Order (প্রি-অর্ডার পণ্য)</option>
-                          <option value="Hot Deal">Hot Deal / Flash Sale (হট ডিল)</option>
-                        </select>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Product Type (প্রোডাক্ট টাইপ)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddTypeInput(!showAddTypeInput)}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddTypeInput ? 'Cancel' : '+ Add Custom Type (নতুন টাইপ)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddTypeInput ? (
+                          <div className="flex items-center gap-2 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                            <input
+                              type="text"
+                              placeholder="Type custom product type name..."
+                              value={newProductTypeInput}
+                              onChange={(e) => setNewProductTypeInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddNewProductType();
+                                }
+                              }}
+                              className="flex-1 bg-white text-zinc-900 text-xs p-2 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddNewProductType()}
+                              className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                list="admin-product-type-datalist"
+                                type="text"
+                                placeholder="Select or type any custom product type..."
+                                value={editingProduct?.product_type || 'Standard Product'}
+                                onChange={(e) => setEditingProduct({ ...editingProduct, product_type: e.target.value })}
+                                className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                              />
+                              <datalist id="admin-product-type-datalist">
+                                {availableProductTypes.map((t) => (
+                                  <option key={t} value={t} />
+                                ))}
+                              </datalist>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsManageTypesModalOpen(true)}
+                              className="px-3 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl border border-zinc-300 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                              title="Manage all custom product types"
+                            >
+                              <SettingsIcon className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Manage</span>
+                            </button>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          You can choose from the list or freely type any custom product type.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -2648,6 +3489,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
 
+                  {/* Quick Shortcut to Color Variants */}
+                  <div className="p-3.5 bg-purple-50/70 border border-purple-200/80 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 font-bold">
+                        <Palette className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-extrabold text-purple-950">Color Variants (কালার ভ্যারিয়েন্ট)</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {editingProduct?.colors && editingProduct.colors.length > 0 ? (
+                            <>
+                              <div className="flex items-center -space-x-1">
+                                {editingProduct.colors.map((c, i) => (
+                                  <span
+                                    key={i}
+                                    title={`${c.name} (${c.stock} in stock)`}
+                                    className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs inline-block"
+                                    style={{ backgroundColor: c.code || '#71717a' }}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-[11px] font-bold text-purple-700">
+                                {editingProduct.colors.length} টি কালার যুক্ত আছে ({editingProduct.colors.reduce((sum, c) => sum + (c.stock || 0), 0)} মোট স্টক)
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-purple-700 truncate">
+                              কালার ভ্যারিয়েন্ট যুক্ত করুন যাতে কাস্টমার পছন্দের কালার নির্বাচন করতে পারেন
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProductModalTab('variants')}
+                      className="px-3 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 flex items-center gap-1"
+                    >
+                      <Palette className="w-3.5 h-3.5" />
+                      <span>{editingProduct?.colors?.length ? 'কালার ম্যানেজ করুন' : '+ কালার যোগ করুন'}</span>
+                    </button>
+                  </div>
+
                   {/* Quick Shortcut to Google SEO */}
                   <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -2695,9 +3579,243 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </label>
                   </div>
                 </>
-              ) : (
-                /* SEO Tab */
-                <div className="space-y-4">
+              )}
+
+              {/* TAB 2: COLOR VARIANTS MANAGEMENT */}
+              {productModalTab === 'variants' && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="p-4 bg-purple-50/80 border border-purple-200 rounded-2xl flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                      <Palette className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-extrabold text-purple-950">
+                        Product Color Variants (কালার ভ্যারিয়েন্ট কনফিগারেশন)
+                      </h4>
+                      <p className="text-[11px] text-purple-700 leading-relaxed mt-0.5">
+                        প্রোডাক্টের একাধিক কালার, প্রতি কালারের আলাদা স্টক ও নিজস্ব ছবি যুক্ত করুন। স্টোরফ্রন্টে কাস্টমার কালার অনুযায়ী ক্লিক করে লাইভ ছবি দেখতে ও অর্ডার করতে পারবেন।
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick Color Presets */}
+                  <div className="bg-zinc-50/90 p-4 rounded-2xl border border-zinc-200/90 space-y-2.5">
+                    <label className="block text-xs font-bold text-zinc-700">
+                      Quick Color Presets (দ্রুত কালার সিলেক্ট করুন):
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { name: 'Midnight Black', code: '#09090b' },
+                        { name: 'Pure White', code: '#ffffff' },
+                        { name: 'Navy Blue', code: '#1e3a8a' },
+                        { name: 'Crimson Red', code: '#dc2626' },
+                        { name: 'Emerald Green', code: '#059669' },
+                        { name: 'Titanium Gray', code: '#4b5563' },
+                        { name: 'Rose Gold', code: '#e0a899' },
+                        { name: 'Royal Blue', code: '#2563eb' },
+                        { name: 'Gold', code: '#d97706' },
+                        { name: 'Silver', code: '#9ca3af' },
+                        { name: 'Deep Purple', code: '#7c3aed' },
+                        { name: 'Sunset Orange', code: '#ea580c' },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setNewColorName(preset.name);
+                            setNewColorCode(preset.code);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white hover:bg-zinc-100 border border-zinc-200 text-[11px] font-semibold text-zinc-800 transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <span
+                            className="w-3 h-3 rounded-full border border-zinc-300 inline-block shadow-xs"
+                            style={{ backgroundColor: preset.code }}
+                          />
+                          <span>{preset.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Add New Color Variant Form */}
+                  <div className="p-4 bg-white rounded-2xl border-2 border-dashed border-purple-300 space-y-3.5">
+                    <h5 className="text-xs font-black text-purple-900 flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-purple-700" />
+                      <span>Add Color Variant (নতুন কালার যুক্ত করুন)</span>
+                    </h5>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Color Name */}
+                      <div className="sm:col-span-1">
+                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                          Color Name (কালারের নাম) *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Midnight Black, Navy"
+                          value={newColorName}
+                          onChange={(e) => setNewColorName(e.target.value)}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-purple-600 font-medium"
+                        />
+                      </div>
+
+                      {/* Color Picker & Hex Code */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                          Color Swatch (কালার কোড)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={newColorCode}
+                            onChange={(e) => setNewColorCode(e.target.value)}
+                            className="w-9 h-9 p-0.5 rounded-xl border border-zinc-300 cursor-pointer shrink-0 bg-white"
+                          />
+                          <input
+                            type="text"
+                            value={newColorCode}
+                            onChange={(e) => setNewColorCode(e.target.value)}
+                            placeholder="#000000"
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Color Stock */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                          Stock for this Color (স্টক সংখ্যা)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={newColorStock}
+                          onChange={(e) => setNewColorStock(Number(e.target.value))}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Color Image (Optional) */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                        Color Specific Image (ঐচ্ছিক - এই কালারের ছবি)
+                      </label>
+                      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            placeholder="Image URL or upload below..."
+                            value={newColorImageUrl}
+                            onChange={(e) => setNewColorImageUrl(e.target.value)}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-zinc-300"
+                          />
+                          <ImageIcon className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-3" />
+                        </div>
+
+                        <label className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-bold border border-zinc-300 cursor-pointer shrink-0 transition-colors">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{isUploadingColorImage ? 'Uploading...' : 'Device Upload'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={isUploadingColorImage}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadColorImage(file);
+                            }}
+                          />
+                        </label>
+
+                        {newColorImageUrl && (
+                          <div className="w-10 h-10 rounded-xl border border-zinc-300 overflow-hidden bg-white shrink-0 self-center">
+                            <img src={newColorImageUrl} alt="Color preview" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddColorVariant}
+                      className="w-full py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Color to Product (কালার যুক্ত করুন)</span>
+                    </button>
+                  </div>
+
+                  {/* Current Color Variants List */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-black text-zinc-900">
+                        Added Colors ({editingProduct?.colors?.length || 0}):
+                      </h5>
+                      {editingProduct?.colors && editingProduct.colors.length > 0 && (
+                        <span className="text-[11px] font-semibold text-zinc-500">
+                          Total Variant Stock: {editingProduct.colors.reduce((sum, c) => sum + (c.stock || 0), 0)} units
+                        </span>
+                      )}
+                    </div>
+
+                    {editingProduct?.colors && editingProduct.colors.length > 0 ? (
+                      <div className="space-y-2">
+                        {editingProduct.colors.map((color, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className="w-7 h-7 rounded-full border-2 border-white shadow-md inline-block shrink-0"
+                                style={{ backgroundColor: color.code || '#71717a' }}
+                              />
+                              {color.image_url && (
+                                <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-300 bg-white shrink-0">
+                                  <img src={color.image_url} alt={color.name} className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-xs text-zinc-900 truncate">{color.name}</span>
+                                  {color.code && (
+                                    <span className="font-mono text-[10px] text-zinc-500 uppercase">{color.code}</span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] font-semibold text-emerald-700">
+                                  Stock: {color.stock ?? 0} units
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveColorVariant(index)}
+                              className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                              title="Remove color variant"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center bg-zinc-50 rounded-2xl border border-dashed border-zinc-300 p-4">
+                        <Palette className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
+                        <p className="text-xs font-bold text-zinc-700">No color variants added yet.</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          Use the form above or click quick color presets to add options for your customers.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: SEO TAB */}
+              {productModalTab === 'seo' && (
+                <div className="space-y-4 animate-fade-in">
                   {/* Google SEO Introduction Card */}
                   <div className="bg-blue-50/80 border border-blue-200 p-4 rounded-2xl flex items-start gap-3">
                     <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
@@ -3020,6 +4138,151 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ====================================================
+          MANAGE CUSTOM PRODUCT TYPES MODAL
+      ==================================================== */}
+      {isManageTypesModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="relative bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col">
+            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-zinc-900 text-white flex items-center justify-center font-bold">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-zinc-900">
+                    Product Types Management
+                  </h3>
+                  <p className="text-xs text-zinc-500">প্রোডাক্টের টাইপসমূহ তৈরি ও নিয়ন্ত্রণ করুন</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManageTypesModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Add New Type Input */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">
+                  Create New Product Type (নতুন প্রোডাক্ট টাইপ যোগ করুন)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. Export Quality, Wholesale, Gift Hamper..."
+                    value={newProductTypeInput}
+                    onChange={(e) => setNewProductTypeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddNewProductType();
+                      }
+                    }}
+                    className="flex-1 bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddNewProductType()}
+                    className="px-4 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Type</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Existing Types List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-700">
+                    Active Product Types ({availableProductTypes.length}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Reset product types to standard defaults?')) {
+                        const defaults = [
+                          'Standard Product',
+                          'Variant Product',
+                          'Combo Offer',
+                          'Physical Product',
+                          'Digital Product',
+                          'Pre-Order',
+                          'Hot Deal'
+                        ];
+                        setAvailableProductTypes(defaults);
+                        localStorage.setItem('maxora_custom_product_types', JSON.stringify(defaults));
+                        showToast('Reset to default product types', 'info');
+                      }
+                    }}
+                    className="text-[11px] font-semibold text-zinc-500 hover:text-zinc-800 underline cursor-pointer"
+                  >
+                    Reset Defaults
+                  </button>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                  {availableProductTypes.map((type) => {
+                    const isDefault = [
+                      'Standard Product',
+                      'Variant Product',
+                      'Combo Offer',
+                      'Physical Product',
+                      'Digital Product',
+                      'Pre-Order',
+                      'Hot Deal'
+                    ].includes(type);
+
+                    return (
+                      <div
+                        key={type}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 border border-zinc-200 hover:bg-zinc-100/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="text-xs font-bold text-zinc-900 truncate">{type}</span>
+                          {isDefault && (
+                            <span className="text-[10px] bg-zinc-200 text-zinc-600 px-1.5 py-0.5 rounded font-medium">
+                              Default
+                            </span>
+                          )}
+                        </div>
+
+                        {!isDefault && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProductType(type)}
+                            className="p-1 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete custom product type"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-zinc-50 border-t border-zinc-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsManageTypesModalOpen(false)}
+                className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================
           ORDER MODAL (EDIT & DETAILS)
       ==================================================== */}
       {isOrderModalOpen && editingOrder && (
@@ -3225,6 +4488,252 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="flex-1 py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
                 >
                   Update Order Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================
+          CATEGORY EDIT MODAL (SETTINGS & CATEGORIES)
+      ==================================================== */}
+      {isCategoryEditModalOpen && categoryToEdit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="relative bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col">
+            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                  <FolderTree className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-zinc-900">
+                    {categoryToEdit.id && dbCategories.some((c) => c.id === categoryToEdit.id)
+                      ? 'Edit Category'
+                      : 'Add New Category'}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Update name, URL slug & visibility. Saved directly to Firestore.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCategoryEditModalOpen(false);
+                  setCategoryToEdit(null);
+                }}
+                className="w-8 h-8 rounded-full bg-zinc-200/70 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategoryEditModal} className="p-6 space-y-5">
+              {/* Category Name */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1.5">
+                  Category Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Smart Watch or স্মার্টওয়াচ"
+                  value={categoryToEdit.name || ''}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setCategoryToEdit({
+                      ...categoryToEdit,
+                      name: newName,
+                      slug: categoryToEdit.slug || generateSlug(newName),
+                    });
+                  }}
+                  className="w-full bg-zinc-50 text-zinc-900 text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-semibold"
+                />
+              </div>
+
+              {/* Category Slug */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-700">
+                    Category URL Slug <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (categoryToEdit.name) {
+                        setCategoryToEdit({
+                          ...categoryToEdit,
+                          slug: generateSlug(categoryToEdit.name),
+                        });
+                      }
+                    }}
+                    className="text-[11px] text-emerald-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Auto-Generate
+                  </button>
+                </div>
+                <div className="flex items-center rounded-xl border border-zinc-300 bg-zinc-50 overflow-hidden focus-within:border-zinc-900">
+                  <span className="px-3 text-xs text-zinc-400 font-mono select-none bg-zinc-100 py-3 border-r border-zinc-200">
+                    /category/
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="smart-watch"
+                    value={categoryToEdit.slug || ''}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
+                      })
+                    }
+                    className="w-full bg-transparent text-zinc-900 text-xs sm:text-sm p-3 focus:outline-none font-mono"
+                  />
+                </div>
+                <span className="text-[11px] text-zinc-400 block mt-1">
+                  Used in browser address bar and SEO canonical URLs
+                </span>
+              </div>
+
+              {/* Category Status Selector */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-2">
+                  Storefront Visibility Status <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryToEdit({ ...categoryToEdit, active: 1 })}
+                    className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      categoryToEdit.active !== 0
+                        ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                        categoryToEdit.active !== 0
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-zinc-300 bg-white'
+                      }`}
+                    >
+                      {categoryToEdit.active !== 0 && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-extrabold text-zinc-900">
+                        Active (প্রদর্শিত)
+                      </span>
+                      <span className="block text-[11px] text-zinc-500 mt-0.5">
+                        Visible on website navbar, filter tabs & search
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCategoryToEdit({ ...categoryToEdit, active: 0 })}
+                    className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      categoryToEdit.active === 0
+                        ? 'bg-amber-50/80 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 shadow-xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                        categoryToEdit.active === 0
+                          ? 'border-amber-600 bg-amber-600 text-white'
+                          : 'border-zinc-300 bg-white'
+                      }`}
+                    >
+                      {categoryToEdit.active === 0 && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-extrabold text-zinc-900">
+                        Hidden (লুকানো)
+                      </span>
+                      <span className="block text-[11px] text-zinc-500 mt-0.5">
+                        Hidden from storefront, products stay preserved
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Display Order */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={categoryToEdit.display_order ?? 1}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        display_order: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
+                  />
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    1 = first item on menu
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Icon Identifier (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Watch, Headphones"
+                    value={categoryToEdit.icon || ''}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        icon: e.target.value,
+                      })
+                    }
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                  />
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    Lucide icon name or tag
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-zinc-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={isSavingCategory}
+                  onClick={() => {
+                    setIsCategoryEditModalOpen(false);
+                    setCategoryToEdit(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCategory || !categoryToEdit.name?.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer"
+                >
+                  {isSavingCategory ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Changes to Firestore</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

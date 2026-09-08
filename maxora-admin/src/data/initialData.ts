@@ -1,4 +1,437 @@
-import { Product, StoreSettings, Customer, Order, OrderItem } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review } from '../types';
+
+export const INITIAL_CATEGORIES: Category[] = [
+  {
+    id: "cat-electronics",
+    name: "Electronics",
+    slug: "electronics",
+    icon: "Cpu",
+    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    display_order: 1,
+    active: 1,
+    meta_title: "Electronics & Smart Tech in Bangladesh | Maxora",
+    meta_description: "Explore smart gadgets, smartwatches, audio devices, and computer accessories with fast Cash on Delivery in Bangladesh."
+  },
+  {
+    id: "cat-smart-gadgets",
+    name: "Smart Gadgets",
+    slug: "smart-gadgets",
+    icon: "Watch",
+    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    display_order: 2,
+    active: 1,
+    meta_title: "Smart Gadgets & Wearables in Bangladesh | Maxora",
+    meta_description: "Explore smartwatches, fitness bands, and wearable tech with fast Cash on Delivery in Bangladesh."
+  },
+  {
+    id: "cat-audio",
+    name: "Audio",
+    slug: "audio",
+    icon: "Headphones",
+    image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80",
+    display_order: 3,
+    active: 1,
+    meta_title: "Premium Wireless Earbuds & Audio in BD | Maxora",
+    meta_description: "Shop Active Noise Cancelling (ANC) earbuds, headphones, and Bluetooth speakers at best prices in BD."
+  },
+  {
+    id: "cat-computer-gaming",
+    name: "Computer & Gaming",
+    slug: "computer-gaming",
+    icon: "Sparkles",
+    image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400&auto=format&fit=crop&q=80",
+    display_order: 3,
+    active: 1,
+    meta_title: "Mechanical Keyboards & Gaming Gear in BD | Maxora",
+    meta_description: "RGB mechanical keyboards, gaming mice, and desk accessories for gamers and professionals in Bangladesh."
+  },
+  {
+    id: "cat-lifestyle-bags",
+    name: "Lifestyle & Bags",
+    slug: "lifestyle-bags",
+    icon: "ShoppingBag",
+    image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80",
+    display_order: 4,
+    active: 1,
+    meta_title: "Anti-Theft Backpacks & Travel Bags | Maxora BD",
+    meta_description: "Water-repellent anti-theft backpacks, laptop bags, and travel gear delivered across 64 districts."
+  },
+  {
+    id: "cat-home-living",
+    name: "Home & Living",
+    slug: "home-living",
+    icon: "Home",
+    image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80",
+    display_order: 5,
+    active: 1,
+    meta_title: "Home & Living Essentials | Maxora BD",
+    meta_description: "Vacuum insulated flasks, coffee dripper sets, and premium home essentials for everyday comfort."
+  },
+  {
+    id: "cat-accessories",
+    name: "Accessories",
+    slug: "accessories",
+    icon: "Shirt",
+    image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80",
+    display_order: 6,
+    active: 1,
+    meta_title: "Genuine Leather Wallets & Accessories | Maxora BD",
+    meta_description: "Handcrafted 100% genuine BD cowhide leather wallets, cardholders, and everyday accessories."
+  },
+  {
+    id: "cat-mobile-accessories",
+    name: "Mobile Accessories",
+    slug: "mobile-accessories",
+    icon: "Sparkles",
+    image_url: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&auto=format&fit=crop&q=80",
+    display_order: 7,
+    active: 1,
+    meta_title: "Fast GaN Chargers & Cables | Maxora BD",
+    meta_description: "Fast chargers, GaN adapters, heavy-duty braided Type-C cables, and mobile accessories."
+  },
+  {
+    id: "cat-gourmet-food",
+    name: "Gourmet & Food",
+    slug: "gourmet-food",
+    icon: "Coffee",
+    image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&auto=format&fit=crop&q=80",
+    display_order: 8,
+    active: 1,
+    meta_title: "Pure Organic Tea & Artisanal Food | Maxora BD",
+    meta_description: "Single-origin whole-leaf Sylhet Sreemangal black tea and gourmet specialty goods."
+  }
+];
+
+export const INITIAL_SUBCATEGORIES: SubCategory[] = [
+  {
+    id: "subcat-smartwatches",
+    category_id: "cat-smart-gadgets",
+    category_slug: "smart-gadgets",
+    name: "Smartwatches",
+    slug: "smartwatches",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-fitness-bands",
+    category_id: "cat-smart-gadgets",
+    category_slug: "smart-gadgets",
+    name: "Fitness Bands",
+    slug: "fitness-bands",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-tws-earbuds",
+    category_id: "cat-audio",
+    category_slug: "audio",
+    name: "TWS Earbuds",
+    slug: "tws-earbuds",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-bluetooth-speakers",
+    category_id: "cat-audio",
+    category_slug: "audio",
+    name: "Bluetooth Speakers",
+    slug: "bluetooth-speakers",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-mechanical-keyboards",
+    category_id: "cat-computer-gaming",
+    category_slug: "computer-gaming",
+    name: "Mechanical Keyboards",
+    slug: "mechanical-keyboards",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-gaming-mouse",
+    category_id: "cat-computer-gaming",
+    category_slug: "computer-gaming",
+    name: "Gaming Mouse",
+    slug: "gaming-mouse",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-backpacks",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    name: "Backpacks",
+    slug: "backpacks",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-vacuum-flasks",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    name: "Vacuum Flasks",
+    slug: "vacuum-flasks",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-coffee-drippers",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    name: "Coffee Drippers",
+    slug: "coffee-drippers",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "subcat-wallets",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    name: "Wallets",
+    slug: "wallets",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-chargers-cables",
+    category_id: "cat-mobile-accessories",
+    category_slug: "mobile-accessories",
+    name: "Chargers & Cables",
+    slug: "chargers-cables",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "subcat-organic-tea",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    name: "Organic Tea",
+    slug: "organic-tea",
+    display_order: 1,
+    active: 1
+  }
+];
+
+export const INITIAL_PRODUCT_TYPES: ProductType[] = [
+  {
+    id: "pt-smartwatch",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    name: "Smartwatch",
+    slug: "smartwatch",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-wireless-earbuds",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-audio",
+    subcategory_slug: "audio",
+    name: "Wireless Earbuds",
+    slug: "wireless-earbuds",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-mechanical-keyboard",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    name: "Mechanical Keyboard",
+    slug: "mechanical-keyboard",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "pt-travel-backpack",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    subcategory_id: "subcat-backpacks",
+    subcategory_slug: "backpacks",
+    name: "Travel Backpack",
+    slug: "travel-backpack",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-vacuum-flask",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    name: "Vacuum Flask",
+    slug: "vacuum-flask",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-coffee-maker",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    name: "Coffee Maker",
+    slug: "coffee-maker",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "pt-leather-wallet",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    subcategory_id: "subcat-wallets",
+    subcategory_slug: "wallets",
+    name: "Leather Wallet",
+    slug: "leather-wallet",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "pt-black-tea",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    subcategory_id: "subcat-organic-tea",
+    subcategory_slug: "organic-tea",
+    name: "Black Tea",
+    slug: "black-tea",
+    display_order: 1,
+    active: 1
+  }
+];
+
+export const INITIAL_CHILD_CATEGORIES: ChildCategory[] = [
+  {
+    id: "child-amoled",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-smartwatch",
+    product_type_slug: "smartwatch",
+    product_type_name: "Smartwatch",
+    name: "AMOLED",
+    slug: "amoled",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-calling",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-smartwatch",
+    product_type_slug: "smartwatch",
+    product_type_name: "Smartwatch",
+    name: "Calling",
+    slug: "calling",
+    display_order: 2,
+    active: 1
+  },
+  {
+    id: "child-anc",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-audio",
+    subcategory_slug: "audio",
+    product_type_id: "pt-wireless-earbuds",
+    product_type_slug: "wireless-earbuds",
+    product_type_name: "Wireless Earbuds",
+    name: "Active Noise Cancelling (ANC)",
+    slug: "active-noise-cancelling-anc",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-rgb-hotswap",
+    category_id: "cat-electronics",
+    category_slug: "electronics",
+    subcategory_id: "subcat-smart-gadgets",
+    subcategory_slug: "smart-gadgets",
+    product_type_id: "pt-mechanical-keyboard",
+    product_type_slug: "mechanical-keyboard",
+    product_type_name: "Mechanical Keyboard",
+    name: "RGB Hot-swap",
+    slug: "rgb-hot-swap",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-anti-theft",
+    category_id: "cat-lifestyle-bags",
+    category_slug: "lifestyle-bags",
+    subcategory_id: "subcat-backpacks",
+    subcategory_slug: "backpacks",
+    product_type_id: "pt-travel-backpack",
+    product_type_slug: "travel-backpack",
+    product_type_name: "Travel Backpack",
+    name: "Anti-Theft",
+    slug: "anti-theft",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-stainless-steel",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    product_type_id: "pt-vacuum-flask",
+    product_type_slug: "vacuum-flask",
+    product_type_name: "Vacuum Flask",
+    name: "Stainless Steel",
+    slug: "stainless-steel",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-pourover",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-kitchen-dining",
+    subcategory_slug: "kitchen-dining",
+    product_type_id: "pt-coffee-maker",
+    product_type_slug: "coffee-maker",
+    product_type_name: "Coffee Maker",
+    name: "Pour-Over Dripper",
+    slug: "pour-over-dripper",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-bifold-rfid",
+    category_id: "cat-accessories",
+    category_slug: "accessories",
+    subcategory_id: "subcat-wallets",
+    subcategory_slug: "wallets",
+    product_type_id: "pt-leather-wallet",
+    product_type_slug: "leather-wallet",
+    product_type_name: "Leather Wallet",
+    name: "Bi-Fold RFID",
+    slug: "bi-fold-rfid",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-whole-leaf",
+    category_id: "cat-gourmet-food",
+    category_slug: "gourmet-food",
+    subcategory_id: "subcat-organic-tea",
+    subcategory_slug: "organic-tea",
+    product_type_id: "pt-black-tea",
+    product_type_slug: "black-tea",
+    product_type_name: "Black Tea",
+    name: "Whole-Leaf BOP",
+    slug: "whole-leaf-bop",
+    display_order: 1,
+    active: 1
+  }
+];
 
 export const INITIAL_SETTINGS: StoreSettings = {
   store_name: "Maxora",
@@ -40,8 +473,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: "prod-001",
     name: "Maxora Ultra AMOLED Smartwatch Series 9",
     description: "1.96-inch Always-on AMOLED display, Bluetooth calling, IP68 water resistance, SpO2 & dynamic heart rate monitoring with 10-day battery backup.",
-    category: "Smart Gadgets",
-    product_type: "Variant Product",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Smartwatch",
+    child_category: "AMOLED",
     sku: "MX-SW-09",
     image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -65,11 +500,41 @@ export const INITIAL_PRODUCTS: Product[] = [
     updated_at: new Date().toISOString()
   },
   {
+    id: "prod-009",
+    name: "Maxora Pulse Bluetooth Calling Smartwatch",
+    description: "Built-in HD speaker & microphone for Bluetooth phone calls, 1.85-inch vibrant curved screen, 100+ sports tracking modes & IP68 waterproof rating.",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Smartwatch",
+    child_category: "Calling",
+    sku: "MX-SW-CALL",
+    image_url: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80",
+    images: [
+      "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [
+      { name: "Matte Black", code: "#18181b", stock: 10 },
+      { name: "Silver Grey", code: "#e4e4e7", stock: 8 }
+    ],
+    buying_price: 1600,
+    selling_price: 2450,
+    discount: 250,
+    final_price: 2200,
+    stock: 18,
+    badge: "BT CALLING",
+    featured: 1,
+    active: 1,
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
     id: "prod-002",
     name: "Acoustic Pro ANC Wireless Earbuds",
     description: "Active Noise Cancellation (ANC) up to 35dB, Quad-mic ENC for crystal-clear phone calls, ultra low latency gaming mode & deep bass drivers.",
-    category: "Audio",
-    product_type: "Variant Product",
+    category: "Electronics",
+    sub_category: "Audio",
+    product_type: "Wireless Earbuds",
+    child_category: "Active Noise Cancelling (ANC)",
     sku: "MX-EB-ANC",
     image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -95,6 +560,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Urban Explorer Anti-Theft Water-Repellent Backpack",
     description: "High-density Oxford fabric, concealed zipper security pockets, integrated USB charging port, fits 15.6-inch laptops with breathable orthopedic lumbar back cushion.",
     category: "Lifestyle & Bags",
+    sub_category: "Backpacks",
+    product_type: "Travel Backpack",
+    child_category: "Anti-Theft",
     sku: "MX-BP-URBAN",
     image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -116,6 +584,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "ThermoGrip Double-Wall Vacuum Insulated Flask 750ml",
     description: "Medical-grade 316 stainless steel interior, maintains drinks hot for 18h / chilled for 24h, 100% leakproof cap with removable fine tea infuser.",
     category: "Home & Living",
+    sub_category: "Kitchen & Dining",
+    product_type: "Vacuum Flask",
+    child_category: "Stainless Steel",
     sku: "MX-BOT-750",
     image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -137,6 +608,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Classic Full-Grain Genuine Leather Bi-Fold Wallet",
     description: "100% genuine BD cowhide leather, RFID blocking shield lining, 8 card slots, dual currency compartments, durable handcrafted waxed stitching.",
     category: "Accessories",
+    sub_category: "Wallets",
+    product_type: "Leather Wallet",
+    child_category: "Bi-Fold RFID",
     sku: "MX-WL-LEA",
     image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -157,7 +631,10 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: "prod-006",
     name: "MechWave RGB Mechanical Gaming Keyboard 75%",
     description: "Compact 75% layout, hot-swappable tactile red linear switches, dynamic per-key RGB backlight with 18 effects, Type-C detachable braided cable.",
-    category: "Smart Gadgets",
+    category: "Electronics",
+    sub_category: "Smart Gadgets",
+    product_type: "Mechanical Keyboard",
+    child_category: "RGB Hot-swap",
     sku: "MX-KB-RGB",
     image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -179,6 +656,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Nordic Ceramic Pour-Over Coffee Dripper Set",
     description: "Handcrafted matte ceramic dripper with wooden heat collar, 600ml borosilicate glass server, and 40 reusable Japanese paper filter sheets.",
     category: "Home & Living",
+    sub_category: "Kitchen & Dining",
+    product_type: "Coffee Maker",
+    child_category: "Pour-Over Dripper",
     sku: "MX-COF-SET",
     image_url: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -200,6 +680,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     name: "Pure Organic Sylhet Sreemangal Whole-Leaf Black Tea 500g",
     description: "Single-origin premium BOP orthodox whole-leaf tea from highland Sreemangal gardens. Rich natural aroma, robust malt liquor flavour.",
     category: "Gourmet & Food",
+    sub_category: "Organic Tea",
+    product_type: "Black Tea",
+    child_category: "Whole-Leaf BOP",
     sku: "MX-TEA-500",
     image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
     images: [
@@ -351,5 +834,80 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     total_spent: 2080,
     created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 6).toISOString()
+  }
+];
+
+export const INITIAL_REVIEWS: Review[] = [
+  {
+    id: "rev-001",
+    product_id: "prod-001",
+    rating: 5,
+    comment: "The AMOLED display is stunning and responsive! Battery easily lasts a week. Excellent build quality for this price.",
+    user_name: "Tanvir Ahmed",
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-002",
+    product_id: "prod-001",
+    rating: 5,
+    comment: "Very smooth Bluetooth calling and accurate step tracking. Delivery was fast inside Dhaka.",
+    user_name: "Mahmudul Hasan",
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-003",
+    product_id: "prod-001",
+    rating: 4,
+    comment: "Good watch overall. Premium feel and straps are comfortable. Heart rate sensor is decently accurate.",
+    user_name: "Nusrat Jahan",
+    created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-004",
+    product_id: "prod-009",
+    rating: 5,
+    comment: "Calling speaker is crisp and loud. Pairs instantly with my Android phone. Very happy with the purchase!",
+    user_name: "Sajjad Hossain",
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-005",
+    product_id: "prod-009",
+    rating: 4,
+    comment: "Nice curved screen and lots of watch faces to choose from. Worth every taka.",
+    user_name: "Rafiqul Islam",
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-006",
+    product_id: "prod-002",
+    rating: 5,
+    comment: "Active Noise Cancellation works surprisingly well in traffic! Deep punchy bass and long playtime.",
+    user_name: "Farhana Yasmin",
+    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-007",
+    product_id: "prod-003",
+    rating: 5,
+    comment: "Typing feel is clicky and tactile. The RGB lighting modes look awesome on my gaming desk.",
+    user_name: "Zubair Rahman",
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    verified_purchase: true
+  },
+  {
+    id: "rev-008",
+    product_id: "prod-004",
+    rating: 5,
+    comment: "Waterproof fabric and hidden zipper give peace of mind while traveling. Comfortable straps too.",
+    user_name: "Imtiaz Karim",
+    created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+    verified_purchase: true
   }
 ];

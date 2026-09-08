@@ -6,14 +6,89 @@ export interface ProductColor {
   price?: number;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  image_url?: string;
+  display_order: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SubCategory {
+  id: string;
+  category_id: string;
+  category_slug: string;
+  name: string;
+  slug: string;
+  display_order: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProductType {
+  id: string;
+  category_id?: string;
+  category_slug?: string;
+  subcategory_id?: string;
+  subcategory_slug?: string;
+  name: string;
+  slug: string;
+  image_url?: string;
+  meta_title?: string;
+  meta_description?: string;
+  display_order?: number;
+  active: boolean | number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ChildCategory {
+  id: string;
+  category_id?: string;
+  category_slug?: string;
+  subcategory_id?: string;
+  subcategory_slug?: string;
+  product_type_id?: string;
+  product_type_slug?: string;
+  product_type_name?: string;
+  name: string;
+  slug: string;
+  image_url?: string;
+  meta_title?: string;
+  meta_description?: string;
+  display_order?: number;
+  active: boolean | number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
   description?: string;
   category: string;
+  category_id?: string;
+  category_slug?: string;
   sub_category?: string;
+  subcategory_id?: string;
+  subcategory_slug?: string;
   child_category?: string;
+  childcategory_id?: string;
+  child_category_id?: string;
+  childcategory_slug?: string;
+  child_category_slug?: string;
   product_type?: string;
+  product_type_id?: string;
+  product_type_slug?: string;
   colors?: ProductColor[];
   sku?: string;
   image_url: string;
@@ -92,7 +167,10 @@ export interface Order {
   delivery_charge: number;
   subtotal: number;
   total: number;
+  total_amount?: number;
   status: OrderStatus;
+  order_status?: string;
+  customer_phone?: string;
   payment_method: string;
   note?: string;
   created_at: string;
@@ -197,4 +275,19 @@ export interface CartItem {
   sku?: string;
   selected_color?: string;
   selected_color_code?: string;
+}
+
+export interface Review {
+  id: string;
+  product_id: string;
+  rating: number; // 1 to 5
+  comment: string;
+  user_name: string;
+  created_at: string;
+  verified_purchase?: boolean;
+}
+
+export interface ProductRatingStats {
+  average: number;
+  count: number;
 }
