@@ -1587,6 +1587,50 @@ export const storeService = {
     }
 
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+    const existing = current.find((t) => t.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newType.name || oldSlug !== newType.slug)) {
+      // Cascade update products
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.product_type_id === id ||
+          (oldSlug && p.product_type_slug === oldSlug) ||
+          (oldName && p.product_type && p.product_type.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.product_type = newType.name;
+          p.product_type_id = newType.id;
+          p.product_type_slug = newType.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+
+      // Cascade update child categories that belong to this product type
+      const childs = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+      let childsChanged = false;
+      childs.forEach((c) => {
+        if (c.product_type_id === id || (oldSlug && c.product_type_slug === oldSlug)) {
+          c.product_type_id = newType.id;
+          c.product_type_slug = newType.slug;
+          c.product_type_name = newType.name;
+          childsChanged = true;
+          setDoc(doc(db, 'child_categories', c.id), c, { merge: true }).catch(() => {});
+        }
+      });
+      if (childsChanged) {
+        setLocal(CHILD_CATEGORIES_KEY, childs);
+        notifyChildCategoriesChanged();
+      }
+    }
+
     const idx = current.findIndex((t) => t.id === id || t.slug === slug);
     let updated: ProductType[];
     if (idx >= 0) {
@@ -1728,6 +1772,36 @@ export const storeService = {
     }
 
     const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+    const existing = current.find((c) => c.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newChild.name || oldSlug !== newChild.slug)) {
+      // Cascade update products with this child category
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.child_category_id === id ||
+          p.childcategory_id === id ||
+          (oldSlug && (p.child_category_slug === oldSlug || p.childcategory_slug === oldSlug)) ||
+          (oldName && p.child_category && p.child_category.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.child_category = newChild.name;
+          p.child_category_id = newChild.id;
+          p.childcategory_id = newChild.id;
+          p.child_category_slug = newChild.slug;
+          p.childcategory_slug = newChild.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+    }
+
     const idx = current.findIndex((c) => c.id === id || c.slug === slug);
     let updated: ChildCategory[];
     if (idx >= 0) {

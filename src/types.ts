@@ -83,8 +83,11 @@ export interface Product {
   subcategory_slug?: string;
   child_category?: string;
   childcategory_id?: string;
+  child_category_id?: string;
   childcategory_slug?: string;
+  child_category_slug?: string;
   product_type?: string;
+  product_type_id?: string;
   product_type_slug?: string;
   colors?: ProductColor[];
   sku?: string;

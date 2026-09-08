@@ -188,8 +188,60 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     setIsCategoryModalOpen(true);
   };
 
+  // Quick Toggle Status Handlers
+  const handleToggleCategoryStatus = async (cat: Category) => {
+    try {
+      const newActive = (cat.active === 0 || cat.active === false) ? 1 : 0;
+      await storeService.saveCategory({ ...cat, active: newActive }, password);
+      showToast(`Category "${cat.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
+      await loadAllTaxonomy();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update category status', 'error');
+    }
+  };
+
+  const handleToggleSubStatus = async (sub: SubCategory) => {
+    try {
+      const newActive = (sub.active === 0 || sub.active === false) ? 1 : 0;
+      await storeService.saveSubCategory({ ...sub, active: newActive }, password);
+      showToast(`Subcategory "${sub.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
+      await loadAllTaxonomy();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update subcategory status', 'error');
+    }
+  };
+
+  const handleToggleTypeStatus = async (type: ProductType) => {
+    try {
+      const newActive = (type.active === 0 || type.active === false) ? 1 : 0;
+      await storeService.saveProductType({ ...type, active: newActive }, password);
+      showToast(`Product Type "${type.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
+      await loadAllTaxonomy();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update product type status', 'error');
+    }
+  };
+
+  const handleToggleChildStatus = async (child: ChildCategory) => {
+    try {
+      const newActive = (child.active === 0 || child.active === false) ? 1 : 0;
+      await storeService.saveChildCategory({ ...child, active: newActive }, password);
+      showToast(`Child Category "${child.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
+      await loadAllTaxonomy();
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update child category status', 'error');
+    }
+  };
+
   const handleOpenEditCategory = (cat: Category) => {
-    setEditingCategory({ ...cat });
+    setEditingCategory({
+      ...cat,
+      active: cat.active !== undefined ? (cat.active !== 0 && cat.active !== false ? 1 : 0) : 1,
+    });
     setIsCategoryModalOpen(true);
   };
 
@@ -244,7 +296,13 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   };
 
   const handleOpenEditSub = (sub: SubCategory) => {
-    setEditingSub({ ...sub });
+    const parentCat = categories.find((c) => c.id === sub.category_id || c.slug === sub.category_slug);
+    setEditingSub({
+      ...sub,
+      category_id: parentCat?.id || sub.category_id || '',
+      category_slug: parentCat?.slug || sub.category_slug || '',
+      active: sub.active !== undefined ? (sub.active !== 0 && sub.active !== false ? 1 : 0) : 1,
+    });
     setIsSubModalOpen(true);
   };
 
@@ -310,7 +368,16 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   };
 
   const handleOpenEditType = (pt: ProductType) => {
-    setEditingType({ ...pt });
+    const parentSub = subCategories.find((s) => s.id === pt.subcategory_id || s.slug === pt.subcategory_slug);
+    const parentCat = categories.find((c) => c.id === (parentSub?.category_id || pt.category_id) || c.slug === (parentSub?.category_slug || pt.category_slug));
+    setEditingType({
+      ...pt,
+      subcategory_id: parentSub?.id || pt.subcategory_id || '',
+      subcategory_slug: parentSub?.slug || pt.subcategory_slug || '',
+      category_id: parentCat?.id || pt.category_id || '',
+      category_slug: parentCat?.slug || pt.category_slug || '',
+      active: pt.active !== undefined ? (pt.active !== 0 && pt.active !== false ? 1 : 0) : 1,
+    });
     setIsTypeModalOpen(true);
   };
 
@@ -386,7 +453,34 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   };
 
   const handleOpenEditChild = (ch: ChildCategory) => {
-    setEditingChild({ ...ch });
+    const parentType = productTypes.find(
+      (t) =>
+        t.id === ch.product_type_id ||
+        t.slug === ch.product_type_slug ||
+        (ch.product_type_name && t.name.toLowerCase() === ch.product_type_name.toLowerCase())
+    );
+    const parentSub = subCategories.find(
+      (s) =>
+        s.id === (parentType?.subcategory_id || ch.subcategory_id) ||
+        s.slug === (parentType?.subcategory_slug || ch.subcategory_slug)
+    );
+    const parentCat = categories.find(
+      (c) =>
+        c.id === (parentSub?.category_id || ch.category_id) ||
+        c.slug === (parentSub?.category_slug || ch.category_slug)
+    );
+
+    setEditingChild({
+      ...ch,
+      product_type_id: parentType?.id || ch.product_type_id || '',
+      product_type_slug: parentType?.slug || ch.product_type_slug || '',
+      product_type_name: parentType?.name || ch.product_type_name || '',
+      subcategory_id: parentSub?.id || ch.subcategory_id || '',
+      subcategory_slug: parentSub?.slug || ch.subcategory_slug || '',
+      category_id: parentCat?.id || ch.category_id || '',
+      category_slug: parentCat?.slug || ch.category_slug || '',
+      active: ch.active !== undefined ? (ch.active !== 0 && ch.active !== false ? 1 : 0) : 1,
+    });
     setIsChildModalOpen(true);
   };
 
@@ -787,11 +881,19 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                         {catProdCount} products
                       </span>
 
-                      {cat.active === 0 || cat.active === false ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-600 font-bold">
-                          Inactive
-                        </span>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCategoryStatus(cat)}
+                        title={cat.active !== 0 && cat.active !== false ? 'Click to hide category from website' : 'Click to show category on website'}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                          cat.active !== 0 && cat.active !== false
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${cat.active !== 0 && cat.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                        {cat.active !== 0 && cat.active !== false ? 'Active' : 'Hidden'}
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -877,6 +979,20 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-200/70 text-zinc-700 font-bold">
                                     {subProdCount} prods
                                   </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSubStatus(sub)}
+                                    title={sub.active !== 0 && sub.active !== false ? 'Click to hide subcategory from website' : 'Click to show subcategory on website'}
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                                      sub.active !== 0 && sub.active !== false
+                                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                                    }`}
+                                  >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${sub.active !== 0 && sub.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                                    {sub.active !== 0 && sub.active !== false ? 'Active' : 'Hidden'}
+                                  </button>
                                 </div>
 
                                 <div className="flex items-center gap-1">
@@ -958,6 +1074,20 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                                               <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-zinc-200 text-zinc-700 font-bold">
                                                 {typeProdCount} prods
                                               </span>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => handleToggleTypeStatus(type)}
+                                                title={type.active !== 0 && type.active !== false ? 'Click to hide product type from website' : 'Click to show product type on website'}
+                                                className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold border transition-all cursor-pointer ${
+                                                  type.active !== 0 && type.active !== false
+                                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                                    : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                                                }`}
+                                              >
+                                                <span className={`w-1 h-1 rounded-full ${type.active !== 0 && type.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                                                {type.active !== 0 && type.active !== false ? 'Active' : 'Hidden'}
+                                              </button>
                                             </div>
 
                                             <div className="flex items-center gap-1">
@@ -1010,6 +1140,18 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                                                     <span className="text-[10px] text-zinc-400">
                                                       ({getProductCountForChild(child)})
                                                     </span>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => handleToggleChildStatus(child)}
+                                                      title={child.active !== 0 && child.active !== false ? 'Click to hide child category' : 'Click to activate child category'}
+                                                      className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold border transition-colors cursor-pointer ${
+                                                        child.active !== 0 && child.active !== false
+                                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                          : 'bg-zinc-100 text-zinc-500 border-zinc-200 hover:bg-zinc-200'
+                                                      }`}
+                                                    >
+                                                      {child.active !== 0 && child.active !== false ? 'Active' : 'Hidden'}
+                                                    </button>
                                                     <button
                                                       onClick={() => handleOpenEditChild(child)}
                                                       className="text-zinc-400 hover:text-zinc-800 ml-1"
@@ -1096,15 +1238,19 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                       <td className="p-3.5 font-bold text-emerald-700">{subsCount} subs</td>
                       <td className="p-3.5 font-bold text-zinc-700">{prodsCount} products</td>
                       <td className="p-3.5">
-                        {cat.active !== 0 && cat.active !== false ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-600">
-                            Inactive
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCategoryStatus(cat)}
+                          title={cat.active !== 0 && cat.active !== false ? 'Click to hide category from website' : 'Click to show category on website'}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                            cat.active !== 0 && cat.active !== false
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${cat.active !== 0 && cat.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                          {cat.active !== 0 && cat.active !== false ? 'Active' : 'Hidden'}
+                        </button>
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
@@ -1212,15 +1358,19 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                       <td className="p-3.5 font-bold text-amber-700">{typesCount} types</td>
                       <td className="p-3.5 font-bold text-zinc-700">{prodsCount} products</td>
                       <td className="p-3.5">
-                        {sub.active !== 0 && sub.active !== false ? (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-600">
-                            Inactive
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSubStatus(sub)}
+                          title={sub.active !== 0 && sub.active !== false ? 'Click to hide subcategory from website' : 'Click to show subcategory on website'}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                            sub.active !== 0 && sub.active !== false
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${sub.active !== 0 && sub.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                          {sub.active !== 0 && sub.active !== false ? 'Active' : 'Hidden'}
+                        </button>
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
@@ -1333,15 +1483,19 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                       <td className="p-3.5 font-bold text-zinc-700">{childsCount} children</td>
                       <td className="p-3.5 font-bold text-zinc-700">{prodsCount} products</td>
                       <td className="p-3.5">
-                        {pt.active !== 0 && pt.active !== false ? (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-600">
-                            Inactive
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTypeStatus(pt)}
+                          title={pt.active !== 0 && pt.active !== false ? 'Click to hide product type from website' : 'Click to show product type on website'}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                            pt.active !== 0 && pt.active !== false
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${pt.active !== 0 && pt.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                          {pt.active !== 0 && pt.active !== false ? 'Active' : 'Hidden'}
+                        </button>
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
@@ -1449,15 +1603,19 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                       </td>
                       <td className="p-3.5 font-bold text-zinc-700">{prodsCount} products</td>
                       <td className="p-3.5">
-                        {ch.active !== 0 && ch.active !== false ? (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-600">
-                            Inactive
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleChildStatus(ch)}
+                          title={ch.active !== 0 && ch.active !== false ? 'Click to hide child category from website' : 'Click to show child category on website'}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                            ch.active !== 0 && ch.active !== false
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border-zinc-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${ch.active !== 0 && ch.active !== false ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+                          {ch.active !== 0 && ch.active !== false ? 'Active' : 'Hidden'}
+                        </button>
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">

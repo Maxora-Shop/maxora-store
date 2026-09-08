@@ -56,6 +56,8 @@ import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
+import { generateSlug } from '../utils/seo';
+import { isProductInCategory } from '../utils/categoryCompatibility';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -373,7 +375,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'marketing'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing'>('general');
+  const [isCategoryEditModalOpen, setIsCategoryEditModalOpen] = useState(false);
+  const [categoryToEdit, setCategoryToEdit] = useState<Partial<Category> | null>(null);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categorySearchInSettings, setCategorySearchInSettings] = useState('');
 
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -508,7 +514,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     if (tab === 'orders') loadOrders(currentPassword);
     if (tab === 'customers') loadCustomers(currentPassword);
-    if (tab === 'settings') loadSettings(currentPassword);
+    if (tab === 'settings') {
+      loadSettings(currentPassword);
+      loadCategories();
+      loadProducts(currentPassword);
+    }
   };
 
   const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings') => {
@@ -719,6 +729,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // Category Edit Handlers for Settings & Management
+  const handleOpenCategoryEditModal = (cat: Category) => {
+    setCategoryToEdit({
+      ...cat,
+      name: cat.name || '',
+      slug: cat.slug || generateSlug(cat.name || ''),
+      active: cat.active !== undefined ? Number(cat.active) : 1,
+      display_order: cat.display_order ?? 1,
+      icon: cat.icon || '',
+    });
+    setIsCategoryEditModalOpen(true);
+  };
+
+  const handleToggleCategoryStatus = async (cat: Category) => {
+    try {
+      const newStatus = cat.active === 0 ? 1 : 0;
+      const res = await storeService.saveCategory({ ...cat, active: newStatus }, password);
+      if (res.success) {
+        showToast(`Category "${cat.name}" is now ${newStatus ? 'Active' : 'Hidden'}!`, 'success');
+        await loadCategories();
+        onSettingsUpdated();
+      } else {
+        showToast('Failed to update category status', 'error');
+      }
+    } catch (err: any) {
+      showToast('Failed to update status: ' + err.message, 'error');
+    }
+  };
+
+  const handleSaveCategoryEditModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryToEdit || !categoryToEdit.name?.trim()) {
+      showToast('Category name is required', 'error');
+      return;
+    }
+
+    try {
+      setIsSavingCategory(true);
+      const name = categoryToEdit.name.trim();
+      const slug = (categoryToEdit.slug?.trim() || generateSlug(name)).toLowerCase();
+      const catData: Partial<Category> = {
+        ...categoryToEdit,
+        name,
+        slug,
+        active: Number(categoryToEdit.active) === 1 ? 1 : 0,
+        display_order: Number(categoryToEdit.display_order) || 1,
+        icon: categoryToEdit.icon?.trim() || '',
+      };
+
+      const res = await storeService.saveCategory(catData, password);
+      if (res.success) {
+        showToast(`Category "${name}" updated & saved to Firestore!`, 'success');
+        setIsCategoryEditModalOpen(false);
+        setCategoryToEdit(null);
+        await loadCategories();
+        await loadProducts(password);
+        onSettingsUpdated();
+      } else {
+        showToast('Failed to update category', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error saving category to Firestore:', err);
+      showToast('Error saving category: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
   // Helper status color classes
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -801,6 +879,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       c.phone.includes(customerSearch) ||
       (c.district && c.district.toLowerCase().includes(customerSearch.toLowerCase())) ||
       (c.area && c.area.toLowerCase().includes(customerSearch.toLowerCase()))
+    );
+  });
+
+  // Filtered Categories for Settings & Taxonomy
+  const filteredCategoriesInSettings = dbCategories.filter((cat) => {
+    if (!categorySearchInSettings.trim()) return true;
+    const q = categorySearchInSettings.toLowerCase().trim();
+    return (
+      cat.name.toLowerCase().includes(q) ||
+      cat.slug.toLowerCase().includes(q) ||
+      (cat.id && cat.id.toLowerCase().includes(q))
     );
   });
 
@@ -2174,7 +2263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Settings Sub-tabs */}
-              <div className="flex items-center gap-1 bg-zinc-200/80 p-1 rounded-2xl">
+              <div className="flex items-center gap-1 bg-zinc-200/80 p-1 rounded-2xl flex-wrap">
                 <button
                   type="button"
                   onClick={() => setSettingsSubTab('general')}
@@ -2185,6 +2274,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   🏢 Store & Delivery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsSubTab('categories');
+                    loadCategories();
+                    loadProducts(password);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    settingsSubTab === 'categories'
+                      ? 'bg-white text-zinc-950 shadow-xs font-black'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <FolderTree className="w-3.5 h-3.5 text-emerald-600" />
+                  Categories & Status
+                  {dbCategories.length > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-200 text-zinc-800 font-extrabold">
+                      {dbCategories.length}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -2201,7 +2311,167 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
+            {/* Settings Sub-tab: Categories */}
+            {settingsSubTab === 'categories' ? (
+              <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-zinc-900 flex items-center gap-2">
+                      <FolderTree className="w-5 h-5 text-emerald-600" />
+                      <span>Categories Management & Status</span>
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Edit category names, slugs, or toggle active/hidden status. Updates persist directly to Firestore.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => loadCategories()}
+                      title="Refresh categories from Firestore"
+                      className="p-2 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-600 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange('categories')}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold transition-all cursor-pointer"
+                      title="Open full taxonomy manager with Subcategories, Product Types & Child Categories"
+                    >
+                      <Layers className="w-4 h-4 text-emerald-600" />
+                      <span>Full Hierarchy Tree</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategoryToEdit({
+                          id: `cat-${Date.now()}`,
+                          name: '',
+                          slug: '',
+                          active: 1,
+                          display_order: dbCategories.length + 1,
+                        });
+                        setIsCategoryEditModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Category</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search categories bar */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search categories by name or slug..."
+                    value={categorySearchInSettings}
+                    onChange={(e) => setCategorySearchInSettings(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 text-xs sm:text-sm rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900"
+                  />
+                </div>
+
+                {/* Category Items List */}
+                {filteredCategoriesInSettings.length === 0 ? (
+                  <div className="p-8 bg-zinc-50 rounded-2xl border border-dashed border-zinc-300 text-center">
+                    <FolderTree className="w-10 h-10 text-zinc-300 mx-auto mb-2" />
+                    <p className="text-xs sm:text-sm font-bold text-zinc-700">No categories match your search</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategorySearchInSettings('');
+                        loadCategories();
+                      }}
+                      className="mt-2 text-xs text-emerald-600 font-bold hover:underline"
+                    >
+                      Reset Filter
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-50 rounded-2xl border border-zinc-200 overflow-hidden divide-y divide-zinc-200">
+                    {filteredCategoriesInSettings.map((cat) => {
+                      const catProdCount = products.filter((p) => isProductInCategory(p, cat)).length;
+                      const isActive = cat.active !== 0;
+
+                      return (
+                        <div
+                          key={cat.id || cat.slug}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/80 transition-colors"
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs">
+                              <FolderTree className="w-5 h-5 text-emerald-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-black text-zinc-900">
+                                  {cat.name}
+                                </h4>
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                    isActive
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-zinc-200 text-zinc-600 border-zinc-300'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isActive ? 'bg-emerald-500' : 'bg-zinc-400'
+                                    }`}
+                                  />
+                                  {isActive ? 'Active (প্রদর্শিত)' : 'Hidden (লুকানো)'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2.5 text-xs text-zinc-500 mt-0.5 flex-wrap">
+                                <span className="font-mono text-zinc-600">/{cat.slug || generateSlug(cat.name)}</span>
+                                <span>•</span>
+                                <span className="font-semibold text-zinc-700">
+                                  {catProdCount} {catProdCount === 1 ? 'Product' : 'Products'}
+                                </span>
+                                {cat.display_order && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-zinc-400">Order: {cat.display_order}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCategoryStatus(cat)}
+                              title={isActive ? 'Click to hide category from website' : 'Click to show category on website'}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                isActive
+                                  ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-300'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                              }`}
+                            >
+                              {isActive ? 'Hide' : 'Activate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCategoryEditModal(cat)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
               {settingsSubTab === 'general' ? (
                 <>
                   <div className="space-y-4">
@@ -2351,6 +2621,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
                   </div>
+
+                  {/* Store Categories in General Settings with Edit Buttons */}
+                  <div className="pt-6 border-t border-zinc-200 space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                          <FolderTree className="w-4 h-4 text-emerald-600" />
+                          <span>Store Categories & Status ({dbCategories.length})</span>
+                        </h3>
+                        <p className="text-xs text-zinc-500">
+                          Edit category names or toggle active/hidden status. Updates persist directly to Firestore.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettingsSubTab('categories');
+                            loadCategories();
+                            loadProducts(password);
+                          }}
+                          className="text-xs text-emerald-600 font-bold hover:underline cursor-pointer"
+                        >
+                          Manage in Categories Tab
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategoryToEdit({
+                              id: `cat-${Date.now()}`,
+                              name: '',
+                              slug: '',
+                              active: 1,
+                              display_order: dbCategories.length + 1,
+                            });
+                            setIsCategoryEditModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Category</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {dbCategories.length === 0 ? (
+                      <div className="p-6 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200 text-center">
+                        <p className="text-xs text-zinc-500 font-medium">No categories found in store.</p>
+                      </div>
+                    ) : (
+                      <div className="bg-zinc-50 rounded-2xl border border-zinc-200 divide-y divide-zinc-200 overflow-hidden">
+                        {dbCategories.map((cat) => {
+                          const catProdCount = products.filter((p) => isProductInCategory(p, cat)).length;
+                          const isActive = cat.active !== 0;
+
+                          return (
+                            <div
+                              key={cat.id || cat.slug}
+                              className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/70 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                                  <FolderTree className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-xs sm:text-sm font-black text-zinc-900 truncate">
+                                      {cat.name}
+                                    </h4>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                        isActive
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : 'bg-zinc-200 text-zinc-600 border-zinc-300'
+                                      }`}
+                                    >
+                                      {isActive ? 'Active' : 'Hidden'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                                    /{cat.slug || generateSlug(cat.name)} • {catProdCount} {catProdCount === 1 ? 'product' : 'products'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCategoryStatus(cat)}
+                                  title={isActive ? 'Click to hide category from website' : 'Click to show category on website'}
+                                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                    isActive
+                                      ? 'bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300'
+                                  }`}
+                                >
+                                  {isActive ? 'Hide' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCategoryEditModal(cat)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 /* Marketing Sub-tab */
@@ -2477,6 +2861,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+            )}
           </div>
         )}
       </main>
@@ -4103,6 +4488,252 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="flex-1 py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
                 >
                   Update Order Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================
+          CATEGORY EDIT MODAL (SETTINGS & CATEGORIES)
+      ==================================================== */}
+      {isCategoryEditModalOpen && categoryToEdit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="relative bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col">
+            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                  <FolderTree className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-zinc-900">
+                    {categoryToEdit.id && dbCategories.some((c) => c.id === categoryToEdit.id)
+                      ? 'Edit Category'
+                      : 'Add New Category'}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Update name, URL slug & visibility. Saved directly to Firestore.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCategoryEditModalOpen(false);
+                  setCategoryToEdit(null);
+                }}
+                className="w-8 h-8 rounded-full bg-zinc-200/70 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategoryEditModal} className="p-6 space-y-5">
+              {/* Category Name */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1.5">
+                  Category Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Smart Watch or স্মার্টওয়াচ"
+                  value={categoryToEdit.name || ''}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setCategoryToEdit({
+                      ...categoryToEdit,
+                      name: newName,
+                      slug: categoryToEdit.slug || generateSlug(newName),
+                    });
+                  }}
+                  className="w-full bg-zinc-50 text-zinc-900 text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-semibold"
+                />
+              </div>
+
+              {/* Category Slug */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-zinc-700">
+                    Category URL Slug <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (categoryToEdit.name) {
+                        setCategoryToEdit({
+                          ...categoryToEdit,
+                          slug: generateSlug(categoryToEdit.name),
+                        });
+                      }
+                    }}
+                    className="text-[11px] text-emerald-600 hover:underline font-bold cursor-pointer"
+                  >
+                    Auto-Generate
+                  </button>
+                </div>
+                <div className="flex items-center rounded-xl border border-zinc-300 bg-zinc-50 overflow-hidden focus-within:border-zinc-900">
+                  <span className="px-3 text-xs text-zinc-400 font-mono select-none bg-zinc-100 py-3 border-r border-zinc-200">
+                    /category/
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="smart-watch"
+                    value={categoryToEdit.slug || ''}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
+                      })
+                    }
+                    className="w-full bg-transparent text-zinc-900 text-xs sm:text-sm p-3 focus:outline-none font-mono"
+                  />
+                </div>
+                <span className="text-[11px] text-zinc-400 block mt-1">
+                  Used in browser address bar and SEO canonical URLs
+                </span>
+              </div>
+
+              {/* Category Status Selector */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-2">
+                  Storefront Visibility Status <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryToEdit({ ...categoryToEdit, active: 1 })}
+                    className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      categoryToEdit.active !== 0
+                        ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 shadow-xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                        categoryToEdit.active !== 0
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-zinc-300 bg-white'
+                      }`}
+                    >
+                      {categoryToEdit.active !== 0 && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-extrabold text-zinc-900">
+                        Active (প্রদর্শিত)
+                      </span>
+                      <span className="block text-[11px] text-zinc-500 mt-0.5">
+                        Visible on website navbar, filter tabs & search
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCategoryToEdit({ ...categoryToEdit, active: 0 })}
+                    className={`p-3.5 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                      categoryToEdit.active === 0
+                        ? 'bg-amber-50/80 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 shadow-xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                        categoryToEdit.active === 0
+                          ? 'border-amber-600 bg-amber-600 text-white'
+                          : 'border-zinc-300 bg-white'
+                      }`}
+                    >
+                      {categoryToEdit.active === 0 && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+                    <div>
+                      <span className="block text-xs font-extrabold text-zinc-900">
+                        Hidden (লুকানো)
+                      </span>
+                      <span className="block text-[11px] text-zinc-500 mt-0.5">
+                        Hidden from storefront, products stay preserved
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Display Order */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Display Order
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={categoryToEdit.display_order ?? 1}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        display_order: Number(e.target.value) || 1,
+                      })
+                    }
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
+                  />
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    1 = first item on menu
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 mb-1">
+                    Icon Identifier (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Watch, Headphones"
+                    value={categoryToEdit.icon || ''}
+                    onChange={(e) =>
+                      setCategoryToEdit({
+                        ...categoryToEdit,
+                        icon: e.target.value,
+                      })
+                    }
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                  />
+                  <span className="text-[10px] text-zinc-400 block mt-1">
+                    Lucide icon name or tag
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-zinc-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={isSavingCategory}
+                  onClick={() => {
+                    setIsCategoryEditModalOpen(false);
+                    setCategoryToEdit(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCategory || !categoryToEdit.name?.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer"
+                >
+                  {isSavingCategory ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Changes to Firestore</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
