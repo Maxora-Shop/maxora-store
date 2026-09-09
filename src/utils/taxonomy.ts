@@ -47,32 +47,64 @@ export interface TaxonomyFilterState {
 }
 
 /**
- * Normalizes string comparison (case-insensitive, trims, and slug-friendly)
+ * Normalizes string comparison (case-insensitive, trims, removes diacritics/punctuation, and slug-friendly)
  */
 export function normalizeKey(val?: string): string {
   if (!val) return '';
-  return val.toLowerCase().trim().replace(/[\s_]+/g, '-');
+  return val
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
- * Check if a product's field matches a target filter
+ * Check if a product's field matches a target filter.
+ * Handles exact names, slugs, ampersands ("Home & Living" vs "home-living"),
+ * comma/slash separated lists ("Fans / Electric Fans"), and IDs.
  */
 export function matchesTaxonomyField(actual?: string, target?: string): boolean {
   if (!target || !target.trim()) return true;
   if (!actual || !actual.trim()) return false;
-  
+
+  const aTrim = actual.trim().toLowerCase();
+  const tTrim = target.trim().toLowerCase();
+
+  // 1. Direct case-insensitive match
+  if (aTrim === tTrim) return true;
+
+  // 2. Slug & normalized key match (handles "Home & Living" vs "home-living")
   const normActual = normalizeKey(actual);
   const normTarget = normalizeKey(target);
 
-  if (normActual === normTarget) return true;
+  if (normActual && normTarget && normActual === normTarget) return true;
 
-  // Direct case-insensitive match
-  if (actual.trim().toLowerCase() === target.trim().toLowerCase()) return true;
+  // 3. Clean alphanumeric match (ignoring dashes, spaces, and punctuation)
+  const cleanA = aTrim.replace(/[^a-z0-9]/g, '');
+  const cleanT = tTrim.replace(/[^a-z0-9]/g, '');
+  if (cleanA && cleanT && cleanA === cleanT) return true;
 
-  // If actual is comma or slash separated list of tags (e.g. "AMOLED, Calling")
-  if (actual.includes(',') || actual.includes('/')) {
-    const parts = actual.split(/[,/]+/).map(p => normalizeKey(p));
-    return parts.includes(normTarget) || parts.some(p => p.toLowerCase() === target.trim().toLowerCase());
+  // 4. If actual contains multiple tags (e.g. "Fans / Electric Fans" or "AMOLED, Calling")
+  if (actual.includes(',') || actual.includes('/') || actual.includes('|')) {
+    const parts = actual.split(/[,/|]+/).map((p) => p.trim());
+    return parts.some((part) => matchesTaxonomyField(part, target));
+  }
+
+  // 5. If target contains multiple tags
+  if (target.includes(',') || target.includes('/') || target.includes('|')) {
+    const targetParts = target.split(/[,/|]+/).map((p) => p.trim());
+    return targetParts.some((tp) => matchesTaxonomyField(actual, tp));
+  }
+
+  // 6. Substring word match for multi-word categories (e.g., target="fans", actual="electric fans")
+  if (normActual && normTarget && normTarget.length >= 3) {
+    const words = normActual.split('-');
+    if (words.includes(normTarget)) return true;
   }
 
   return false;

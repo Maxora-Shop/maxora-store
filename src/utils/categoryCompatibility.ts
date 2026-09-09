@@ -1,19 +1,20 @@
 import { Category, SubCategory, ProductType, ChildCategory, Product } from '../types';
 import { generateSlug } from './seo';
+import { matchesTaxonomyField } from './taxonomy';
 
 /**
  * Checks whether a product belongs to a given category.
  * Supports:
  * 1. Matching by category_id
  * 2. Matching by category name (case-insensitive)
- * 3. Matching by slug
+ * 3. Matching by slug & taxonomy variations (e.g. "Home & Living" vs "home-living")
  */
 export function isProductInCategory(product: Product, category: Category): boolean {
   if (!product || !category) return false;
-  if (product.category_id && product.category_id === category.id) return true;
-  if (product.category && product.category.toLowerCase().trim() === category.name.toLowerCase().trim()) return true;
-  if (product.category && generateSlug(product.category) === category.slug) return true;
-  if (product.category_slug && product.category_slug === category.slug) return true;
+  if (product.category_id && (product.category_id === category.id || matchesTaxonomyField(product.category_id, category.id))) return true;
+  if (matchesTaxonomyField(product.category, category.name)) return true;
+  if (matchesTaxonomyField(product.category, category.slug)) return true;
+  if (product.category_slug && matchesTaxonomyField(product.category_slug, category.slug)) return true;
   return false;
 }
 
@@ -22,14 +23,14 @@ export function isProductInCategory(product: Product, category: Category): boole
  * Supports:
  * 1. Matching by subcategory_id
  * 2. Matching by sub_category name (case-insensitive)
- * 3. Matching by slug
+ * 3. Matching by slug & taxonomy variations
  */
 export function isProductInSubCategory(product: Product, subCategory: SubCategory): boolean {
   if (!product || !subCategory) return false;
-  if (product.subcategory_id && product.subcategory_id === subCategory.id) return true;
-  if (product.sub_category && product.sub_category.toLowerCase().trim() === subCategory.name.toLowerCase().trim()) return true;
-  if (product.sub_category && generateSlug(product.sub_category) === subCategory.slug) return true;
-  if (product.subcategory_slug && product.subcategory_slug === subCategory.slug) return true;
+  if (product.subcategory_id && (product.subcategory_id === subCategory.id || matchesTaxonomyField(product.subcategory_id, subCategory.id))) return true;
+  if (matchesTaxonomyField(product.sub_category, subCategory.name)) return true;
+  if (matchesTaxonomyField(product.sub_category, subCategory.slug)) return true;
+  if (product.subcategory_slug && matchesTaxonomyField(product.subcategory_slug, subCategory.slug)) return true;
   return false;
 }
 
@@ -38,10 +39,10 @@ export function isProductInSubCategory(product: Product, subCategory: SubCategor
  */
 export function isProductInProductType(product: Product, productType: ProductType): boolean {
   if (!product || !productType) return false;
-  if (product.product_type_id && product.product_type_id === productType.id) return true;
-  if (product.product_type && product.product_type.toLowerCase().trim() === productType.name.toLowerCase().trim()) return true;
-  if (product.product_type && generateSlug(product.product_type) === productType.slug) return true;
-  if (product.product_type_slug && product.product_type_slug === productType.slug) return true;
+  if (product.product_type_id && (product.product_type_id === productType.id || matchesTaxonomyField(product.product_type_id, productType.id))) return true;
+  if (matchesTaxonomyField(product.product_type, productType.name)) return true;
+  if (matchesTaxonomyField(product.product_type, productType.slug)) return true;
+  if (product.product_type_slug && matchesTaxonomyField(product.product_type_slug, productType.slug)) return true;
   return false;
 }
 
@@ -51,49 +52,36 @@ export function isProductInProductType(product: Product, productType: ProductTyp
 export function isProductInChildCategory(product: Product, childCategory: ChildCategory): boolean {
   if (!product || !childCategory) return false;
   const pChildId = product.childcategory_id || product.child_category_id;
-  if (pChildId && pChildId === childCategory.id) return true;
-
-  const targetName = childCategory.name.toLowerCase().trim();
-  const targetSlug = childCategory.slug;
-
-  const pChild = (product.child_category || '').toLowerCase().trim();
-  if (pChild) {
-    if (pChild === targetName || generateSlug(pChild) === targetSlug) return true;
-    if (pChild.includes(',') || pChild.includes('/')) {
-      const parts = pChild.split(/[,/]+/).map((s) => s.trim());
-      if (parts.some((part) => part.toLowerCase() === targetName || generateSlug(part) === targetSlug)) {
-        return true;
-      }
-    }
-  }
-
+  if (pChildId && (pChildId === childCategory.id || matchesTaxonomyField(pChildId, childCategory.id))) return true;
+  if (matchesTaxonomyField(product.child_category, childCategory.name)) return true;
+  if (matchesTaxonomyField(product.child_category, childCategory.slug)) return true;
   const pChildSlug = product.childcategory_slug || product.child_category_slug;
-  if (pChildSlug && pChildSlug === targetSlug) return true;
-
+  if (pChildSlug && matchesTaxonomyField(pChildSlug, childCategory.slug)) return true;
   return false;
 }
 
 /**
  * Merges explicit categories with any distinct categories discovered on products,
- * ensuring 100% backward compatibility with legacy product records.
+ * ensuring 100% backward compatibility with legacy and newly added product records.
  */
 export function reconcileCategories(
-  existingCategories: Category[],
-  products: Product[]
+  existingCategories: Category[] = [],
+  products: Product[] = []
 ): Category[] {
-  if (existingCategories && existingCategories.length > 0) {
-    // If the store already has defined categories, respect them directly!
-    return [...existingCategories].sort((a, b) => {
-      const orderA = a.display_order ?? 999;
-      const orderB = b.display_order ?? 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.name.localeCompare(b.name);
-    });
-  }
-
-  // Only if no categories are registered at all, discover them from products
   const categoryMap = new Map<string, Category>();
-  products.forEach((prod) => {
+
+  // 1. Add existing registered categories
+  (existingCategories || []).forEach((cat) => {
+    if (!cat || !cat.name) return;
+    const slug = cat.slug || generateSlug(cat.name);
+    categoryMap.set(slug, {
+      ...cat,
+      slug,
+    });
+  });
+
+  // 2. Discover categories from active products not yet in the map
+  (products || []).forEach((prod) => {
     if (!prod.category) return;
     const catName = prod.category.trim();
     if (!catName || catName.toLowerCase() === 'uncategorized') return;
@@ -123,21 +111,26 @@ export function reconcileCategories(
  * Merges explicit subcategories with any distinct sub_categories discovered on products.
  */
 export function reconcileSubCategories(
-  existingSubCategories: SubCategory[],
-  categories: Category[],
-  products: Product[]
+  existingSubCategories: SubCategory[] = [],
+  categories: Category[] = [],
+  products: Product[] = []
 ): SubCategory[] {
-  if (existingSubCategories && existingSubCategories.length > 0) {
-    return [...existingSubCategories].sort((a, b) => {
-      const orderA = a.display_order ?? 999;
-      const orderB = b.display_order ?? 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.name.localeCompare(b.name);
-    });
-  }
-
   const subCategoryMap = new Map<string, SubCategory>();
-  products.forEach((prod) => {
+
+  // 1. Add existing registered subcategories
+  (existingSubCategories || []).forEach((sub) => {
+    if (!sub || !sub.name) return;
+    const subSlug = sub.slug || generateSlug(sub.name);
+    const parentSlug = sub.category_slug || '';
+    const key = `${parentSlug}:::${subSlug}`;
+    subCategoryMap.set(key, {
+      ...sub,
+      slug: subSlug,
+    });
+  });
+
+  // 2. Discover subcategories from active products
+  (products || []).forEach((prod) => {
     if (!prod.sub_category) return;
     const subName = prod.sub_category.trim();
     if (!subName || subName.toLowerCase() === 'general') return;
@@ -145,7 +138,7 @@ export function reconcileSubCategories(
     const parentCatName = (prod.category || '').trim();
     const parentCatSlug = generateSlug(parentCatName);
     const matchedCat = categories.find(
-      (c) => c.slug === parentCatSlug || c.name.toLowerCase() === parentCatName.toLowerCase()
+      (c) => matchesTaxonomyField(c.slug, parentCatSlug) || matchesTaxonomyField(c.name, parentCatName)
     );
 
     const subSlug = generateSlug(subName);

@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   TaxonomyCategory,
   TaxonomySubCategory,
   TaxonomyProductType,
   TaxonomyChildCategory,
   TaxonomyFilterState,
+  matchesTaxonomyField,
 } from '../utils/taxonomy';
+import { Product } from '../types';
 import {
   LayoutGrid,
   ChevronRight,
@@ -34,7 +36,13 @@ interface CategoryHierarchyMenuProps {
     subCategory?: string;
     productType?: string;
     childCategory?: string;
+    categoryId?: string;
+    subCategoryId?: string;
+    productTypeId?: string;
+    childCategoryId?: string;
   }) => void;
+  products?: Product[];
+  onSelectProduct?: (product: Product) => void;
 }
 
 // Icon mapper for categories
@@ -62,6 +70,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   taxonomy,
   currentFilter,
   onSelectTaxonomy,
+  products = [],
+  onSelectProduct,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -150,6 +160,36 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   const currentCat = taxonomy.find((c) => c.slug === activeCatSlug) || taxonomy[0];
   const currentSub = currentCat?.subCategories.find((s) => s.slug === activeSubSlug) || currentCat?.subCategories[0];
   const currentType = currentSub?.productTypes.find((t) => t.slug === activeTypeSlug) || currentSub?.productTypes[0];
+
+  // Real-time matching products within the current active hierarchy branch
+  const matchingProducts = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    return products.filter((p) => {
+      if (p.active === 0 || p.active === false || String(p.active) === '0') return false;
+      if (currentCat) {
+        const matchCat =
+          (p.category_id && (p.category_id === currentCat.id || matchesTaxonomyField(p.category_id, currentCat.id))) ||
+          matchesTaxonomyField(p.category, currentCat.slug) ||
+          matchesTaxonomyField(p.category, currentCat.name);
+        if (!matchCat) return false;
+      }
+      if (currentSub) {
+        const matchSub =
+          (p.subcategory_id && (p.subcategory_id === currentSub.id || matchesTaxonomyField(p.subcategory_id, currentSub.id))) ||
+          matchesTaxonomyField(p.sub_category, currentSub.slug) ||
+          matchesTaxonomyField(p.sub_category, currentSub.name);
+        if (!matchSub) return false;
+      }
+      if (currentType) {
+        const matchType =
+          (p.product_type_id && (p.product_type_id === currentType.id || matchesTaxonomyField(p.product_type_id, currentType.id))) ||
+          matchesTaxonomyField(p.product_type, currentType.slug) ||
+          matchesTaxonomyField(p.product_type, currentType.name);
+        if (!matchType) return false;
+      }
+      return true;
+    });
+  }, [products, currentCat, currentSub, currentType]);
 
   const handleSelectAllProducts = () => {
     onSelectTaxonomy({
@@ -466,12 +506,19 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                 const isActive = type.slug === activeTypeSlug;
                 const isSelected =
                   currentFilter.productType &&
-                  currentFilter.productType.toLowerCase() === type.name.toLowerCase();
+                  (matchesTaxonomyField(currentFilter.productType, type.name) ||
+                   matchesTaxonomyField(currentFilter.productType, type.slug));
 
                 return (
                   <div
                     key={type.slug}
                     onMouseEnter={() => setActiveTypeSlug(type.slug)}
+                    onClick={() => {
+                      setActiveTypeSlug(type.slug);
+                      if (currentCat && currentSub) {
+                        handleProductTypeClick(currentCat, currentSub, type);
+                      }
+                    }}
                     className={`group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
                       isActive
                         ? 'bg-white shadow-sm border border-zinc-200 text-zinc-950 font-bold'
@@ -480,8 +527,13 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                   >
                     <button
                       type="button"
-                      onClick={() => currentCat && handleProductTypeClick(currentCat, currentSub, type)}
-                      className="flex-1 text-left flex items-center gap-2 truncate"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (currentCat && currentSub) {
+                          handleProductTypeClick(currentCat, currentSub, type);
+                        }
+                      }}
+                      className="flex-1 text-left flex items-center gap-2 truncate cursor-pointer"
                     >
                       <Tag className="w-3.5 h-3.5 text-zinc-400" />
                       <span className="truncate">{type.name}</span>
@@ -515,8 +567,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
           )}
         </div>
 
-        {/* Tier 4: Child Category */}
-        <div className="flex flex-col bg-white p-2 overflow-y-auto">
+        {/* Tier 4: Child Category & Matching Products */}
+        <div className="flex flex-col bg-white p-2 overflow-y-auto max-h-[480px]">
           <div className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-emerald-800 flex items-center justify-between bg-emerald-50/50 rounded-lg mb-1">
             <span>4. Child Category</span>
             <span className="text-[10px] text-emerald-600 font-bold">
@@ -531,7 +583,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                 <button
                   type="button"
                   onClick={() => handleProductTypeClick(currentCat, currentSub, currentType)}
-                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 hover:bg-zinc-100 transition-colors flex items-center justify-between mb-1 border border-zinc-200"
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 hover:bg-zinc-100 transition-colors flex items-center justify-between mb-1 border border-zinc-200 cursor-pointer"
                 >
                   <span>All {currentType.name}</span>
                   <span className="text-[10px] bg-zinc-200 text-zinc-800 px-1.5 py-0.5 rounded">
@@ -543,7 +595,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
               {currentType.childCategories.map((child) => {
                 const isSelected =
                   currentFilter.childCategory &&
-                  currentFilter.childCategory.toLowerCase() === child.name.toLowerCase();
+                  (matchesTaxonomyField(currentFilter.childCategory, child.name) ||
+                   matchesTaxonomyField(currentFilter.childCategory, child.slug));
 
                 return (
                   <button
@@ -576,8 +629,59 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
               })}
 
               {currentType.childCategories.length === 0 && (
-                <div className="p-4 text-center text-xs text-zinc-400 italic">
+                <div className="p-3 text-center text-xs text-zinc-400 italic">
                   No child categories under {currentType.name}
+                </div>
+              )}
+
+              {/* Direct Matching Products Preview List in Category Menu */}
+              {matchingProducts.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-zinc-200/80">
+                  <div className="px-1 mb-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-600">
+                      Products ({matchingProducts.length})
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-bold">Click to open</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {matchingProducts.slice(0, 6).map((prod) => (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSelectProduct) {
+                            onSelectProduct(prod);
+                            onClose();
+                          } else if (currentCat && currentSub) {
+                            handleProductTypeClick(currentCat, currentSub, currentType);
+                          }
+                        }}
+                        className="w-full text-left p-2 rounded-xl bg-zinc-50 hover:bg-emerald-50/80 border border-zinc-200/80 hover:border-emerald-300 transition-all flex items-center gap-2.5 group cursor-pointer"
+                      >
+                        {prod.images?.[0] ? (
+                          <img
+                            src={prod.images[0]}
+                            alt={prod.name}
+                            className="w-9 h-9 rounded-lg object-cover bg-white border border-zinc-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-zinc-200 flex items-center justify-center shrink-0">
+                            <Package className="w-4 h-4 text-zinc-400" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-zinc-900 truncate group-hover:text-emerald-700">
+                            {prod.name}
+                          </p>
+                          <p className="text-[11px] font-bold text-emerald-600">
+                            ৳{Number(prod.selling_price || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-zinc-400 group-hover:text-emerald-600 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -763,6 +867,48 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                 )}
               </div>
             ))}
+
+            {matchingProducts.length > 0 && (
+              <div className="pt-2 mt-2 border-t border-zinc-200">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 block mb-1.5">
+                  Products in this category ({matchingProducts.length})
+                </span>
+                <div className="space-y-1.5">
+                  {matchingProducts.slice(0, 4).map((prod) => (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => {
+                        if (onSelectProduct) {
+                          onSelectProduct(prod);
+                          onClose();
+                        }
+                      }}
+                      className="w-full text-left p-2 rounded-xl bg-white border border-zinc-200 flex items-center gap-2 cursor-pointer"
+                    >
+                      {prod.images?.[0] ? (
+                        <img
+                          src={prod.images[0]}
+                          alt={prod.name}
+                          className="w-9 h-9 rounded-lg object-cover bg-zinc-100 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                          <Package className="w-4 h-4 text-zinc-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-zinc-900 truncate">{prod.name}</p>
+                        <p className="text-[11px] font-bold text-emerald-600">
+                          ৳{Number(prod.selling_price || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -798,6 +944,48 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                 </span>
               </button>
             ))}
+
+            {matchingProducts.length > 0 && (
+              <div className="pt-2 mt-2 border-t border-zinc-200">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 block mb-1.5">
+                  Products in {currentType.name} ({matchingProducts.length})
+                </span>
+                <div className="space-y-1.5">
+                  {matchingProducts.slice(0, 5).map((prod) => (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => {
+                        if (onSelectProduct) {
+                          onSelectProduct(prod);
+                          onClose();
+                        }
+                      }}
+                      className="w-full text-left p-2 rounded-xl bg-white border border-zinc-200 flex items-center gap-2 cursor-pointer"
+                    >
+                      {prod.images?.[0] ? (
+                        <img
+                          src={prod.images[0]}
+                          alt={prod.name}
+                          className="w-9 h-9 rounded-lg object-cover bg-zinc-100 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                          <Package className="w-4 h-4 text-zinc-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-zinc-900 truncate">{prod.name}</p>
+                        <p className="text-[11px] font-bold text-emerald-600">
+                          ৳{Number(prod.selling_price || 0).toLocaleString()}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

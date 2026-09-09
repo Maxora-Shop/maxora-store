@@ -2,6 +2,7 @@ import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, Or
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug } from '../utils/seo';
+import { matchesTaxonomyField } from '../utils/taxonomy';
 import { db } from '../firebase';
 import {
   collection,
@@ -556,62 +557,44 @@ export const storeService = {
     }
 
     if (category.trim() && category.toLowerCase() !== 'all') {
-      const catTrim = category.toLowerCase().trim();
-      const catTarget = catTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
-        if (p.category_id && p.category_id === category) return true;
-        const pCat = (p.category || '').toLowerCase().trim();
-        const pCatSlug = pCat.replace(/[\s_]+/g, '-');
-        const pSlug = (p.category_slug || '').toLowerCase().trim();
-        return pCat === catTrim || pCatSlug === catTarget || (pSlug && pSlug === catTarget);
+        if (p.category_id && (p.category_id === category || matchesTaxonomyField(p.category_id, category))) return true;
+        return (
+          matchesTaxonomyField(p.category, category) ||
+          matchesTaxonomyField(p.category_slug, category)
+        );
       });
     }
 
     if (subCategory.trim() && subCategory.toLowerCase() !== 'all') {
-      const subTrim = subCategory.toLowerCase().trim();
-      const subTarget = subTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
-        if (p.subcategory_id && p.subcategory_id === subCategory) return true;
-        const pSub = (p.sub_category || '').toLowerCase().trim();
-        const pSubSlug = pSub.replace(/[\s_]+/g, '-');
-        const pSlug = (p.subcategory_slug || '').toLowerCase().trim();
-        return pSub === subTrim || pSubSlug === subTarget || (pSlug && pSlug === subTarget);
+        if (p.subcategory_id && (p.subcategory_id === subCategory || matchesTaxonomyField(p.subcategory_id, subCategory))) return true;
+        return (
+          matchesTaxonomyField(p.sub_category, subCategory) ||
+          matchesTaxonomyField(p.subcategory_slug, subCategory)
+        );
       });
     }
 
     if (productType.trim() && productType.toLowerCase() !== 'all') {
-      const typeTrim = productType.toLowerCase().trim();
-      const typeTarget = typeTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
-        if (p.product_type_id && p.product_type_id === productType) return true;
-        const pType = (p.product_type || '').toLowerCase().trim();
-        const pTypeSlug = pType.replace(/[\s_]+/g, '-');
-        const pSlug = (p.product_type_slug || '').toLowerCase().trim();
-        return pType === typeTrim || pTypeSlug === typeTarget || (pSlug && pSlug === typeTarget);
+        if (p.product_type_id && (p.product_type_id === productType || matchesTaxonomyField(p.product_type_id, productType))) return true;
+        return (
+          matchesTaxonomyField(p.product_type, productType) ||
+          matchesTaxonomyField(p.product_type_slug, productType)
+        );
       });
     }
 
     if (childCategory.trim() && childCategory.toLowerCase() !== 'all') {
-      const childTrim = childCategory.toLowerCase().trim();
-      const childTarget = childTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
         const pChildId = p.childcategory_id || p.child_category_id;
-        if (pChildId && pChildId === childCategory) return true;
-
-        const pChildSlug = (p.childcategory_slug || p.child_category_slug || '').toLowerCase().trim();
-        if (pChildSlug && pChildSlug === childTarget) return true;
-
-        const pChild = (p.child_category || '').toLowerCase().trim();
-        const pSlug = pChild.replace(/[\s_]+/g, '-');
-
-        if (pChild.includes(',') || pChild.includes('/')) {
-          const parts = pChild.split(/[,/]+/).map((s) => s.trim().toLowerCase());
-          return (
-            parts.includes(childTrim) ||
-            parts.some((part) => part.replace(/[\s_]+/g, '-') === childTarget)
-          );
-        }
-        return pChild === childTrim || pSlug === childTarget;
+        if (pChildId && (pChildId === childCategory || matchesTaxonomyField(pChildId, childCategory))) return true;
+        return (
+          matchesTaxonomyField(p.child_category, childCategory) ||
+          matchesTaxonomyField(p.childcategory_slug, childCategory) ||
+          matchesTaxonomyField(p.child_category_slug, childCategory)
+        );
       });
     }
 

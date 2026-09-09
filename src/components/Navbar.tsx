@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShoppingBag, Search, Truck, Phone, LayoutGrid, ChevronDown, PackageCheck, Sparkles, X, Heart } from 'lucide-react';
-import { StoreSettings, Category } from '../types';
+import { StoreSettings, Category, Product } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState } from '../utils/taxonomy';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 
@@ -24,6 +24,8 @@ interface NavbarProps {
     productType?: string;
     childCategory?: string;
   }) => void;
+  products?: Product[];
+  onSelectProduct?: (product: Product) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -41,6 +43,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   taxonomy = [],
   currentTaxonomyFilter = {} as Partial<TaxonomyFilterState>,
   onSelectTaxonomy,
+  products = [],
+  onSelectProduct,
 }) => {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
@@ -168,6 +172,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 taxonomy={taxonomy}
                 currentFilter={currentTaxonomyFilter}
                 onSelectTaxonomy={handleTaxonomySelect}
+                products={products}
+                onSelectProduct={onSelectProduct}
               />
             )}
           </div>
@@ -294,6 +300,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               taxonomy={taxonomy}
               currentFilter={currentTaxonomyFilter}
               onSelectTaxonomy={handleTaxonomySelect}
+              products={products}
+              onSelectProduct={onSelectProduct}
             />
           </div>
         </div>

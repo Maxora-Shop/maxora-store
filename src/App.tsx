@@ -831,6 +831,8 @@ export default function App() {
           childCategory: selectedChildCategory,
         }}
         onSelectTaxonomy={handleTaxonomySelect}
+        products={products}
+        onSelectProduct={handleOpenProductDetail}
       />
 
       {/* Main Content Area */}
