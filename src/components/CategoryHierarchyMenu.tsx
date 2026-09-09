@@ -157,8 +157,14 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
       subCategory: '',
       productType: '',
       childCategory: '',
+      categoryId: '',
+      subCategoryId: '',
+      productTypeId: '',
+      childCategoryId: '',
     });
-    onClose();
+    setTimeout(() => {
+      onClose();
+    }, 10);
   };
 
   const handleCategoryClick = (cat: TaxonomyCategory) => {
@@ -167,8 +173,11 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
       subCategory: '',
       productType: '',
       childCategory: '',
+      categoryId: cat.id,
     });
-    onClose();
+    setTimeout(() => {
+      onClose();
+    }, 10);
   };
 
   const handleSubCategoryClick = (cat: TaxonomyCategory, sub: TaxonomySubCategory) => {
@@ -177,8 +186,12 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
       subCategory: sub.slug || sub.name,
       productType: '',
       childCategory: '',
+      categoryId: cat.id,
+      subCategoryId: sub.id,
     });
-    onClose();
+    setTimeout(() => {
+      onClose();
+    }, 10);
   };
 
   const handleProductTypeClick = (
@@ -189,10 +202,15 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     onSelectTaxonomy({
       category: cat.slug || cat.name,
       subCategory: sub.slug || sub.name,
-      productType: type.name,
+      productType: type.slug || type.name,
       childCategory: '',
+      categoryId: cat.id,
+      subCategoryId: sub.id,
+      productTypeId: type.id,
     });
-    onClose();
+    setTimeout(() => {
+      onClose();
+    }, 10);
   };
 
   const handleChildCategoryClick = (
@@ -204,10 +222,16 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     onSelectTaxonomy({
       category: cat.slug || cat.name,
       subCategory: sub.slug || sub.name,
-      productType: type.name,
-      childCategory: child.name,
+      productType: type.slug || type.name,
+      childCategory: child.slug || child.name,
+      categoryId: cat.id,
+      subCategoryId: sub.id,
+      productTypeId: type.id,
+      childCategoryId: child.id,
     });
-    onClose();
+    setTimeout(() => {
+      onClose();
+    }, 10);
   };
 
   return (

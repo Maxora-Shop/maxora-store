@@ -76,6 +76,28 @@ function notifyReviewsChanged(): void {
   }
 }
 
+// Sanitize data before writing to Firestore so undefined never causes a rejection
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return '' as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanForFirestore(item)) as any;
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanForFirestore(value);
+      } else {
+        cleaned[key] = '';
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
 // Helpers for Local Storage
 function getLocal<T>(key: string, defaultValue: T): T {
   try {
@@ -534,45 +556,62 @@ export const storeService = {
     }
 
     if (category.trim() && category.toLowerCase() !== 'all') {
-      const catTarget = category.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      const catTrim = category.toLowerCase().trim();
+      const catTarget = catTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
+        if (p.category_id && p.category_id === category) return true;
         const pCat = (p.category || '').toLowerCase().trim();
         const pCatSlug = pCat.replace(/[\s_]+/g, '-');
-        return pCat === category.toLowerCase().trim() || pCatSlug === catTarget;
+        const pSlug = (p.category_slug || '').toLowerCase().trim();
+        return pCat === catTrim || pCatSlug === catTarget || (pSlug && pSlug === catTarget);
       });
     }
 
     if (subCategory.trim() && subCategory.toLowerCase() !== 'all') {
-      const subTarget = subCategory.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      const subTrim = subCategory.toLowerCase().trim();
+      const subTarget = subTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
+        if (p.subcategory_id && p.subcategory_id === subCategory) return true;
         const pSub = (p.sub_category || '').toLowerCase().trim();
         const pSubSlug = pSub.replace(/[\s_]+/g, '-');
-        return pSub === subCategory.toLowerCase().trim() || pSubSlug === subTarget;
+        const pSlug = (p.subcategory_slug || '').toLowerCase().trim();
+        return pSub === subTrim || pSubSlug === subTarget || (pSlug && pSlug === subTarget);
       });
     }
 
     if (productType.trim() && productType.toLowerCase() !== 'all') {
-      const typeTarget = productType.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      const typeTrim = productType.toLowerCase().trim();
+      const typeTarget = typeTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
+        if (p.product_type_id && p.product_type_id === productType) return true;
         const pType = (p.product_type || '').toLowerCase().trim();
         const pTypeSlug = pType.replace(/[\s_]+/g, '-');
-        return pType === productType.toLowerCase().trim() || pTypeSlug === typeTarget;
+        const pSlug = (p.product_type_slug || '').toLowerCase().trim();
+        return pType === typeTrim || pTypeSlug === typeTarget || (pSlug && pSlug === typeTarget);
       });
     }
 
     if (childCategory.trim() && childCategory.toLowerCase() !== 'all') {
-      const childTarget = childCategory.toLowerCase().trim().replace(/[\s_]+/g, '-');
+      const childTrim = childCategory.toLowerCase().trim();
+      const childTarget = childTrim.replace(/[\s_]+/g, '-');
       list = list.filter((p) => {
+        const pChildId = p.childcategory_id || p.child_category_id;
+        if (pChildId && pChildId === childCategory) return true;
+
+        const pChildSlug = (p.childcategory_slug || p.child_category_slug || '').toLowerCase().trim();
+        if (pChildSlug && pChildSlug === childTarget) return true;
+
         const pChild = (p.child_category || '').toLowerCase().trim();
-        const pChildSlug = pChild.replace(/[\s_]+/g, '-');
+        const pSlug = pChild.replace(/[\s_]+/g, '-');
+
         if (pChild.includes(',') || pChild.includes('/')) {
           const parts = pChild.split(/[,/]+/).map((s) => s.trim().toLowerCase());
           return (
-            parts.includes(childCategory.toLowerCase().trim()) ||
+            parts.includes(childTrim) ||
             parts.some((part) => part.replace(/[\s_]+/g, '-') === childTarget)
           );
         }
-        return pChild === childCategory.toLowerCase().trim() || pChildSlug === childTarget;
+        return pChild === childTrim || pSlug === childTarget;
       });
     }
 
@@ -804,16 +843,16 @@ export const storeService = {
       orderItems.push({
         id: `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
         order_id: orderId,
-        product_id: prod?.id || item.product_id,
-        product_name: prod?.name || item.name,
-        sku: prod?.sku || '',
+        product_id: String(prod?.id || item.product_id || ''),
+        product_name: String(prod?.name || item.name || ''),
+        sku: String(prod?.sku || ''),
         quantity: qty,
         unit_price: finalPrice,
         buying_price: Number(prod?.buying_price || 0),
         line_total: lineTotal,
-        image_url: matchedColor?.image_url || prod?.image_url,
-        selected_color: item.selected_color,
-        selected_color_code: item.selected_color_code || matchedColor?.code,
+        image_url: String(matchedColor?.image_url || prod?.image_url || ''),
+        selected_color: String(item.selected_color || ''),
+        selected_color_code: String(item.selected_color_code || matchedColor?.code || ''),
       });
 
       if (prod) {
@@ -845,13 +884,13 @@ export const storeService = {
     const customerId = `cust-${orderPayload.phone.replace(/[^0-9]/g, '') || Date.now().toString(36)}`;
     const customerData: Customer = {
       id: customerId,
-      name: orderPayload.customer_name,
-      phone: orderPayload.phone,
+      name: orderPayload.customer_name || 'Customer',
+      phone: orderPayload.phone || '',
       alt_phone: orderPayload.alt_phone || '',
       email: orderPayload.email || '',
-      district: orderPayload.district,
-      area: orderPayload.area,
-      address: orderPayload.address,
+      district: orderPayload.district || '',
+      area: orderPayload.area || '',
+      address: orderPayload.address || '',
       total_orders: 1,
       total_spent: total,
       created_at: new Date().toISOString(),
@@ -862,14 +901,14 @@ export const storeService = {
       id: orderId,
       order_number: orderNo,
       customer_id: customerId,
-      customer_name: orderPayload.customer_name,
-      phone: orderPayload.phone,
+      customer_name: orderPayload.customer_name || 'Customer',
+      phone: orderPayload.phone || '',
       alt_phone: orderPayload.alt_phone || '',
       email: orderPayload.email || '',
-      district: orderPayload.district,
-      area: orderPayload.area,
-      address: orderPayload.address,
-      delivery_area: orderPayload.delivery_area,
+      district: orderPayload.district || '',
+      area: orderPayload.area || '',
+      address: orderPayload.address || '',
+      delivery_area: orderPayload.delivery_area || 'inside_dhaka',
       delivery_charge: deliveryCharge,
       subtotal,
       total,
@@ -881,17 +920,19 @@ export const storeService = {
       items: orderItems,
     };
 
-    // 1. SAVE TO FIRESTORE DIRECTLY (Cloud DB)
-    const firestoreOrder = {
+    // 1. SAVE TO FIRESTORE DIRECTLY (Cloud DB) - Sanitized against any undefined fields
+    const firestoreOrder = cleanForFirestore({
       ...newOrder,
-      customer_phone: orderPayload.phone,
+      customer_phone: orderPayload.phone || '',
       total_amount: total,
       order_status: 'Pending',
-    };
+    });
+
+    const firestoreCustomer = cleanForFirestore(customerData);
 
     try {
       await setDoc(doc(db, 'orders', orderId), firestoreOrder);
-      await setDoc(doc(db, 'customers', customerId), customerData, { merge: true });
+      await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
       console.log('Order successfully synced to Firestore:', orderId);
     } catch (e) {
       console.error('Firestore createOrder write failed:', e);
@@ -1348,8 +1389,46 @@ export const storeService = {
     }
 
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
+    const catToDelete = current.find((c) => c.id === categoryId);
+    const catName = catToDelete?.name?.toLowerCase().trim();
+    const catSlug = catToDelete?.slug?.toLowerCase().trim();
+
     const updated = current.filter((c) => c.id !== categoryId);
     setLocal(CATEGORIES_KEY, updated);
+
+    // 1. Unlink any products that were in this category
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let prodsChanged = false;
+    prods.forEach((p) => {
+      if (
+        p.category_id === categoryId ||
+        (catSlug && (p.category_slug || '').toLowerCase().trim() === catSlug) ||
+        (catName && (p.category || '').toLowerCase().trim() === catName)
+      ) {
+        p.category = 'Uncategorized';
+        p.category_id = '';
+        p.category_slug = 'uncategorized';
+        prodsChanged = true;
+        setDoc(doc(db, 'products', String(p.id)), {
+          category: 'Uncategorized',
+          category_id: '',
+          category_slug: 'uncategorized',
+        }, { merge: true }).catch(() => {});
+      }
+    });
+    if (prodsChanged) {
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }
+
+    // 2. Unlink or remove subcategories that belonged to this category
+    const subcats = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    const remainingSubcats = subcats.filter((s) => s.category_id !== categoryId && s.category_slug !== catSlug);
+    if (remainingSubcats.length !== subcats.length) {
+      setLocal(SUBCATEGORIES_KEY, remainingSubcats);
+      notifySubCategoriesChanged();
+    }
+
     notifyCategoriesChanged();
 
     return { success: true };
@@ -1482,8 +1561,38 @@ export const storeService = {
     }
 
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
+    const subToDelete = current.find((s) => s.id === subCategoryId);
+    const subSlug = subToDelete?.slug?.toLowerCase().trim();
+    const subName = subToDelete?.name?.toLowerCase().trim();
+
     const updated = current.filter((s) => s.id !== subCategoryId);
     setLocal(SUBCATEGORIES_KEY, updated);
+
+    // Unlink products associated with this subcategory
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let prodsChanged = false;
+    prods.forEach((p) => {
+      if (
+        p.subcategory_id === subCategoryId ||
+        (subSlug && (p.subcategory_slug || '').toLowerCase().trim() === subSlug) ||
+        (subName && (p.sub_category || '').toLowerCase().trim() === subName)
+      ) {
+        p.sub_category = '';
+        p.subcategory_id = '';
+        p.subcategory_slug = '';
+        prodsChanged = true;
+        setDoc(doc(db, 'products', String(p.id)), {
+          sub_category: '',
+          subcategory_id: '',
+          subcategory_slug: '',
+        }, { merge: true }).catch(() => {});
+      }
+    });
+    if (prodsChanged) {
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }
+
     notifySubCategoriesChanged();
 
     return { success: true };
@@ -1664,8 +1773,38 @@ export const storeService = {
     }
 
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
+    const typeToDelete = current.find((t) => t.id === typeId);
+    const typeSlug = typeToDelete?.slug?.toLowerCase().trim();
+    const typeName = typeToDelete?.name?.toLowerCase().trim();
+
     const updated = current.filter((t) => t.id !== typeId);
     setLocal(PRODUCT_TYPES_KEY, updated);
+
+    // Unlink products associated with this product type
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let prodsChanged = false;
+    prods.forEach((p) => {
+      if (
+        p.product_type_id === typeId ||
+        (typeSlug && (p.product_type_slug || '').toLowerCase().trim() === typeSlug) ||
+        (typeName && (p.product_type || '').toLowerCase().trim() === typeName)
+      ) {
+        p.product_type = 'Standard Product';
+        p.product_type_id = '';
+        p.product_type_slug = '';
+        prodsChanged = true;
+        setDoc(doc(db, 'products', String(p.id)), {
+          product_type: 'Standard Product',
+          product_type_id: '',
+          product_type_slug: '',
+        }, { merge: true }).catch(() => {});
+      }
+    });
+    if (prodsChanged) {
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }
+
     notifyProductTypesChanged();
 
     return { success: true };

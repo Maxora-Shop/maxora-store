@@ -15,7 +15,7 @@ import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, C
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
@@ -24,6 +24,8 @@ import {
   reconcileSubCategories,
   isProductInCategory,
   isProductInSubCategory,
+  isProductInProductType,
+  isProductInChildCategory,
 } from './utils/categoryCompatibility';
 import {
   buildTaxonomyTree,
@@ -172,40 +174,55 @@ export default function App() {
         setIsProductNotFound(false);
         pendingSlugRef.current = null;
 
-        // Category & Subcategory check: /category/:slug or /category/:slug/:subslug
-        if (path.startsWith('/category/')) {
+        // Category & Subcategory check: /products?..., /category/:slug, /type/:slug, /child/:slug
+        if (search) {
+          const searchParams = new URLSearchParams(search);
+          const cat = searchParams.get('category') || '';
+          const sub = searchParams.get('subcategory') || searchParams.get('subCategory') || '';
+          const type = searchParams.get('productType') || searchParams.get('product_type') || searchParams.get('type') || '';
+          const child = searchParams.get('childCategory') || searchParams.get('child_category') || searchParams.get('child') || '';
+
+          setSelectedCategory(cat);
+          setSelectedSubCategory(sub);
+          setSelectedProductType(type);
+          setSelectedChildCategory(child);
+
+          if (cat || sub || type || child || path.startsWith('/products')) {
+            setTimeout(() => {
+              productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 80);
+          }
+        } else if (path.startsWith('/category/')) {
           const match = path.match(/^\/category\/([^/?#]+)(?:\/([^/?#]+))?/);
           if (match) {
             const rawCat = decodeURIComponent(match[1]);
             const rawSub = match[2] ? decodeURIComponent(match[2]) : '';
             setSelectedCategory(rawCat);
             setSelectedSubCategory(rawSub);
+            setSelectedProductType('');
+            setSelectedChildCategory('');
+            setTimeout(() => {
+              productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 80);
           }
         } else if (path.startsWith('/type/')) {
           const rawType = decodeURIComponent(path.replace('/type/', '').replace(/\/$/, '').trim());
           setSelectedProductType(rawType);
+          setSelectedChildCategory('');
+          setTimeout(() => {
+            productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 80);
         } else if (path.startsWith('/child/')) {
           const rawChild = decodeURIComponent(path.replace('/child/', '').replace(/\/$/, '').trim());
           setSelectedChildCategory(rawChild);
+          setTimeout(() => {
+            productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }, 80);
         } else if (path === '/' && !hash && !search) {
           setSelectedCategory('');
           setSelectedSubCategory('');
           setSelectedProductType('');
           setSelectedChildCategory('');
-        } else if (search) {
-          const searchParams = new URLSearchParams(search);
-          if (searchParams.has('category')) {
-            setSelectedCategory(searchParams.get('category') || '');
-            if (searchParams.has('subcategory')) {
-              setSelectedSubCategory(searchParams.get('subcategory') || '');
-            }
-          }
-          if (searchParams.has('type')) {
-            setSelectedProductType(searchParams.get('type') || '');
-          }
-          if (searchParams.has('child')) {
-            setSelectedChildCategory(searchParams.get('child') || '');
-          }
         }
       }
     };
@@ -537,19 +554,35 @@ export default function App() {
 
   const activeCategoryObj = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') return null;
-    const s = selectedCategory.toLowerCase();
+    const s = selectedCategory.toLowerCase().trim();
     return reconciledCategories.find(
-      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase() === s || c.id === selectedCategory
+      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedCategory
     );
   }, [selectedCategory, reconciledCategories]);
 
   const activeSubCategoryObj = useMemo(() => {
     if (!selectedSubCategory || selectedSubCategory === 'All' || selectedSubCategory === 'all') return null;
-    const s = selectedSubCategory.toLowerCase();
+    const s = selectedSubCategory.toLowerCase().trim();
     return reconciledSubCategories.find(
-      (sub) => sub.slug?.toLowerCase() === s || sub.name?.toLowerCase() === s || sub.id === selectedSubCategory
+      (sub) => sub.slug?.toLowerCase() === s || sub.name?.toLowerCase().trim() === s || sub.id === selectedSubCategory
     );
   }, [selectedSubCategory, reconciledSubCategories]);
+
+  const activeProductTypeObj = useMemo(() => {
+    if (!selectedProductType || selectedProductType === 'All' || selectedProductType === 'all') return null;
+    const s = selectedProductType.toLowerCase().trim();
+    return productTypes.find(
+      (t) => t.slug?.toLowerCase() === s || t.name?.toLowerCase().trim() === s || t.id === selectedProductType
+    );
+  }, [selectedProductType, productTypes]);
+
+  const activeChildCategoryObj = useMemo(() => {
+    if (!selectedChildCategory || selectedChildCategory === 'All' || selectedChildCategory === 'all') return null;
+    const s = selectedChildCategory.toLowerCase().trim();
+    return childCategories.find(
+      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedChildCategory
+    );
+  }, [selectedChildCategory, childCategories]);
 
   // Max product price calculation for budget slider
   const maxStorePrice = useMemo(() => {
@@ -562,17 +595,62 @@ export default function App() {
   }, [products]);
 
   // Unified Taxonomy Selection Handler across Navbar and Catalog components
-  const handleTaxonomySelect = (filter: {
-    category?: string;
-    subCategory?: string;
-    productType?: string;
-    childCategory?: string;
-  }) => {
-    setSelectedCategory(filter.category || '');
-    setSelectedSubCategory(filter.subCategory || '');
-    setSelectedProductType(filter.productType || '');
-    setSelectedChildCategory(filter.childCategory || '');
-    scrollToProducts();
+  const handleTaxonomySelect = (filter: Partial<TaxonomyFilterState>) => {
+    const cat = filter.category || '';
+    const sub = filter.subCategory || '';
+    const type = filter.productType || '';
+    const child = filter.childCategory || '';
+
+    setSelectedCategory(cat);
+    setSelectedSubCategory(sub);
+    setSelectedProductType(type);
+    setSelectedChildCategory(child);
+    setSearchQuery('');
+    setQuickViewProduct(null);
+    setIsProductNotFound(false);
+
+    // Update browser URL query parameters cleanly
+    const params = new URLSearchParams();
+    if (cat) params.set('category', cat);
+    if (sub) params.set('subcategory', sub);
+    if (type) params.set('productType', type);
+    if (child) params.set('childCategory', child);
+
+    const qs = params.toString();
+    const newPath = qs ? `/products?${qs}` : '/';
+
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+    }
+
+    setTimeout(() => {
+      productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 60);
+  };
+
+  const updateTaxonomyFilter = (updates: Partial<TaxonomyFilterState>) => {
+    const newCat = updates.category !== undefined ? updates.category : selectedCategory;
+    const newSub = updates.subCategory !== undefined ? updates.subCategory : selectedSubCategory;
+    const newType = updates.productType !== undefined ? updates.productType : selectedProductType;
+    const newChild = updates.childCategory !== undefined ? updates.childCategory : selectedChildCategory;
+
+    setSelectedCategory(newCat);
+    setSelectedSubCategory(newSub);
+    setSelectedProductType(newType);
+    setSelectedChildCategory(newChild);
+
+    const params = new URLSearchParams();
+    if (newCat) params.set('category', newCat);
+    if (newSub) params.set('subcategory', newSub);
+    if (newType) params.set('productType', newType);
+    if (newChild) params.set('childCategory', newChild);
+
+    const qs = params.toString();
+    const newPath = qs ? `/products?${qs}` : '/';
+
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+    }
   };
 
   const handleClearAllTaxonomy = () => {
@@ -580,6 +658,10 @@ export default function App() {
     setSelectedSubCategory('');
     setSelectedProductType('');
     setSelectedChildCategory('');
+    setSearchQuery('');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/');
+    }
   };
 
   // Price Filter Handlers
@@ -624,8 +706,12 @@ export default function App() {
       if (selectedCategory && selectedCategory !== 'All' && selectedCategory !== 'all') {
         if (activeCategoryObj) {
           if (!isProductInCategory(p, activeCategoryObj)) return false;
-        } else if (!matchesTaxonomyField(p.category, selectedCategory)) {
-          return false;
+        } else {
+          const matchCat =
+            (p.category_id && p.category_id === selectedCategory) ||
+            matchesTaxonomyField(p.category, selectedCategory) ||
+            matchesTaxonomyField(p.category_slug, selectedCategory);
+          if (!matchCat) return false;
         }
       }
 
@@ -633,22 +719,40 @@ export default function App() {
       if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
         if (activeSubCategoryObj) {
           if (!isProductInSubCategory(p, activeSubCategoryObj)) return false;
-        } else if (!matchesTaxonomyField(p.sub_category, selectedSubCategory)) {
-          return false;
+        } else {
+          const matchSub =
+            (p.subcategory_id && p.subcategory_id === selectedSubCategory) ||
+            matchesTaxonomyField(p.sub_category, selectedSubCategory) ||
+            matchesTaxonomyField(p.subcategory_slug, selectedSubCategory);
+          if (!matchSub) return false;
         }
       }
 
       // 4. Product Type matching
       if (selectedProductType && selectedProductType !== 'All' && selectedProductType !== 'all') {
-        if (!matchesTaxonomyField(p.product_type, selectedProductType)) {
-          return false;
+        if (activeProductTypeObj) {
+          if (!isProductInProductType(p, activeProductTypeObj)) return false;
+        } else {
+          const matchType =
+            (p.product_type_id && p.product_type_id === selectedProductType) ||
+            matchesTaxonomyField(p.product_type, selectedProductType) ||
+            matchesTaxonomyField(p.product_type_slug, selectedProductType);
+          if (!matchType) return false;
         }
       }
 
       // 5. Child Category matching
       if (selectedChildCategory && selectedChildCategory !== 'All' && selectedChildCategory !== 'all') {
-        if (!matchesTaxonomyField(p.child_category, selectedChildCategory)) {
-          return false;
+        if (activeChildCategoryObj) {
+          if (!isProductInChildCategory(p, activeChildCategoryObj)) return false;
+        } else {
+          const pChildId = p.childcategory_id || p.child_category_id;
+          const matchChild =
+            (pChildId && pChildId === selectedChildCategory) ||
+            matchesTaxonomyField(p.child_category, selectedChildCategory) ||
+            matchesTaxonomyField(p.childcategory_slug, selectedChildCategory) ||
+            matchesTaxonomyField(p.child_category_slug, selectedChildCategory);
+          if (!matchChild) return false;
         }
       }
 
@@ -671,6 +775,8 @@ export default function App() {
     selectedChildCategory,
     activeCategoryObj,
     activeSubCategoryObj,
+    activeProductTypeObj,
+    activeChildCategoryObj,
     priceRange,
     showSavedOnly,
     wishlistIds,
@@ -729,8 +835,8 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 w-full flex-1">
-        {/* Hero Section */}
-        {!searchQuery && (
+        {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
+        {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
           <Hero
             settings={settings}
             products={products}
@@ -742,6 +848,74 @@ export default function App() {
 
         {/* Product Grid Section */}
         <section ref={productSectionRef} className="my-8 scroll-mt-24" id="products-catalog-section">
+          {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category */}
+          {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) && (
+            <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3.5 py-2.5 rounded-xl border border-zinc-200/90">
+              <button
+                type="button"
+                onClick={handleClearAllTaxonomy}
+                className="flex items-center gap-1.5 text-zinc-600 hover:text-emerald-700 font-semibold transition-colors cursor-pointer"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>Home</span>
+              </button>
+
+              {selectedCategory && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => updateTaxonomyFilter({ subCategory: '', productType: '', childCategory: '' })}
+                    className={`hover:text-emerald-700 transition-colors cursor-pointer truncate max-w-[160px] ${
+                      !selectedSubCategory && !selectedProductType && !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
+                    }`}
+                  >
+                    {activeCategoryObj?.name || selectedCategory}
+                  </button>
+                </>
+              )}
+
+              {selectedSubCategory && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => updateTaxonomyFilter({ productType: '', childCategory: '' })}
+                    className={`hover:text-emerald-700 transition-colors cursor-pointer truncate max-w-[160px] ${
+                      !selectedProductType && !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
+                    }`}
+                  >
+                    {activeSubCategoryObj?.name || selectedSubCategory}
+                  </button>
+                </>
+              )}
+
+              {selectedProductType && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={() => updateTaxonomyFilter({ childCategory: '' })}
+                    className={`hover:text-emerald-700 transition-colors cursor-pointer truncate max-w-[160px] ${
+                      !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
+                    }`}
+                  >
+                    {activeProductTypeObj?.name || selectedProductType}
+                  </button>
+                </>
+              )}
+
+              {selectedChildCategory && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-md truncate max-w-[180px]">
+                    {activeChildCategoryObj?.name || selectedChildCategory}
+                  </span>
+                </>
+              )}
+            </nav>
+          )}
+
           {/* Budget & Price Range Filter */}
           <PriceFilter
             priceRange={priceRange}
@@ -802,14 +976,14 @@ export default function App() {
                     {selectedProductType && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-zinc-700">{selectedProductType}</span>
+                        <span className="text-zinc-700">{activeProductTypeObj?.name || selectedProductType}</span>
                       </>
                     )}
                     {selectedChildCategory && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
                         <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg text-lg sm:text-xl font-black">
-                          {selectedChildCategory}
+                          {activeChildCategoryObj?.name || selectedChildCategory}
                         </span>
                       </>
                     )}
@@ -834,30 +1008,23 @@ export default function App() {
               <div className="flex items-center flex-wrap gap-2">
                 {selectedChildCategory && (
                   <button
-                    onClick={() => setSelectedChildCategory('')}
+                    onClick={() => updateTaxonomyFilter({ childCategory: '' })}
                     className="text-xs font-bold text-emerald-950 bg-emerald-200/90 hover:bg-emerald-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Child Category: {selectedChildCategory} ✕
+                    Child Category: {activeChildCategoryObj?.name || selectedChildCategory} ✕
                   </button>
                 )}
                 {selectedProductType && (
                   <button
-                    onClick={() => {
-                      setSelectedProductType('');
-                      setSelectedChildCategory('');
-                    }}
+                    onClick={() => updateTaxonomyFilter({ productType: '', childCategory: '' })}
                     className="text-xs font-bold text-zinc-800 bg-zinc-200 hover:bg-zinc-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Type: {selectedProductType} ✕
+                    Type: {activeProductTypeObj?.name || selectedProductType} ✕
                   </button>
                 )}
                 {selectedSubCategory && (
                   <button
-                    onClick={() => {
-                      setSelectedSubCategory('');
-                      setSelectedProductType('');
-                      setSelectedChildCategory('');
-                    }}
+                    onClick={() => updateTaxonomyFilter({ subCategory: '', productType: '', childCategory: '' })}
                     className="text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-200/80 hover:bg-zinc-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
                     Subcategory: {activeSubCategoryObj?.name || selectedSubCategory} ✕
@@ -918,26 +1085,37 @@ export default function App() {
                 {showSavedOnly ? <Heart className="w-8 h-8 fill-rose-500" /> : <ShoppingBag className="w-8 h-8" />}
               </div>
               <h3 className="text-lg font-bold text-zinc-900 mb-1">
-                {showSavedOnly ? 'Your Wishlist is Empty' : 'No Products Found'}
+                {showSavedOnly
+                  ? 'Your Wishlist is Empty'
+                  : selectedChildCategory
+                  ? `No Products in "${activeChildCategoryObj?.name || selectedChildCategory}"`
+                  : selectedProductType
+                  ? `No Products in "${activeProductTypeObj?.name || selectedProductType}"`
+                  : selectedCategory
+                  ? `No Products in "${activeCategoryObj?.name || selectedCategory}"`
+                  : 'No Products Found'}
               </h3>
               <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
                 {showSavedOnly
                   ? "You haven't saved any items yet. Tap the heart icon on any product in the store to save it here!"
-                  : "We couldn't find any products matching your search or category criteria."}
+                  : "We couldn't find any products matching the selected category. Try selecting another category or view all products."}
               </p>
-              <button
-                onClick={() => {
-                  if (showSavedOnly) {
-                    setShowSavedOnly(false);
-                  } else {
-                    setSearchQuery('');
-                    setSelectedCategory('');
-                  }
-                }}
-                className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
-              >
-                {showSavedOnly ? 'Browse All Products' : 'Reset Search & Filters'}
-              </button>
+              <div className="flex items-center justify-center gap-3 flex-wrap">
+                <button
+                  onClick={handleClearAllTaxonomy}
+                  className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+                >
+                  {showSavedOnly ? 'Browse All Products' : 'View All Products'}
+                </button>
+                {(selectedChildCategory || selectedProductType) && (
+                  <button
+                    onClick={() => updateTaxonomyFilter({ childCategory: '', productType: '' })}
+                    className="px-5 py-2.5 rounded-full bg-zinc-100 text-zinc-800 text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
+                  >
+                    View Parent Category
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </section>

@@ -40,6 +40,10 @@ export interface TaxonomyFilterState {
   subCategory: string;
   productType: string;
   childCategory: string;
+  categoryId?: string;
+  subCategoryId?: string;
+  productTypeId?: string;
+  childCategoryId?: string;
 }
 
 /**
@@ -62,10 +66,13 @@ export function matchesTaxonomyField(actual?: string, target?: string): boolean 
 
   if (normActual === normTarget) return true;
 
+  // Direct case-insensitive match
+  if (actual.trim().toLowerCase() === target.trim().toLowerCase()) return true;
+
   // If actual is comma or slash separated list of tags (e.g. "AMOLED, Calling")
   if (actual.includes(',') || actual.includes('/')) {
     const parts = actual.split(/[,/]+/).map(p => normalizeKey(p));
-    return parts.includes(normTarget);
+    return parts.includes(normTarget) || parts.some(p => p.toLowerCase() === target.trim().toLowerCase());
   }
 
   return false;
@@ -396,35 +403,58 @@ export function filterProductsByTaxonomy(
   products: Product[],
   filter: Partial<TaxonomyFilterState>
 ): Product[] {
-  const { category = '', subCategory = '', productType = '', childCategory = '' } = filter;
+  const {
+    category = '',
+    subCategory = '',
+    productType = '',
+    childCategory = '',
+    categoryId,
+    subCategoryId,
+    productTypeId,
+    childCategoryId,
+  } = filter;
 
   return products.filter((p) => {
     // 1. Category check
     if (category && category !== 'all' && category !== 'All') {
-      if (!matchesTaxonomyField(p.category, category)) {
-        return false;
-      }
+      const matchCat =
+        (categoryId && p.category_id === categoryId) ||
+        (p.category_id && p.category_id === category) ||
+        matchesTaxonomyField(p.category, category) ||
+        matchesTaxonomyField(p.category_slug, category);
+      if (!matchCat) return false;
     }
 
     // 2. Subcategory check
     if (subCategory && subCategory !== 'all' && subCategory !== 'All') {
-      if (!matchesTaxonomyField(p.sub_category, subCategory)) {
-        return false;
-      }
+      const matchSub =
+        (subCategoryId && p.subcategory_id === subCategoryId) ||
+        (p.subcategory_id && p.subcategory_id === subCategory) ||
+        matchesTaxonomyField(p.sub_category, subCategory) ||
+        matchesTaxonomyField(p.subcategory_slug, subCategory);
+      if (!matchSub) return false;
     }
 
     // 3. Product Type check
     if (productType && productType !== 'all' && productType !== 'All') {
-      if (!matchesTaxonomyField(p.product_type, productType)) {
-        return false;
-      }
+      const matchType =
+        (productTypeId && p.product_type_id === productTypeId) ||
+        (p.product_type_id && p.product_type_id === productType) ||
+        matchesTaxonomyField(p.product_type, productType) ||
+        matchesTaxonomyField(p.product_type_slug, productType);
+      if (!matchType) return false;
     }
 
     // 4. Child Category check
     if (childCategory && childCategory !== 'all' && childCategory !== 'All') {
-      if (!matchesTaxonomyField(p.child_category, childCategory)) {
-        return false;
-      }
+      const pChildId = p.childcategory_id || p.child_category_id;
+      const matchChild =
+        (childCategoryId && pChildId === childCategoryId) ||
+        (pChildId && pChildId === childCategory) ||
+        matchesTaxonomyField(p.child_category, childCategory) ||
+        matchesTaxonomyField(p.childcategory_slug, childCategory) ||
+        matchesTaxonomyField(p.child_category_slug, childCategory);
+      if (!matchChild) return false;
     }
 
     return true;
