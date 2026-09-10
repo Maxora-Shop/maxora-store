@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart } from 'lucide-react';
+import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -40,12 +40,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       {/* Product Image Area */}
       <a
         href={productPath}
-        onClick={(e) => {
-          e.preventDefault();
-          onQuickView(product);
-        }}
+        target="_blank"
+        rel="noopener noreferrer"
         className="relative aspect-square bg-zinc-100 overflow-hidden cursor-pointer block"
         aria-label={`View details for ${product.name}`}
+        title={`Open ${product.name} in separate tab`}
       >
         <img
           src={displayImage}
@@ -98,32 +97,45 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           />
         </button>
 
-        {/* Mobile Quick View Trigger (visible on mobile, positioned below heart) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            onQuickView(product);
-          }}
-          className="sm:hidden absolute top-12 right-2.5 w-8 h-8 rounded-full bg-white/90 shadow-md flex items-center justify-center text-zinc-800 z-10 active:scale-90 transition-transform"
-          aria-label="View Details"
-        >
-          <Eye className="w-4 h-4" />
-        </button>
-
-        {/* Quick View Button overlay (Desktop hover) */}
-        <div className="hidden sm:flex absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-2 p-4">
+        {/* Mobile Quick Action Buttons (visible on mobile, positioned below heart) */}
+        <div className="sm:hidden absolute top-12 right-2.5 flex flex-col gap-1.5 z-20">
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
               onQuickView(product);
             }}
-            className="bg-white/95 hover:bg-white text-zinc-900 px-3.5 py-2 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/95 shadow-md flex items-center justify-center text-zinc-800 active:scale-90 transition-transform cursor-pointer border border-zinc-200/80"
+            aria-label="Quick View in modal"
+            title="Quick View"
           >
-            <Eye className="w-3.5 h-3.5" />
-            Quick View
+            <Eye className="w-4 h-4" />
           </button>
+        </div>
+
+        {/* Quick View & Open in Tab Buttons overlay (Desktop hover) */}
+        <div className="hidden sm:flex absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-2 p-3">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onQuickView(product);
+            }}
+            className="bg-white/95 hover:bg-white text-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            title="Quick View in preview modal"
+          >
+            <Eye className="w-3.5 h-3.5 text-zinc-700" />
+            <span>Quick View</span>
+          </button>
+          <span
+            className="bg-zinc-950/90 hover:bg-zinc-950 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all"
+            title="Click card to open in separate tab"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+            <span>New Tab</span>
+          </span>
         </div>
 
         {/* Out of stock overlay banner */}
@@ -189,11 +201,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <h3 className="mb-1.5 leading-snug">
             <a
               href={productPath}
-              onClick={(e) => {
-                e.preventDefault();
-                onQuickView(product);
-              }}
+              target="_blank"
+              rel="noopener noreferrer"
               className="font-bold text-zinc-900 text-xs sm:text-base line-clamp-2 hover:text-emerald-700 transition-colors cursor-pointer block"
+              title={`Open ${product.name} in separate tab`}
             >
               {product.name}
             </a>

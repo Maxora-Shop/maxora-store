@@ -123,6 +123,10 @@ export default function App() {
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
 
   const productSectionRef = useRef<HTMLDivElement>(null);
+  const productsRef = useRef<Product[]>(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
 
   // Route listener: handles /admin, /product/:slug, browser back/forward, and direct URLs
   useEffect(() => {
@@ -144,9 +148,19 @@ export default function App() {
       // Product check: /product/:slug or legacy #product-:slug
       let productSlug: string | null = null;
       if (path.startsWith('/product/')) {
-        productSlug = path.replace('/product/', '').replace(/\/$/, '').trim();
+        const rawSlug = path.replace('/product/', '').replace(/\/$/, '').trim();
+        try {
+          productSlug = decodeURIComponent(rawSlug);
+        } catch {
+          productSlug = rawSlug;
+        }
       } else if (hash.startsWith('#product-')) {
-        productSlug = hash.replace('#product-', '').trim();
+        const rawSlug = hash.replace('#product-', '').trim();
+        try {
+          productSlug = decodeURIComponent(rawSlug);
+        } catch {
+          productSlug = rawSlug;
+        }
         // Redirect legacy hash to clean URL
         if (productSlug) {
           window.history.replaceState({}, '', `/product/${productSlug}`);
@@ -154,22 +168,19 @@ export default function App() {
       }
 
       if (productSlug) {
-        const found = findProductBySlugOrId(products, productSlug);
+        const currentProducts = productsRef.current;
+        const found = findProductBySlugOrId(currentProducts, productSlug);
         if (found) {
           setQuickViewProduct(found);
           setIsProductNotFound(false);
           pixelService.trackViewContent(found);
           pendingSlugRef.current = null;
-        } else if (hasFetchedProducts && !loadingProducts) {
-          // Products fetched and not found
-          setQuickViewProduct(null);
-          setIsProductNotFound(true);
-          pendingSlugRef.current = null;
         } else {
-          // Still waiting for store products to load
+          // Keep slug pending until products finish loading
           pendingSlugRef.current = productSlug;
         }
       } else {
+        // Only clear quick view if user navigated via browser back/forward button to a non-product URL
         setQuickViewProduct(null);
         setIsProductNotFound(false);
         pendingSlugRef.current = null;
@@ -237,12 +248,12 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
     };
-  }, [products, hasFetchedProducts, loadingProducts]);
+  }, []);
 
   // Resolve any pending product slug whenever products array or fetch status changes
   useEffect(() => {
     const currentSlug = pendingSlugRef.current;
-    if (currentSlug) {
+    if (currentSlug && products.length > 0) {
       const found = findProductBySlugOrId(products, currentSlug);
       if (found) {
         setQuickViewProduct(found);
@@ -319,17 +330,10 @@ export default function App() {
     };
   }, []);
 
-  // Re-fetch products when category, subcategory, product type, child category, search, or view changes
+  // Fetch products on initial mount or when returning from admin
   useEffect(() => {
     fetchProducts();
-  }, [
-    searchQuery,
-    selectedCategory,
-    selectedSubCategory,
-    selectedProductType,
-    selectedChildCategory,
-    isAdminView,
-  ]);
+  }, [isAdminView]);
 
   const fetchSettings = async () => {
     try {
@@ -360,13 +364,9 @@ export default function App() {
   const fetchProducts = async () => {
     setLoadingProducts(true);
     try {
-      const data = await storeService.getProducts(
-        searchQuery,
-        selectedCategory,
-        selectedSubCategory,
-        selectedProductType,
-        selectedChildCategory
-      );
+      // Always retrieve all active products from store so the entire inventory is available
+      // for instant category/subcategory/type/child-category filtering, mega menu preview, and direct slug lookups
+      const data = await storeService.getProducts();
       setProducts(data);
     } catch (err) {
       console.error('Failed to load products:', err);
@@ -471,6 +471,7 @@ export default function App() {
     initialTab: 'details' | 'reviews' = 'details'
   ) => {
     setQuickViewProduct(product);
+    setIsProductNotFound(false);
     setQuickViewInitialTab(initialTab);
     if (updateHistory) {
       const slug = getProductSlug(product);
@@ -485,11 +486,14 @@ export default function App() {
 
   const handleCloseProductDetail = () => {
     setQuickViewProduct(null);
+    setIsProductNotFound(false);
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/product/')) {
       if (selectedCategory && selectedSubCategory && activeCategoryObj && activeSubCategoryObj) {
         window.history.pushState({}, '', `/category/${activeCategoryObj.slug}/${activeSubCategoryObj.slug}`);
       } else if (selectedCategory && activeCategoryObj) {
         window.history.pushState({}, '', `/category/${activeCategoryObj.slug}`);
+      } else if (selectedCategory) {
+        window.history.pushState({}, '', `/products?category=${encodeURIComponent(selectedCategory)}`);
       } else {
         window.history.pushState({}, '', '/');
       }

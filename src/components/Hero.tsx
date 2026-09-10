@@ -12,8 +12,10 @@ import {
   ShoppingBag,
   Sparkles,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { Product, StoreSettings } from '../types';
+import { getProductSlug } from '../utils/seo';
 
 interface HeroProps {
   settings: StoreSettings;
@@ -246,14 +248,15 @@ export const Hero: React.FC<HeroProps> = ({
 
                   {/* Actions */}
                   <div className="flex flex-wrap items-center gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => onOpenProduct && onOpenProduct(currentProduct)}
+                    <a
+                      href={`/product/${getProductSlug(currentProduct)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="px-6 py-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
                     >
                       <span>Shop Now</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                      <ExternalLink className="w-4 h-4 text-emerald-600" />
+                    </a>
 
                     <button
                       type="button"
@@ -268,9 +271,12 @@ export const Hero: React.FC<HeroProps> = ({
 
                 {/* Product Visual Showcase (5 Cols) */}
                 <div className="md:col-span-5 flex items-center justify-center">
-                  <div
-                    onClick={() => onOpenProduct && onOpenProduct(currentProduct)}
-                    className="relative w-full aspect-square max-w-[280px] sm:max-w-[320px] rounded-2xl bg-zinc-900/70 border border-zinc-800 p-4 flex items-center justify-center group cursor-pointer overflow-hidden shadow-inner"
+                  <a
+                    href={`/product/${getProductSlug(currentProduct)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative w-full aspect-square max-w-[280px] sm:max-w-[320px] rounded-2xl bg-zinc-900/70 border border-zinc-800 p-4 flex items-center justify-center group cursor-pointer overflow-hidden shadow-inner block"
+                    title={`Open ${currentProduct.name} in separate tab`}
                   >
                     <img
                       src={productImage}
@@ -282,13 +288,13 @@ export const Hero: React.FC<HeroProps> = ({
                           'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
                       }}
                     />
-                    <div className="absolute inset-0 bg-zinc-950/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 text-white text-xs font-bold shadow-lg border border-zinc-700">
-                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Quick View</span>
+                    <div className="absolute inset-0 bg-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/95 text-white text-xs font-bold shadow-lg border border-zinc-700">
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Open in Tab</span>
                       </span>
                     </div>
-                  </div>
+                  </a>
                 </div>
               </motion.div>
             </AnimatePresence>

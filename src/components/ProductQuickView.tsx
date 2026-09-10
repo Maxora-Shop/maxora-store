@@ -14,6 +14,7 @@ import {
   Sparkles,
   Send,
   Heart,
+  ExternalLink,
 } from 'lucide-react';
 import { Product, Review } from '../types';
 import { getProductSlug, SITE_URL } from '../utils/seo';
@@ -225,7 +226,11 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
 
   return (
     <div
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
     >
       <div
@@ -234,6 +239,17 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
       >
         {/* Header Action Buttons */}
         <div className="absolute top-3.5 right-3.5 z-30 flex items-center gap-2">
+          <a
+            href={`/product/${getProductSlug(product)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-9 px-3 rounded-full bg-white/95 border border-zinc-200 hover:bg-zinc-100 flex items-center gap-1.5 text-zinc-700 hover:text-emerald-700 transition-colors shadow-sm text-xs font-bold"
+            title="Open in separate tab (আলাদা ট্যাবে খুলুন)"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">Open in Tab</span>
+          </a>
+
           <button
             type="button"
             onClick={() => onToggleWishlist?.(product)}
