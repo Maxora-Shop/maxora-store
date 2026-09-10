@@ -1,5 +1,5 @@
-import React from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -22,6 +22,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isWishlisted = false,
   onToggleWishlist,
 }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+
   const sellingPrice = Number(product.selling_price || 0);
   const discount = Number(product.discount || 0);
   const finalPrice = Math.max(0, sellingPrice - discount);
@@ -30,42 +32,73 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isLowStock = Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 5;
 
   const productSlug = getProductSlug(product);
-  const productPath = `/product/${productSlug}`;
+  const fullProductUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/product/${productSlug}`
+    : `/product/${productSlug}`;
   const imageAlt = `${product.name}${product.sku ? ` - ${product.sku}` : ''}`;
 
-  const displayImage = product.image_url || (product.images && product.images[0]) || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
+  const rawImage = product.image_url || (product.images && product.images[0]) || '';
+
+  // Calculate discount percentage if applicable
+  const discountPercent = sellingPrice > 0 && discount > 0 ? Math.round((discount / sellingPrice) * 100) : 0;
+
+  const handleProductLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // If user clicked with Ctrl/Cmd or middle mouse, let browser open new tab natively
+    if (e.metaKey || e.ctrlKey || e.button === 1) {
+      return;
+    }
+    // Attempt window.open for separate tab
+    let opened: Window | null = null;
+    try {
+      opened = window.open(fullProductUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      opened = null;
+    }
+    // If popup was blocked by browser or sandboxed iframe preview, smoothly open details modal
+    if (!opened || opened.closed || typeof opened.closed === 'undefined') {
+      onQuickView(product);
+    }
+  };
 
   return (
-    <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col justify-between hover:-translate-y-1">
+    <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full">
       {/* Product Image Area */}
-      <a
-        href={productPath}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="relative aspect-square bg-zinc-100 overflow-hidden cursor-pointer block"
-        aria-label={`View details for ${product.name}`}
-        title={`Open ${product.name} in separate tab`}
-      >
-        <img
-          src={displayImage}
-          alt={imageAlt}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
-          }}
-        />
+      <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-3 sm:p-4 overflow-hidden group/image">
+        <a
+          href={fullProductUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleProductLinkClick}
+          className="w-full h-full flex items-center justify-center cursor-pointer"
+          aria-label={`View details for ${product.name}`}
+          title={`Open ${product.name} in separate tab`}
+        >
+          {!imageFailed && rawImage ? (
+            <img
+              src={rawImage}
+              alt={imageAlt}
+              className="max-w-full max-h-full w-auto h-auto object-contain group-hover/image:scale-105 transition-transform duration-300"
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-50 rounded-xl text-zinc-400 p-2 text-center">
+              <Package className="w-8 h-8 sm:w-10 sm:h-10 text-zinc-300 mb-1" />
+              <span className="text-[10px] sm:text-xs font-semibold text-zinc-400">Maxora Product</span>
+            </div>
+          )}
+        </a>
 
         {/* Floating Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 pointer-events-none">
+        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[65%]">
           {product.badge && (
-            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md shadow-sm backdrop-blur-xs">
+            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md shadow-xs backdrop-blur-xs truncate">
               {product.badge}
             </span>
           )}
           {hasDiscount && (
-            <span className="bg-rose-600 text-white font-extrabold text-[9px] sm:text-[10px] tracking-wide px-2 py-0.5 rounded-md shadow-sm">
-              SAVE ৳{discount.toLocaleString('en-BD')}
+            <span className="bg-rose-600 text-white font-extrabold text-[9px] sm:text-[10px] tracking-wide px-2 py-0.5 rounded-md shadow-xs">
+              {discountPercent > 0 ? `-${discountPercent}%` : `SAVE ৳${discount.toLocaleString('en-BD')}`}
             </span>
           )}
         </div>
@@ -80,10 +113,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               onToggleWishlist(product);
             }
           }}
-          className={`absolute top-2.5 right-2.5 w-8 h-8 sm:w-9 sm:h-9 rounded-full shadow-md flex items-center justify-center z-20 transition-all cursor-pointer ${
+          className={`absolute top-2.5 right-2.5 w-8 h-8 sm:w-9 sm:h-9 rounded-full shadow-xs flex items-center justify-center z-20 transition-all cursor-pointer ${
             isWishlisted
               ? 'bg-white text-rose-500 scale-105 border border-rose-200'
-              : 'bg-white/90 hover:bg-white text-zinc-500 hover:text-rose-500 hover:scale-105 border border-zinc-200/70'
+              : 'bg-white/90 hover:bg-white text-zinc-500 hover:text-rose-500 hover:scale-105 border border-zinc-200/80'
           }`}
           aria-label={isWishlisted ? "Remove from wishlist" : "Save to wishlist"}
           title={isWishlisted ? "Remove from Saved Items" : "Save to Wishlist"}
@@ -97,8 +130,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           />
         </button>
 
-        {/* Mobile Quick Action Buttons (visible on mobile, positioned below heart) */}
-        <div className="sm:hidden absolute top-12 right-2.5 flex flex-col gap-1.5 z-20">
+        {/* Desktop Quick View & Open in Tab Overlay (on hover) */}
+        <div className="hidden sm:flex absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-2 p-3 pointer-events-none">
           <button
             type="button"
             onClick={(e) => {
@@ -106,50 +139,65 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.preventDefault();
               onQuickView(product);
             }}
-            className="w-8 h-8 rounded-full bg-white/95 shadow-md flex items-center justify-center text-zinc-800 active:scale-90 transition-transform cursor-pointer border border-zinc-200/80"
-            aria-label="Quick View in modal"
-            title="Quick View"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Quick View & Open in Tab Buttons overlay (Desktop hover) */}
-        <div className="hidden sm:flex absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-2 p-3">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              onQuickView(product);
-            }}
-            className="bg-white/95 hover:bg-white text-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
-            title="Quick View in preview modal"
+            className="pointer-events-auto bg-white hover:bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            title="Quick View product details"
           >
             <Eye className="w-3.5 h-3.5 text-zinc-700" />
             <span>Quick View</span>
           </button>
-          <span
-            className="bg-zinc-950/90 hover:bg-zinc-950 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all"
-            title="Click card to open in separate tab"
+          <a
+            href={fullProductUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleProductLinkClick}
+            className="pointer-events-auto bg-zinc-950 hover:bg-zinc-800 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            title="Open product in separate browser tab"
           >
             <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
             <span>New Tab</span>
-          </span>
+          </a>
+        </div>
+
+        {/* Mobile Quick Action Buttons */}
+        <div className="sm:hidden absolute bottom-2 right-2 z-20 flex items-center gap-1">
+          <a
+            href={fullProductUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={handleProductLinkClick}
+            className="w-7 h-7 rounded-full bg-zinc-950 text-white shadow-xs flex items-center justify-center active:scale-90 transition-transform cursor-pointer"
+            title="Open in new tab"
+            aria-label="Open in new tab"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+          </a>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onQuickView(product);
+            }}
+            className="w-7 h-7 rounded-full bg-white/95 shadow-xs flex items-center justify-center text-zinc-800 active:scale-90 transition-transform cursor-pointer border border-zinc-200/80"
+            aria-label="Quick View in modal"
+            title="Quick View"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Out of stock overlay banner */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center">
-            <span className="bg-zinc-950 text-white text-[11px] sm:text-xs font-black uppercase tracking-wider px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full border border-zinc-700">
-              Sold Out
+          <div className="absolute inset-0 bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center pointer-events-none">
+            <span className="bg-zinc-950 text-white text-[10px] sm:text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border border-zinc-700">
+              Stock Out
             </span>
           </div>
         )}
-      </a>
+      </div>
 
       {/* Product Content Area */}
-      <div className="p-3.5 sm:p-5 flex-1 flex flex-col justify-between">
+      <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
         <div>
           {/* Category & SKU */}
           <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">
@@ -158,7 +206,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Average Rating Display */}
-          <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="flex items-center gap-1.5 mb-1.5 min-h-[20px]">
             {ratingStats && ratingStats.count > 0 ? (
               <button
                 type="button"
@@ -200,10 +248,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Product Name */}
           <h3 className="mb-1.5 leading-snug">
             <a
-              href={productPath}
+              href={fullProductUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-bold text-zinc-900 text-xs sm:text-base line-clamp-2 hover:text-emerald-700 transition-colors cursor-pointer block"
+              onClick={handleProductLinkClick}
+              className="font-bold text-zinc-900 text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] hover:text-emerald-700 transition-colors cursor-pointer block"
               title={`Open ${product.name} in separate tab`}
             >
               {product.name}
@@ -211,7 +260,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </h3>
 
           {/* Stock Indicator */}
-          <div className="mb-2">
+          <div className="mb-2 min-h-[18px]">
             {isOutOfStock ? (
               <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600">
                 Stock Out
@@ -250,27 +299,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Pricing & Add to Cart button */}
-        <div>
-          <div className="flex items-baseline gap-1.5 sm:gap-2 mb-2.5 sm:mb-3.5">
-            <span className="text-base sm:text-xl font-black text-zinc-950">
+        <div className="pt-2">
+          <div className="flex items-baseline gap-1.5 sm:gap-2 mb-2.5 sm:mb-3 min-h-[26px]">
+            <span className="text-base sm:text-lg font-black text-zinc-950">
               ৳{finalPrice.toLocaleString('en-BD')}
             </span>
             {hasDiscount && (
-              <span className="text-[11px] sm:text-sm font-semibold text-zinc-400 line-through">
+              <span className="text-[11px] sm:text-xs font-semibold text-zinc-400 line-through">
                 ৳{sellingPrice.toLocaleString('en-BD')}
               </span>
             )}
           </div>
 
           <button
+            type="button"
             disabled={isOutOfStock}
             onClick={() => onAddToCart(product)}
-            className={`w-full min-h-[42px] sm:min-h-[44px] py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
+            className={`w-full min-h-[40px] sm:min-h-[44px] py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
               isOutOfStock
                 ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
                 : isAdded
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "bg-zinc-950 hover:bg-zinc-800 text-white active:scale-95 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-zinc-950 hover:bg-zinc-800 text-white active:scale-98 shadow-xs"
             }`}
           >
             {isAdded ? (

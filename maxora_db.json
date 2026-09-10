@@ -186,6 +186,27 @@
       "active": 1,
       "created_at": "2026-09-04T14:37:22.504Z",
       "updated_at": "2026-09-05T14:37:22.504Z"
+    },
+    {
+      "id": "prod-010",
+      "name": "Maxora AeroStream Rechargeable Oscillating Desk Fan",
+      "description": "Whisper-quiet brushless DC motor, 4000mAh rechargeable lithium battery with up to 12h runtime, 4 speed modes, 90° auto-oscillation, USB-C fast charging, and compact portable design.",
+      "category": "Home & Living",
+      "sub_category": "Home Appliances",
+      "product_type": "Variant Products",
+      "child_category": "Electric Fans",
+      "sku": "MX-FAN-01",
+      "image_url": "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&auto=format&fit=crop&q=80",
+      "images": "[\"https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&auto=format&fit=crop&q=80\"]",
+      "buying_price": 1350,
+      "selling_price": 2150,
+      "discount": 250,
+      "stock": 22,
+      "badge": "BESTSELLER",
+      "featured": 1,
+      "active": 1,
+      "created_at": "2026-09-05T14:37:22.504Z",
+      "updated_at": "2026-09-05T14:37:22.504Z"
     }
   ],
   "customers": [
@@ -346,6 +367,7 @@
     { "id": "subcat-anti-theft-backpacks", "category_id": "cat-lifestyle-bags", "category_slug": "lifestyle-bags", "name": "Anti-Theft Backpacks", "slug": "anti-theft-backpacks", "active": 1, "display_order": 1 },
     { "id": "subcat-drinkware-flasks", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Drinkware & Vacuum Flasks", "slug": "drinkware-flasks", "active": 1, "display_order": 1 },
     { "id": "subcat-coffee-gear", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Coffee Gear", "slug": "coffee-gear", "active": 1, "display_order": 2 },
+    { "id": "subcat-home-appliances", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Home Appliances", "slug": "home-appliances", "active": 1, "display_order": 3 },
     { "id": "subcat-leather-wallets", "category_id": "cat-accessories", "category_slug": "accessories", "name": "Leather Wallets", "slug": "leather-wallets", "active": 1, "display_order": 1 },
     { "id": "subcat-organic-tea", "category_id": "cat-gourmet-food", "category_slug": "gourmet-food", "name": "Organic Tea", "slug": "organic-tea", "active": 1, "display_order": 1 }
   ]

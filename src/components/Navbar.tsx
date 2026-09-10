@@ -69,13 +69,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     subCategory?: string;
     productType?: string;
     childCategory?: string;
+    categoryId?: string;
+    subCategoryId?: string;
+    productTypeId?: string;
+    childCategoryId?: string;
   }) => {
     if (onSelectTaxonomy) {
       onSelectTaxonomy(filter);
     } else if (onSelectCategory && filter.category) {
       onSelectCategory(filter.category);
     }
-    setCategoryMenuOpen(false);
+    // Allow navigation state and smooth transition to apply before closing mega menu
+    setTimeout(() => {
+      setCategoryMenuOpen(false);
+    }, 160);
   };
 
   return (

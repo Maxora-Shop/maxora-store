@@ -216,7 +216,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     });
     setTimeout(() => {
       onClose();
-    }, 10);
+    }, 160);
   };
 
   const handleCategoryClick = (cat: TaxonomyCategory) => {
@@ -229,7 +229,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     });
     setTimeout(() => {
       onClose();
-    }, 10);
+    }, 160);
   };
 
   const handleSubCategoryClick = (cat: TaxonomyCategory, sub: TaxonomySubCategory) => {
@@ -243,7 +243,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     });
     setTimeout(() => {
       onClose();
-    }, 10);
+    }, 160);
   };
 
   const handleProductTypeClick = (
@@ -262,7 +262,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     });
     setTimeout(() => {
       onClose();
-    }, 10);
+    }, 160);
   };
 
   const handleChildCategoryClick = (
@@ -283,7 +283,34 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     });
     setTimeout(() => {
       onClose();
-    }, 10);
+    }, 160);
+  };
+
+  const handleProductNavigate = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    prod: Product
+  ) => {
+    const slug = getProductSlug(prod);
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const fullUrl = `${origin}/product/${slug}`;
+
+    // Always invoke onSelectProduct so the product details view/modal opens immediately
+    if (onSelectProduct) {
+      onSelectProduct(prod);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ slug, productId: prod.id }, '', `/product/${slug}`);
+    }
+
+    // Attempt to open in a new tab as well
+    try {
+      window.open(fullUrl, '_blank');
+    } catch {
+      // Popups may be restricted in sandbox iframe; onSelectProduct already handled it
+    }
+
+    onClose();
   };
 
   return (
@@ -448,6 +475,19 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                       } else {
                         setActiveTypeSlug('');
                       }
+                      setActiveChildSlug('');
+                    }}
+                    onClick={() => {
+                      setActiveSubSlug(sub.slug);
+                      if (sub.productTypes.length > 0) {
+                        setActiveTypeSlug(sub.productTypes[0].slug);
+                      } else {
+                        setActiveTypeSlug('');
+                        if (currentCat) {
+                          handleSubCategoryClick(currentCat, sub);
+                        }
+                      }
+                      setActiveChildSlug('');
                     }}
                     className={`group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
                       isActive
@@ -455,16 +495,12 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                         : 'hover:bg-zinc-50 text-zinc-700 font-medium'
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => handleSubCategoryClick(currentCat, sub)}
-                      className="flex-1 text-left flex items-center gap-2 truncate"
-                    >
+                    <div className="flex-1 text-left flex items-center gap-2 truncate">
                       <span className="truncate">{sub.name}</span>
                       {isSelected && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                       )}
-                    </button>
+                    </div>
 
                     <div className="flex items-center gap-1.5 shrink-0 ml-1">
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-500 font-medium">
@@ -506,7 +542,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
               <button
                 type="button"
                 onClick={() => currentCat && handleSubCategoryClick(currentCat, currentSub)}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center justify-between mb-1 border border-dashed border-emerald-200"
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center justify-between mb-1 border border-dashed border-emerald-200 cursor-pointer"
               >
                 <span>View All {currentSub.name}</span>
                 <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
@@ -531,6 +567,9 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                     onClick={() => {
                       setActiveTypeSlug(type.slug);
                       setActiveChildSlug('');
+                      if (type.childCategories.length === 0 && currentCat && currentSub) {
+                        handleProductTypeClick(currentCat, currentSub, type);
+                      }
                     }}
                     className={`group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
                       isActive
@@ -670,13 +709,9 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                           href={prodUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={() => {
-                            setTimeout(() => {
-                              onClose();
-                            }, 120);
-                          }}
+                          onClick={(e) => handleProductNavigate(e, prod)}
                           className="w-full text-left p-2 rounded-xl bg-zinc-50 hover:bg-emerald-50/80 border border-zinc-200/80 hover:border-emerald-300 transition-all flex items-center gap-2.5 group cursor-pointer"
-                          title="Open product in new tab (আলাদা ট্যাবে খুলুন)"
+                          title="Open product details / separate tab"
                         >
                           {prod.images?.[0] ? (
                             <img
@@ -909,11 +944,9 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                         href={prodUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => {
-                          onClose();
-                        }}
+                        onClick={(e) => handleProductNavigate(e, prod)}
                         className="w-full text-left p-2 rounded-xl bg-white border border-zinc-200 flex items-center gap-2 cursor-pointer hover:border-emerald-400 transition-colors"
-                        title="Open product in new tab (আলাদা ট্যাবে খুলুন)"
+                        title="Open product details / separate tab"
                       >
                         {prod.images?.[0] ? (
                           <img
@@ -996,11 +1029,9 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                         href={prodUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => {
-                          onClose();
-                        }}
+                        onClick={(e) => handleProductNavigate(e, prod)}
                         className="w-full text-left p-2 rounded-xl bg-white border border-zinc-200 flex items-center gap-2 cursor-pointer hover:border-emerald-400 transition-colors"
-                        title="Open product in new tab (আলাদা ট্যাবে খুলুন)"
+                        title="Open product details / separate tab"
                       >
                         {prod.images?.[0] ? (
                           <img

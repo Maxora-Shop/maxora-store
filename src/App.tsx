@@ -22,6 +22,8 @@ import { SavedItemsDrawer } from './components/SavedItemsDrawer';
 import {
   reconcileCategories,
   reconcileSubCategories,
+  reconcileProductTypes,
+  reconcileChildCategories,
   isProductInCategory,
   isProductInSubCategory,
   isProductInProductType,
@@ -545,11 +547,19 @@ export default function App() {
     () => reconcileSubCategories(subCategories, reconciledCategories, products),
     [subCategories, reconciledCategories, products]
   );
+  const reconciledProductTypes = useMemo(
+    () => reconcileProductTypes(productTypes, reconciledCategories, reconciledSubCategories, products),
+    [productTypes, reconciledCategories, reconciledSubCategories, products]
+  );
+  const reconciledChildCategories = useMemo(
+    () => reconcileChildCategories(childCategories, reconciledCategories, reconciledSubCategories, reconciledProductTypes, products),
+    [childCategories, reconciledCategories, reconciledSubCategories, reconciledProductTypes, products]
+  );
 
   // Dynamic 4-Tier Taxonomy Hierarchy Tree (Category -> Subcategory -> Product Type -> Child Category)
   const taxonomyTree = useMemo(() => {
-    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories, productTypes, childCategories);
-  }, [products, reconciledCategories, reconciledSubCategories, productTypes, childCategories]);
+    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories);
+  }, [products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories]);
 
   // Saved / Wishlisted products list
   const savedProducts = useMemo(() => {
@@ -560,7 +570,7 @@ export default function App() {
     if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') return null;
     const s = selectedCategory.toLowerCase().trim();
     return reconciledCategories.find(
-      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedCategory
+      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedCategory || matchesTaxonomyField(c.slug, selectedCategory) || matchesTaxonomyField(c.name, selectedCategory)
     );
   }, [selectedCategory, reconciledCategories]);
 
@@ -568,25 +578,50 @@ export default function App() {
     if (!selectedSubCategory || selectedSubCategory === 'All' || selectedSubCategory === 'all') return null;
     const s = selectedSubCategory.toLowerCase().trim();
     return reconciledSubCategories.find(
-      (sub) => sub.slug?.toLowerCase() === s || sub.name?.toLowerCase().trim() === s || sub.id === selectedSubCategory
+      (sub) => sub.slug?.toLowerCase() === s || sub.name?.toLowerCase().trim() === s || sub.id === selectedSubCategory || matchesTaxonomyField(sub.slug, selectedSubCategory) || matchesTaxonomyField(sub.name, selectedSubCategory)
     );
   }, [selectedSubCategory, reconciledSubCategories]);
 
   const activeProductTypeObj = useMemo(() => {
     if (!selectedProductType || selectedProductType === 'All' || selectedProductType === 'all') return null;
     const s = selectedProductType.toLowerCase().trim();
-    return productTypes.find(
-      (t) => t.slug?.toLowerCase() === s || t.name?.toLowerCase().trim() === s || t.id === selectedProductType
+    return reconciledProductTypes.find(
+      (t) => t.slug?.toLowerCase() === s || t.name?.toLowerCase().trim() === s || t.id === selectedProductType || matchesTaxonomyField(t.slug, selectedProductType) || matchesTaxonomyField(t.name, selectedProductType)
     );
-  }, [selectedProductType, productTypes]);
+  }, [selectedProductType, reconciledProductTypes]);
 
   const activeChildCategoryObj = useMemo(() => {
     if (!selectedChildCategory || selectedChildCategory === 'All' || selectedChildCategory === 'all') return null;
     const s = selectedChildCategory.toLowerCase().trim();
-    return childCategories.find(
-      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedChildCategory
+    return reconciledChildCategories.find(
+      (c) => c.slug?.toLowerCase() === s || c.name?.toLowerCase().trim() === s || c.id === selectedChildCategory || matchesTaxonomyField(c.slug, selectedChildCategory) || matchesTaxonomyField(c.name, selectedChildCategory)
     );
-  }, [selectedChildCategory, childCategories]);
+  }, [selectedChildCategory, reconciledChildCategories]);
+
+  // Formatted display names with fallback title casing
+  const displayCategoryName = useMemo(() => {
+    if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') return '';
+    if (activeCategoryObj?.name) return activeCategoryObj.name;
+    return selectedCategory.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }, [selectedCategory, activeCategoryObj]);
+
+  const displaySubCategoryName = useMemo(() => {
+    if (!selectedSubCategory || selectedSubCategory === 'All' || selectedSubCategory === 'all') return '';
+    if (activeSubCategoryObj?.name) return activeSubCategoryObj.name;
+    return selectedSubCategory.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }, [selectedSubCategory, activeSubCategoryObj]);
+
+  const displayProductTypeName = useMemo(() => {
+    if (!selectedProductType || selectedProductType === 'All' || selectedProductType === 'all') return '';
+    if (activeProductTypeObj?.name) return activeProductTypeObj.name;
+    return selectedProductType.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }, [selectedProductType, activeProductTypeObj]);
+
+  const displayChildCategoryName = useMemo(() => {
+    if (!selectedChildCategory || selectedChildCategory === 'All' || selectedChildCategory === 'all') return '';
+    if (activeChildCategoryObj?.name) return activeChildCategoryObj.name;
+    return selectedChildCategory.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }, [selectedChildCategory, activeChildCategoryObj]);
 
   // Max product price calculation for budget slider
   const maxStorePrice = useMemo(() => {
@@ -840,7 +875,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 w-full flex-1">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
         {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
         {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
           <Hero
@@ -853,7 +888,7 @@ export default function App() {
         )}
 
         {/* Product Grid Section */}
-        <section ref={productSectionRef} className="my-8 scroll-mt-24" id="products-catalog-section">
+        <section ref={productSectionRef} className="mt-6 sm:mt-8 mb-8 sm:mb-10 scroll-mt-24" id="products-catalog-section">
           {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category */}
           {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) && (
             <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3.5 py-2.5 rounded-xl border border-zinc-200/90">
@@ -876,7 +911,7 @@ export default function App() {
                       !selectedSubCategory && !selectedProductType && !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
                     }`}
                   >
-                    {activeCategoryObj?.name || selectedCategory}
+                    {displayCategoryName}
                   </button>
                 </>
               )}
@@ -891,7 +926,7 @@ export default function App() {
                       !selectedProductType && !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
                     }`}
                   >
-                    {activeSubCategoryObj?.name || selectedSubCategory}
+                    {displaySubCategoryName}
                   </button>
                 </>
               )}
@@ -906,7 +941,7 @@ export default function App() {
                       !selectedChildCategory ? 'text-zinc-950 font-bold' : 'text-zinc-600'
                     }`}
                   >
-                    {activeProductTypeObj?.name || selectedProductType}
+                    {displayProductTypeName}
                   </button>
                 </>
               )}
@@ -915,7 +950,7 @@ export default function App() {
                 <>
                   <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                   <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-md truncate max-w-[180px]">
-                    {activeChildCategoryObj?.name || selectedChildCategory}
+                    {displayChildCategoryName}
                   </span>
                 </>
               )}
@@ -970,32 +1005,30 @@ export default function App() {
                     <Heart className="w-6 h-6 fill-rose-500 text-rose-500 inline" />
                     Saved Items / Wishlist
                   </span>
-                ) : activeCategoryObj ? (
+                ) : (selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) ? (
                   <>
-                    <span>{activeCategoryObj.name}</span>
-                    {activeSubCategoryObj && (
+                    {displayCategoryName && <span>{displayCategoryName}</span>}
+                    {displaySubCategoryName && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-emerald-600">{activeSubCategoryObj.name}</span>
+                        <span className="text-emerald-600">{displaySubCategoryName}</span>
                       </>
                     )}
-                    {selectedProductType && (
+                    {displayProductTypeName && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-zinc-700">{activeProductTypeObj?.name || selectedProductType}</span>
+                        <span className="text-zinc-700">{displayProductTypeName}</span>
                       </>
                     )}
-                    {selectedChildCategory && (
+                    {displayChildCategoryName && (
                       <>
                         <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg text-lg sm:text-xl font-black">
-                          {activeChildCategoryObj?.name || selectedChildCategory}
+                        <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg text-lg sm:text-xl font-black">
+                          {displayChildCategoryName}
                         </span>
                       </>
                     )}
                   </>
-                ) : selectedCategory ? (
-                  `${selectedCategory}`
                 ) : searchQuery ? (
                   `Search Results for "${searchQuery}"`
                 ) : (
@@ -1017,7 +1050,7 @@ export default function App() {
                     onClick={() => updateTaxonomyFilter({ childCategory: '' })}
                     className="text-xs font-bold text-emerald-950 bg-emerald-200/90 hover:bg-emerald-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Child Category: {activeChildCategoryObj?.name || selectedChildCategory} ✕
+                    Child Category: {displayChildCategoryName} ✕
                   </button>
                 )}
                 {selectedProductType && (
@@ -1025,7 +1058,7 @@ export default function App() {
                     onClick={() => updateTaxonomyFilter({ productType: '', childCategory: '' })}
                     className="text-xs font-bold text-zinc-800 bg-zinc-200 hover:bg-zinc-300 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Type: {activeProductTypeObj?.name || selectedProductType} ✕
+                    Type: {displayProductTypeName} ✕
                   </button>
                 )}
                 {selectedSubCategory && (
@@ -1033,7 +1066,7 @@ export default function App() {
                     onClick={() => updateTaxonomyFilter({ subCategory: '', productType: '', childCategory: '' })}
                     className="text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-zinc-200/80 hover:bg-zinc-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Subcategory: {activeSubCategoryObj?.name || selectedSubCategory} ✕
+                    Subcategory: {displaySubCategoryName} ✕
                   </button>
                 )}
                 {selectedCategory && (
@@ -1041,7 +1074,7 @@ export default function App() {
                     onClick={handleClearAllTaxonomy}
                     className="text-xs font-bold text-emerald-800 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer"
                   >
-                    Category: {activeCategoryObj?.name || selectedCategory} ✕
+                    Category: {displayCategoryName} ✕
                   </button>
                 )}
                 {(selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
@@ -1058,7 +1091,7 @@ export default function App() {
 
           {/* Products List Grid */}
           {loadingProducts ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                 <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 animate-pulse">
                   <div className="aspect-square bg-zinc-200 rounded-xl" />
@@ -1069,7 +1102,17 @@ export default function App() {
               ))}
             </div>
           ) : filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div
+              className={`grid gap-4 sm:gap-6 ${
+                filteredProducts.length === 1
+                  ? 'grid-cols-1 max-w-xs sm:max-w-sm mx-auto sm:mx-0'
+                  : filteredProducts.length === 2
+                  ? 'grid-cols-2 max-w-xl'
+                  : filteredProducts.length === 3
+                  ? 'grid-cols-2 sm:grid-cols-3 max-w-4xl'
+                  : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
+              }`}
+            >
               {filteredProducts.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -1128,7 +1171,7 @@ export default function App() {
       </main>
 
       {/* Trust & Guarantee Banner */}
-      <section className="bg-white border-t border-zinc-200 py-12 px-4 sm:px-6 my-10">
+      <section className="bg-white border-t border-zinc-200 py-8 sm:py-10 px-4 sm:px-6 mt-6 sm:mt-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-center sm:text-left">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
             <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0">
@@ -1169,7 +1212,7 @@ export default function App() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-zinc-950 text-white pt-14 pb-8 border-t border-zinc-800">
+      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-8 border-t border-zinc-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-zinc-800">
           {/* Col 1 */}
           <div className="space-y-3 md:col-span-2">

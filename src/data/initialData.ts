@@ -185,6 +185,15 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     active: 1
   },
   {
+    id: "subcat-home-appliances",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    name: "Home Appliances",
+    slug: "home-appliances",
+    display_order: 3,
+    active: 1
+  },
+  {
     id: "subcat-wallets",
     category_id: "cat-accessories",
     category_slug: "accessories",
@@ -278,6 +287,17 @@ export const INITIAL_PRODUCT_TYPES: ProductType[] = [
     name: "Coffee Maker",
     slug: "coffee-maker",
     display_order: 2,
+    active: 1
+  },
+  {
+    id: "pt-variant-products",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-home-appliances",
+    subcategory_slug: "home-appliances",
+    name: "Variant Products",
+    slug: "variant-products",
+    display_order: 3,
     active: 1
   },
   {
@@ -400,6 +420,20 @@ export const INITIAL_CHILD_CATEGORIES: ChildCategory[] = [
     product_type_name: "Coffee Maker",
     name: "Pour-Over Dripper",
     slug: "pour-over-dripper",
+    display_order: 1,
+    active: 1
+  },
+  {
+    id: "child-electric-fans",
+    category_id: "cat-home-living",
+    category_slug: "home-living",
+    subcategory_id: "subcat-home-appliances",
+    subcategory_slug: "home-appliances",
+    product_type_id: "pt-variant-products",
+    product_type_slug: "variant-products",
+    product_type_name: "Variant Products",
+    name: "Electric Fans",
+    slug: "electric-fans",
     display_order: 1,
     active: 1
   },
@@ -695,6 +729,34 @@ export const INITIAL_PRODUCTS: Product[] = [
     stock: 45,
     badge: "100% ORGANIC",
     featured: 0,
+    active: 1,
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: "prod-010",
+    name: "Maxora AeroStream Rechargeable Oscillating Desk Fan",
+    description: "Whisper-quiet brushless DC motor, 4000mAh rechargeable lithium battery with up to 12h runtime, 4 speed modes, 90° auto-oscillation, USB-C fast charging, and compact portable design.",
+    category: "Home & Living",
+    sub_category: "Home Appliances",
+    product_type: "Variant Products",
+    child_category: "Electric Fans",
+    sku: "MX-FAN-01",
+    image_url: "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&auto=format&fit=crop&q=80",
+    images: [
+      "https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [
+      { name: "Arctic White", code: "#f8fafc", stock: 14 },
+      { name: "Sage Green", code: "#15803d", stock: 8 }
+    ],
+    buying_price: 1350,
+    selling_price: 2150,
+    discount: 250,
+    final_price: 1900,
+    stock: 22,
+    badge: "BESTSELLER",
+    featured: 1,
     active: 1,
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     updated_at: new Date().toISOString()

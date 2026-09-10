@@ -165,3 +165,129 @@ export function reconcileSubCategories(
     return a.name.localeCompare(b.name);
   });
 }
+
+/**
+ * Merges explicit product types with any distinct product_types discovered on products.
+ */
+export function reconcileProductTypes(
+  existingProductTypes: ProductType[] = [],
+  categories: Category[] = [],
+  subCategories: SubCategory[] = [],
+  products: Product[] = []
+): ProductType[] {
+  const typeMap = new Map<string, ProductType>();
+
+  // 1. Add existing registered product types
+  (existingProductTypes || []).forEach((pt) => {
+    if (!pt || !pt.name) return;
+    const slug = pt.slug || generateSlug(pt.name);
+    const key = `${pt.subcategory_slug || ''}:::${slug}`;
+    typeMap.set(key, {
+      ...pt,
+      slug,
+    });
+  });
+
+  // 2. Discover product types from active products
+  (products || []).forEach((prod) => {
+    if (!prod.product_type) return;
+    const typeName = prod.product_type.trim();
+    if (!typeName || typeName.toLowerCase() === 'standard product') return;
+
+    const subName = (prod.sub_category || '').trim();
+    const subSlug = generateSlug(subName);
+    const typeSlug = generateSlug(typeName);
+    const key = `${subSlug}:::${typeSlug}`;
+
+    if (!typeMap.has(key)) {
+      typeMap.set(key, {
+        id: prod.product_type_id || `pt-auto-${typeSlug}`,
+        category_id: prod.category_id || '',
+        category_slug: generateSlug(prod.category || ''),
+        subcategory_id: prod.subcategory_id || '',
+        subcategory_slug: subSlug,
+        name: typeName,
+        slug: typeSlug,
+        display_order: typeMap.size + 1,
+        active: 1,
+        created_at: new Date().toISOString(),
+      });
+    }
+  });
+
+  return Array.from(typeMap.values()).sort((a, b) => {
+    const orderA = a.display_order ?? 999;
+    const orderB = b.display_order ?? 999;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Merges explicit child categories with any distinct child_categories discovered on products.
+ */
+export function reconcileChildCategories(
+  existingChildCategories: ChildCategory[] = [],
+  categories: Category[] = [],
+  subCategories: SubCategory[] = [],
+  productTypes: ProductType[] = [],
+  products: Product[] = []
+): ChildCategory[] {
+  const childMap = new Map<string, ChildCategory>();
+
+  // 1. Add existing registered child categories
+  (existingChildCategories || []).forEach((ch) => {
+    if (!ch || !ch.name) return;
+    const slug = ch.slug || generateSlug(ch.name);
+    const key = `${ch.product_type_slug || ''}:::${slug}`;
+    childMap.set(key, {
+      ...ch,
+      slug,
+    });
+  });
+
+  // 2. Discover child categories from active products
+  (products || []).forEach((prod) => {
+    if (!prod.child_category) return;
+    const rawChild = prod.child_category.trim();
+    if (!rawChild) return;
+
+    const parts = rawChild.includes(',') || rawChild.includes('/')
+      ? rawChild.split(/[,/]+/).map((s) => s.trim()).filter(Boolean)
+      : [rawChild];
+
+    const typeSlug = generateSlug(prod.product_type || '');
+    const subSlug = generateSlug(prod.sub_category || '');
+    const catSlug = generateSlug(prod.category || '');
+
+    parts.forEach((childName) => {
+      const childSlug = generateSlug(childName);
+      const key = `${typeSlug}:::${childSlug}`;
+
+      if (!childMap.has(key)) {
+        childMap.set(key, {
+          id: (prod.childcategory_id || prod.child_category_id) || `child-auto-${childSlug}`,
+          category_id: prod.category_id || '',
+          category_slug: catSlug,
+          subcategory_id: prod.subcategory_id || '',
+          subcategory_slug: subSlug,
+          product_type_id: prod.product_type_id || '',
+          product_type_slug: typeSlug,
+          product_type_name: prod.product_type || '',
+          name: childName,
+          slug: childSlug,
+          display_order: childMap.size + 1,
+          active: 1,
+          created_at: new Date().toISOString(),
+        });
+      }
+    });
+  });
+
+  return Array.from(childMap.values()).sort((a, b) => {
+    const orderA = a.display_order ?? 999;
+    const orderB = b.display_order ?? 999;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+  });
+}
