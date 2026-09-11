@@ -649,7 +649,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       setLoading(true);
-      await storeService.saveProduct(editingProduct, password);
+      const cleanedSlug = generateSlug(editingProduct.slug || editingProduct.name);
+      const productToSave: Product = {
+        ...editingProduct,
+        slug: cleanedSlug,
+        meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
+        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
+      };
+
+      await storeService.saveProduct(productToSave, password);
       showToast('Product saved successfully!', 'success');
       setIsProductModalOpen(false);
       setEditingProduct(null);
@@ -3085,7 +3093,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       required
                       placeholder="e.g. Ultra Smart Watch Series 9"
                       value={editingProduct?.name || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        const prevNameSlug = generateSlug(editingProduct?.name || '');
+                        const shouldUpdateSlug = !editingProduct?.slug || editingProduct.slug === prevNameSlug;
+                        setEditingProduct({
+                          ...editingProduct,
+                          name: newName,
+                          slug: shouldUpdateSlug ? generateSlug(newName) : editingProduct.slug,
+                        });
+                      }}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                     />
                   </div>
@@ -4207,7 +4224,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="button"
                         onClick={() => {
                           if (!editingProduct?.name) return;
-                          const slug = editingProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                          const slug = generateSlug(editingProduct.name);
                           setEditingProduct({ ...editingProduct, slug });
                         }}
                         className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"

@@ -5,6 +5,7 @@ export const STORE_NAME = 'Maxora Shop';
 
 /**
  * Safely generates a URL-friendly, clean slug from a string.
+ * Supports alphanumeric, Latin diacritics normalization, Bengali script (\u0980-\u09FF), and hyphens.
  */
 export function generateSlug(text: string): string {
   if (!text) return '';
@@ -13,8 +14,8 @@ export function generateSlug(text: string): string {
     .toLowerCase()
     .trim()
     .normalize('NFD') // separate diacritics
-    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
-    .replace(/[^a-z0-9\s-]/g, '') // remove invalid characters
+    .replace(/[\u0300-\u036f]/g, '') // remove Latin diacritics
+    .replace(/[^a-z0-9\u0980-\u09ff\s-]/g, '') // preserve a-z, 0-9, Bengali Unicode, hyphens, and spaces
     .replace(/[\s_]+/g, '-') // collapse spaces and underscores to a single dash
     .replace(/-+/g, '-') // collapse multiple dashes
     .replace(/^-+|-+$/g, ''); // trim leading and trailing dashes

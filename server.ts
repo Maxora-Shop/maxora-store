@@ -1446,6 +1446,26 @@ app.get('/api/subcategories', (req, res) => {
   });
 });
 
+function escapeXml(unsafe: string): string {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function escapeHtml(unsafe: string): string {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Generate dynamic XML sitemap function
 function buildDynamicSitemap(baseUrl: string): string {
   const today = new Date().toISOString().split('T')[0];
@@ -1453,15 +1473,16 @@ function buildDynamicSitemap(baseUrl: string): string {
   // 1. Active Products only (strictly excludes deleted or inactive products)
   const activeProducts = (db.products || []).filter(p => p.active !== 0 && p.active !== false && String(p.active) !== '0');
   const productUrls = activeProducts.map(p => {
-    const slug = p.slug || (p.name ? p.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : p.id);
+    const slug = cleanSlug(p.slug || p.name || String(p.id));
+    if (!slug) return '';
     const lastMod = (p.updated_at || p.created_at || new Date().toISOString()).split('T')[0];
     return `  <url>
-    <loc>${baseUrl}/product/${slug}</loc>
-    <lastmod>${lastMod}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/product/${slug}`)}</loc>
+    <lastmod>${escapeXml(lastMod)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>`;
-  }).join('\n');
+  }).filter(Boolean).join('\n');
 
   // 2. Tier 1: Active Categories only (excludes deleted or inactive)
   const activeCategories = (db.categories || defaultCategories).filter(c => c.active !== 0 && c.active !== false && String(c.active) !== '0');
@@ -1469,8 +1490,8 @@ function buildDynamicSitemap(baseUrl: string): string {
     const slug = c.slug || (c.name ? c.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : c.id);
     const lastMod = (c.updated_at || c.created_at || new Date().toISOString()).split('T')[0];
     return `  <url>
-    <loc>${baseUrl}/category/${slug}</loc>
-    <lastmod>${lastMod}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/category/${slug}`)}</loc>
+    <lastmod>${escapeXml(lastMod)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>`;
@@ -1484,8 +1505,8 @@ function buildDynamicSitemap(baseUrl: string): string {
     const subSlug = s.slug || (s.name ? s.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : s.id);
     const lastMod = (s.updated_at || s.created_at || new Date().toISOString()).split('T')[0];
     return `  <url>
-    <loc>${baseUrl}/category/${catSlug}/${subSlug}</loc>
-    <lastmod>${lastMod}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/category/${catSlug}/${subSlug}`)}</loc>
+    <lastmod>${escapeXml(lastMod)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>`;
@@ -1508,8 +1529,8 @@ function buildDynamicSitemap(baseUrl: string): string {
   });
   const productTypeUrls = Array.from(rawProductTypes).map(slug => {
     return `  <url>
-    <loc>${baseUrl}/type/${slug}</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/type/${slug}`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>`;
@@ -1537,8 +1558,8 @@ function buildDynamicSitemap(baseUrl: string): string {
   });
   const childCategoryUrls = Array.from(rawChildCategories).map(slug => {
     return `  <url>
-    <loc>${baseUrl}/child/${slug}</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/child/${slug}`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>`;
@@ -1547,14 +1568,14 @@ function buildDynamicSitemap(baseUrl: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>${baseUrl}/</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>${baseUrl}/track</loc>
-    <lastmod>${today}</lastmod>
+    <loc>${escapeXml(`${baseUrl}/track`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
@@ -1568,14 +1589,368 @@ ${productUrls}
 
 // GET /sitemap.xml (Dynamic Google XML Sitemap)
 app.get(['/sitemap.xml', '/api/sitemap.xml'], (req, res) => {
-  const host = req.get('host') || '';
-  const isVercelOrProd = host.includes('maxora-store-ruby.vercel.app') || (!host.includes('localhost') && !host.includes('127.0.0.1'));
-  const baseUrl = isVercelOrProd ? 'https://maxora-store-ruby.vercel.app' : `${req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${host}`;
-
+  const baseUrl = 'https://maxora-store-ruby.vercel.app';
   const sitemap = buildDynamicSitemap(baseUrl);
 
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
   res.send(sitemap);
+});
+
+function cleanSlug(text: string): string {
+  if (!text) return '';
+  return String(text)
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Helper to render product SSR HTML
+function getProductSsrHtml(rawSlug: string): { html: string; status: number } | null {
+  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const slug = cleanSlug(rawSlug);
+  const product = db.products.find(p => {
+    const pSlug = cleanSlug(p.slug || p.name || String(p.id));
+    return pSlug === slug || String(p.id).toLowerCase() === slug.toLowerCase() || (p.sku && p.sku.toLowerCase() === slug.toLowerCase());
+  });
+
+  const distIndex = path.join(process.cwd(), 'dist', 'index.html');
+  const rootIndex = path.join(process.cwd(), 'index.html');
+  const templatePath = fs.existsSync(distIndex) ? distIndex : rootIndex;
+  if (!fs.existsSync(templatePath)) return null;
+  const templateHtml = fs.readFileSync(templatePath, 'utf8');
+
+  const isProductActive = product && product.active !== 0 && product.active !== false && String(product.active) !== '0';
+
+  // 404 for missing or inactive product
+  if (!product || !isProductActive) {
+    const notFoundTitle = 'Product Not Found (404) | Maxora Shop Bangladesh';
+    const notFoundDesc = 'The requested product could not be found or has been discontinued at Maxora Shop Bangladesh.';
+    const seoHeadTags = `
+    <!-- Google Search Console 404 Header Directives -->
+    <title>${escapeHtml(notFoundTitle)}</title>
+    <meta name="description" content="${escapeHtml(notFoundDesc)}" />
+    <meta name="robots" content="noindex, nofollow" />
+    `;
+    const semantic404Body = `
+    <main class="max-w-2xl mx-auto py-16 px-4 text-center font-sans">
+      <h1 class="text-3xl font-extrabold text-zinc-900 mb-3">Product Not Found (404)</h1>
+      <p class="text-zinc-600 mb-6">${escapeHtml(notFoundDesc)}</p>
+      <a href="${baseUrl}/" style="display:inline-block;background:#18181b;color:#ffffff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Return to Maxora Home</a>
+    </main>
+    `;
+    const notFoundHtml = templateHtml
+      .replace(/<title>.*?<\/title>/i, '')
+      .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
+      .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
+      .replace(/<head>/i, `<head>${seoHeadTags}`)
+      .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semantic404Body}`);
+    return { html: notFoundHtml, status: 404 };
+  }
+
+  const sellingPrice = Number(product.selling_price || 0);
+  const discount = Number(product.discount || 0);
+  const finalPrice = Math.max(0, sellingPrice - discount);
+  const title = product.meta_title?.trim() || `${product.name} Price in Bangladesh | Maxora Shop`;
+  const plainDesc = product.description ? product.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+  const description = product.meta_description?.trim() || (plainDesc ? `${plainDesc}. Buy online at best price in Bangladesh with Cash on Delivery at Maxora Shop.` : `Buy ${product.name} at best price in Bangladesh. 100% authentic quality, Cash on Delivery available at Maxora Shop.`);
+
+  let imagesArr: string[] = [];
+  if (Array.isArray(product.images)) imagesArr = product.images;
+  else if (typeof product.images === 'string') {
+    try { imagesArr = JSON.parse(product.images); } catch { imagesArr = [product.images]; }
+  }
+  const mainImage = product.og_image || product.image_url || imagesArr[0] || '';
+  const canonicalUrl = `${baseUrl}/product/${cleanSlug(product.slug || product.name || String(product.id))}`;
+
+  const jsonLd = {
+    '@context': 'https://schema.org/',
+    '@type': 'Product',
+    name: product.name,
+    image: imagesArr.length > 0 ? imagesArr : [mainImage],
+    description: plainDesc || description,
+    sku: product.sku || product.id,
+    mpn: product.sku || product.id,
+    brand: { '@type': 'Brand', name: product.brand || 'Maxora' },
+    offers: {
+      '@type': 'Offer',
+      url: canonicalUrl,
+      priceCurrency: 'BDT',
+      price: finalPrice,
+      priceValidUntil: '2027-12-31',
+      itemCondition: 'https://schema.org/NewCondition',
+      availability: Number(product.stock || 1) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      seller: { '@type': 'Organization', name: 'Maxora Shop Bangladesh' }
+    }
+  };
+
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+      ...(product.category ? [
+        { '@type': 'ListItem', position: 2, name: product.category, item: `${baseUrl}/category/${cleanSlug(product.category)}` },
+        { '@type': 'ListItem', position: 3, name: product.name, item: canonicalUrl }
+      ] : [
+        { '@type': 'ListItem', position: 2, name: product.name, item: canonicalUrl }
+      ])
+    ]
+  };
+
+  const seoHeadTags = `
+    <!-- Google Search Console & SEO Pre-rendered Meta Tags -->
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}" />
+    ${product.meta_keywords ? `<meta name="keywords" content="${escapeHtml(product.meta_keywords)}" />` : ''}
+    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+    <!-- Open Graph (Facebook / WhatsApp / LinkedIn) -->
+    <meta property="og:type" content="product" />
+    <meta property="og:site_name" content="Maxora Shop" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+    <meta property="og:image" content="${escapeHtml(mainImage)}" />
+    <meta property="og:image:alt" content="${escapeHtml(product.name)}" />
+    <meta property="product:price:amount" content="${finalPrice}" />
+    <meta property="product:price:currency" content="BDT" />
+    <meta property="product:availability" content="${Number(product.stock || 1) > 0 ? 'in stock' : 'out of stock'}" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(title)}" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
+    <meta name="twitter:image" content="${escapeHtml(mainImage)}" />
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+${JSON.stringify(jsonLd, null, 2)}
+    </script>
+    <script type="application/ld+json">
+${JSON.stringify(breadcrumbLd, null, 2)}
+    </script>
+  `;
+
+  const semanticSsrBody = `
+    <article id="ssr-product-container" class="max-w-4xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
+      <nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+        <a href="${baseUrl}">Home</a> &gt; 
+        ${product.category ? `<a href="${baseUrl}/category/${cleanSlug(product.category)}">${escapeHtml(product.category)}</a> &gt; ` : ''}
+        <span class="text-zinc-800">${escapeHtml(product.name)}</span>
+      </nav>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div>
+          <img src="${escapeHtml(mainImage)}" alt="${escapeHtml(product.name)}" class="w-full max-h-96 object-contain rounded-xl border border-zinc-200" />
+        </div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold text-zinc-900 mb-3">${escapeHtml(product.name)}</h1>
+          <div class="mb-4">
+            <span class="text-2xl font-extrabold text-emerald-600">৳${finalPrice}</span>
+            ${discount > 0 ? `<span class="ml-2 text-zinc-400 line-through text-lg">৳${sellingPrice}</span>` : ''}
+          </div>
+          <div class="text-xs text-zinc-600 space-y-1 mb-4">
+            <p><strong>Availability:</strong> <span class="${Number(product.stock || 1) > 0 ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${Number(product.stock || 1) > 0 ? 'In Stock' : 'Out of Stock'}</span></p>
+            <p><strong>SKU:</strong> ${escapeHtml(product.sku || product.id)}</p>
+            <p><strong>Category:</strong> ${escapeHtml(product.category || 'General')}</p>
+          </div>
+          <div class="prose prose-sm text-zinc-700 leading-relaxed border-t border-zinc-200 pt-4">
+            <p>${escapeHtml(plainDesc || description)}</p>
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+
+  let modifiedHtml = templateHtml
+    .replace(/<title>.*?<\/title>/i, '')
+    .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
+    .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
+    .replace(/<head>/i, `<head>${seoHeadTags}`)
+    .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticSsrBody}`);
+
+  return { html: modifiedHtml, status: 200 };
+}
+
+// Helper to render category SSR HTML
+function getCategorySsrHtml(rawSlug: string): { html: string; status: number } | null {
+  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const slug = cleanSlug(rawSlug);
+
+  const matchedCat = db.categories.find(c => cleanSlug(c.slug || c.name || c.id) === slug);
+  const matchedSub = db.subcategories.find(s => cleanSlug(s.slug || s.name || s.id) === slug);
+  const matchingProducts = db.products.filter(p => {
+    if (p.active === 0 || p.active === false || String(p.active) === '0') return false;
+    return cleanSlug(p.category || '') === slug || cleanSlug(p.sub_category || '') === slug || cleanSlug(p.child_category || '') === slug;
+  });
+
+  const distIndex = path.join(process.cwd(), 'dist', 'index.html');
+  const rootIndex = path.join(process.cwd(), 'index.html');
+  const templatePath = fs.existsSync(distIndex) ? distIndex : rootIndex;
+  if (!fs.existsSync(templatePath)) return null;
+  const templateHtml = fs.readFileSync(templatePath, 'utf8');
+
+  if (!matchedCat && !matchedSub && matchingProducts.length === 0) {
+    const notFoundTitle = 'Category Not Found (404) | Maxora Shop Bangladesh';
+    const notFoundDesc = 'The requested category could not be found at Maxora Shop Bangladesh.';
+    const seoHeadTags = `
+    <!-- Google Search Console 404 Header Directives -->
+    <title>${escapeHtml(notFoundTitle)}</title>
+    <meta name="description" content="${escapeHtml(notFoundDesc)}" />
+    <meta name="robots" content="noindex, nofollow" />
+    `;
+    const semantic404Body = `
+    <main class="max-w-2xl mx-auto py-16 px-4 text-center font-sans">
+      <h1 class="text-3xl font-extrabold text-zinc-900 mb-3">Category Not Found (404)</h1>
+      <p class="text-zinc-600 mb-6">${escapeHtml(notFoundDesc)}</p>
+      <a href="${baseUrl}/" style="display:inline-block;background:#18181b;color:#ffffff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Explore Categories</a>
+    </main>
+    `;
+    const notFoundHtml = templateHtml
+      .replace(/<title>.*?<\/title>/i, '')
+      .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
+      .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
+      .replace(/<head>/i, `<head>${seoHeadTags}`)
+      .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semantic404Body}`);
+    return { html: notFoundHtml, status: 404 };
+  }
+
+  const categoryName = matchedCat?.name || matchedSub?.name || matchingProducts[0]?.category || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const canonicalUrl = `${baseUrl}/category/${slug}`;
+  const title = `${categoryName} Collection | Best Price in Bangladesh | Maxora Shop`;
+  const description = `Shop genuine ${categoryName} online at Maxora Shop Bangladesh. Discover ${matchingProducts.length} authentic products with Cash on Delivery nationwide.`;
+  const catImage = matchingProducts[0]?.image_url || `${baseUrl}/og-image.png`;
+
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+      { '@type': 'ListItem', position: 2, name: categoryName, item: canonicalUrl },
+    ]
+  };
+
+  const itemListLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `${categoryName} Products`,
+    itemListElement: matchingProducts.slice(0, 20).map((p, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      url: `${baseUrl}/product/${cleanSlug(p.slug || p.name || p.id)}`,
+      name: p.name
+    }))
+  };
+
+  const seoHeadTags = `
+    <!-- Google Search Console & SEO Category Meta Tags -->
+    <title>${escapeHtml(title)}</title>
+    <meta name="description" content="${escapeHtml(description)}" />
+    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Maxora Shop" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+    <meta property="og:image" content="${escapeHtml(catImage)}" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(title)}" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
+    <meta name="twitter:image" content="${escapeHtml(catImage)}" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+${JSON.stringify(breadcrumbLd, null, 2)}
+    </script>
+    <script type="application/ld+json">
+${JSON.stringify(itemListLd, null, 2)}
+    </script>
+  `;
+
+  const semanticCategoryBody = `
+    <main id="ssr-category-container" class="max-w-6xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
+      <nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+        <a href="${baseUrl}">Home</a> &gt; 
+        <span class="text-zinc-800">${escapeHtml(categoryName)}</span>
+      </nav>
+      <header class="mb-8 border-b border-zinc-200 pb-4">
+        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">${escapeHtml(categoryName)} Collection</h1>
+        <p class="text-zinc-600 text-sm leading-relaxed">${escapeHtml(description)}</p>
+        <p class="text-xs text-zinc-500 mt-2 font-medium">Showing ${matchingProducts.length} items</p>
+      </header>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        ${matchingProducts.map(p => {
+          const pSelling = Number(p.selling_price || 0);
+          const pDisc = Number(p.discount || 0);
+          const pFinal = Math.max(0, pSelling - pDisc);
+          const pSlug = cleanSlug(p.slug || p.name || p.id);
+          return `
+          <a href="${baseUrl}/product/${pSlug}" class="group block border border-zinc-200 rounded-xl p-3 bg-white hover:shadow-md transition">
+            <div class="aspect-square w-full mb-3 overflow-hidden rounded-lg bg-zinc-50 flex items-center justify-center">
+              <img src="${escapeHtml(p.image_url || '')}" alt="${escapeHtml(p.name)}" class="h-full w-full object-contain group-hover:scale-105 transition" />
+            </div>
+            <h2 class="text-sm font-semibold text-zinc-800 line-clamp-2 mb-1">${escapeHtml(p.name)}</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-bold text-emerald-600">৳${pFinal}</span>
+              ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">৳${pSelling}</span>` : ''}
+            </div>
+          </a>
+          `;
+        }).join('')}
+      </div>
+    </main>
+  `;
+
+  let modifiedHtml = templateHtml
+    .replace(/<title>.*?<\/title>/i, '')
+    .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
+    .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
+    .replace(/<head>/i, `<head>${seoHeadTags}`)
+    .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticCategoryBody}`);
+
+  return { html: modifiedHtml, status: 200 };
+}
+
+// GET /product/:slug (SSR pre-rendered product page for Googlebot & Social Crawlers)
+app.get('/product/:slug', (req, res, next) => {
+  const result = getProductSsrHtml(req.params.slug);
+  if (result) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (result.status === 200) {
+      res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=600, stale-while-revalidate=86400');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    return res.status(result.status).send(result.html);
+  }
+  next();
+});
+
+// GET /category/:slug and /category/:catSlug/:subSlug (SSR pre-rendered category page)
+app.get(['/category/:slug', '/category/:catSlug/:subSlug'], (req, res, next) => {
+  const targetSlug = req.params.subSlug || req.params.slug;
+  const result = getCategorySsrHtml(targetSlug);
+  if (result) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (result.status === 200) {
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    return res.status(result.status).send(result.html);
+  }
+  next();
 });
 
 // GET /robots.txt (Crawler directives)

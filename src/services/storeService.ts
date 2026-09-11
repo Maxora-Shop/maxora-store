@@ -1,7 +1,7 @@
 import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
-import { generateSlug } from '../utils/seo';
+import { generateSlug, getProductSlug } from '../utils/seo';
 import { matchesTaxonomyField } from '../utils/taxonomy';
 import { db } from '../firebase';
 import {
@@ -686,6 +686,15 @@ export const storeService = {
       ? productData.images
       : [productData.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'];
 
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let baseSlug = productData.slug ? generateSlug(productData.slug) : generateSlug(productData.name || newId);
+    if (!baseSlug) baseSlug = `item-${newId.slice(-6)}`;
+    let finalSlug = baseSlug;
+    let counter = 1;
+    while (local.some(p => String(p.id) !== String(newId) && p.slug === finalSlug)) {
+      finalSlug = `${baseSlug}-${counter++}`;
+    }
+
     const newProd: Product = {
       id: newId,
       name: productData.name || 'New Product',
@@ -707,10 +716,10 @@ export const storeService = {
       badge: productData.badge || '',
       featured: productData.featured ? 1 : 0,
       active: productData.active !== undefined ? (productData.active ? 1 : 0) : 1,
-      meta_title: productData.meta_title || '',
-      meta_description: productData.meta_description || '',
+      meta_title: productData.meta_title?.trim() || `${productData.name || 'Product'} Price in Bangladesh | Maxora Shop`,
+      meta_description: productData.meta_description?.trim() || (productData.description ? productData.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${productData.name || 'product'} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       meta_keywords: productData.meta_keywords || '',
-      slug: productData.slug || (productData.name ? productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+      slug: finalSlug,
       brand: productData.brand || 'Maxora',
       og_image: productData.og_image || productData.image_url || images[0],
       created_at: productData.created_at || new Date().toISOString(),
@@ -732,7 +741,6 @@ export const storeService = {
     }).catch(() => {});
 
     // 3. Update local cache
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const existingIdx = local.findIndex(p => String(p.id) === String(newProd.id));
     if (existingIdx >= 0) {
       local[existingIdx] = newProd;
@@ -753,11 +761,21 @@ export const storeService = {
     const current = index !== -1 ? local[index] : ({} as Product);
     const sellingPrice = productData.selling_price !== undefined ? Number(productData.selling_price) : Number(current.selling_price || 0);
     const discount = productData.discount !== undefined ? Number(productData.discount) : Number(current.discount || 0);
+    const name = productData.name !== undefined ? productData.name : current.name;
+    const rawSlug = productData.slug !== undefined ? productData.slug : (current.slug || name);
+    let baseSlug = rawSlug ? generateSlug(rawSlug) : generateSlug(name || idStr);
+    if (!baseSlug) baseSlug = `item-${idStr.slice(-6)}`;
+    let finalSlug = baseSlug;
+    let counter = 1;
+    while (local.some(p => String(p.id) !== idStr && p.slug === finalSlug)) {
+      finalSlug = `${baseSlug}-${counter++}`;
+    }
 
     const updated: Product = {
       ...current,
       ...productData,
       id: idStr,
+      slug: finalSlug,
       selling_price: sellingPrice,
       discount: discount,
       final_price: Math.max(0, sellingPrice - discount),
