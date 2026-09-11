@@ -833,7 +833,16 @@ export const storeService = {
     address: string;
     delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
     note?: string;
-    items: Array<{ product_id: string; name: string; quantity: number; selected_color?: string; selected_color_code?: string }>;
+    items: Array<{
+      product_id: string;
+      name: string;
+      quantity: number;
+      selected_color?: string;
+      selected_color_code?: string;
+      image_url?: string;
+      unit_price?: number;
+      sku?: string;
+    }>;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     const settings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
@@ -846,11 +855,19 @@ export const storeService = {
       const prod = products.find((p) => String(p.id) === String(item.product_id));
       const qty = Math.max(1, Number(item.quantity || 1));
       const discount = Number(prod?.discount || 0);
-      const price = Number(prod?.selling_price || 0);
+      const price = Number(prod?.selling_price || item.unit_price || 0);
       const finalPrice = Math.max(0, price - discount);
       const lineTotal = finalPrice * qty;
 
       const matchedColor = prod?.colors?.find(c => c.name === item.selected_color);
+      const resolvedImage = String(
+        (item.selected_color && matchedColor?.image_url) ||
+        item.image_url ||
+        prod?.image_url ||
+        (prod?.images && prod?.images[0]) ||
+        matchedColor?.image_url ||
+        ''
+      ).trim();
 
       subtotal += lineTotal;
       orderItems.push({
@@ -858,12 +875,12 @@ export const storeService = {
         order_id: orderId,
         product_id: String(prod?.id || item.product_id || ''),
         product_name: String(prod?.name || item.name || ''),
-        sku: String(prod?.sku || ''),
+        sku: String(prod?.sku || item.sku || ''),
         quantity: qty,
         unit_price: finalPrice,
         buying_price: Number(prod?.buying_price || 0),
         line_total: lineTotal,
-        image_url: String(matchedColor?.image_url || prod?.image_url || (prod?.images && prod?.images[0]) || ''),
+        image_url: resolvedImage,
         selected_color: String(item.selected_color || ''),
         selected_color_code: String(item.selected_color_code || matchedColor?.code || ''),
         slug: String(prod?.slug || ''),

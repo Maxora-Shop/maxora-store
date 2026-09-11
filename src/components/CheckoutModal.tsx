@@ -116,6 +116,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           quantity: item.quantity,
           selected_color: item.selected_color,
           selected_color_code: item.selected_color_code,
+          image_url: item.image_url,
+          unit_price: item.unit_price,
+          sku: item.sku,
         })),
       });
 

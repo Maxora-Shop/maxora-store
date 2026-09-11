@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Order, OrderItem, StoreSettings, Product } from '../types';
 import { Printer, X, Package, Loader2, ArrowRight } from 'lucide-react';
 import { storeService } from '../services/storeService';
+import { INITIAL_PRODUCTS } from '../data/initialData';
 import { getProductSlug, generateSlug, findProductBySlugOrId, SITE_URL } from '../utils/seo';
 
 interface InvoiceModalProps {
@@ -32,20 +33,37 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     setIsMounted(true);
   }, []);
 
-  // Sync or fetch products from store product database
+  // Sync or fetch products from store product database with resilient local cache fallback
   useEffect(() => {
     if (products && products.length > 0) {
       setLoadedProducts(products);
-    } else {
-      storeService
-        .getProducts()
-        .then((list) => {
-          if (Array.isArray(list) && list.length > 0) {
-            setLoadedProducts(list);
-          }
-        })
-        .catch(() => {});
+      return;
     }
+
+    // 1. Immediately read cached products from localStorage if available
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('maxora_products') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLoadedProducts(parsed);
+        }
+      }
+    } catch {}
+
+    // 2. Query admin products in background
+    storeService
+      .getAllAdminProducts()
+      .then((list) => {
+        if (Array.isArray(list) && list.length > 0) {
+          setLoadedProducts(list);
+        } else {
+          setLoadedProducts((prev) => (prev.length > 0 ? prev : INITIAL_PRODUCTS));
+        }
+      })
+      .catch(() => {
+        setLoadedProducts((prev) => (prev.length > 0 ? prev : INITIAL_PRODUCTS));
+      });
   }, [products]);
 
   const handleImageError = (key: string) => {
@@ -53,39 +71,98 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   /**
-   * Universally resolves the real product record belonging to this order item from the store's product database.
+   * Universally resolves the real product record belonging to this order item from all available product sources.
    */
   const getItemProduct = (item: OrderItem, index: number): Product | null => {
-    const pool = loadedProducts && loadedProducts.length > 0 ? loadedProducts : products;
-    if (!pool || pool.length === 0) return null;
+    // Gather pool of products across loaded state, props, localStorage cache, and initial catalog
+    const candidateList: Product[] = [];
+    if (Array.isArray(loadedProducts) && loadedProducts.length > 0) candidateList.push(...loadedProducts);
+    if (Array.isArray(products) && products.length > 0) candidateList.push(...products);
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('maxora_products') : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) candidateList.push(...parsed);
+      }
+    } catch {}
+    if (Array.isArray(INITIAL_PRODUCTS)) candidateList.push(...INITIAL_PRODUCTS);
 
-    if (item.product_id) {
-      const byId = pool.find((p) => String(p.id) === String(item.product_id));
+    if (candidateList.length === 0) return null;
+
+    // Deduplicate by ID
+    const seen = new Set<string>();
+    const pool: Product[] = [];
+    for (const p of candidateList) {
+      const key = String(p.id || '').trim();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        pool.push(p);
+      }
+    }
+
+    const rawItemId = String(item.product_id || (item as any).productId || (item as any).id || '').trim();
+    const rawItemSku = String(item.sku || (item as any).sku || '').trim();
+    const rawItemName = String(item.product_name || (item as any).productName || (item as any).name || '').trim();
+    const rawItemSlug = String((item as any).slug || '').trim();
+
+    // 1. By ID match (exact string or number)
+    if (rawItemId && rawItemId.toLowerCase() !== 'custom') {
+      const byId = pool.find((p) => String(p.id).trim().toLowerCase() === rawItemId.toLowerCase());
       if (byId) return byId;
     }
 
-    if (item.sku && item.sku.trim()) {
+    // 2. By SKU match
+    if (rawItemSku) {
       const bySku = pool.find(
-        (p) => p.sku && p.sku.toLowerCase().trim() === item.sku?.toLowerCase().trim()
+        (p) => p.sku && p.sku.trim().toLowerCase() === rawItemSku.toLowerCase()
       );
       if (bySku) return bySku;
     }
 
-    if (item.product_name && item.product_name.trim()) {
+    // 3. By Exact Name match (case-insensitive)
+    if (rawItemName) {
       const byName = pool.find(
-        (p) => p.name && p.name.toLowerCase().trim() === item.product_name?.toLowerCase().trim()
+        (p) => p.name && p.name.trim().toLowerCase() === rawItemName.toLowerCase()
       );
       if (byName) return byName;
     }
 
-    if (item.product_id) {
-      const byHelper = findProductBySlugOrId(pool, item.product_id);
+    // 4. By Slug or ID helper
+    if (rawItemId) {
+      const byHelper = findProductBySlugOrId(pool, rawItemId);
       if (byHelper) return byHelper;
     }
-
-    if ((item as any).slug) {
-      const bySlug = findProductBySlugOrId(pool, (item as any).slug);
+    if (rawItemSlug) {
+      const bySlug = findProductBySlugOrId(pool, rawItemSlug);
       if (bySlug) return bySlug;
+    }
+
+    // 5. By partial name match (contains)
+    if (rawItemName && rawItemName.length >= 3) {
+      const targetLower = rawItemName.toLowerCase();
+      const byPartial = pool.find((p) => {
+        if (!p.name) return false;
+        const pLower = p.name.trim().toLowerCase();
+        return pLower.includes(targetLower) || targetLower.includes(pLower);
+      });
+      if (byPartial) return byPartial;
+    }
+
+    // 6. By keywords match
+    if (rawItemName) {
+      const words = rawItemName
+        .toLowerCase()
+        .split(/[\s\-_,]+/)
+        .filter((w) => w.length >= 3 && !['with', 'and', 'the', 'for', 'pro', 'new'].includes(w));
+      if (words.length > 0) {
+        const byWords = pool.find((p) => {
+          if (!p.name) return false;
+          const pLower = p.name.toLowerCase();
+          const matchCount = words.filter((w) => pLower.includes(w)).length;
+          return matchCount >= Math.min(2, words.length);
+        });
+        if (byWords) return byWords;
+      }
     }
 
     return null;
@@ -97,27 +174,40 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const getItemImage = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
     const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
 
-    // 1. If color variant matches a specific color image
-    if (prod && item.selected_color && Array.isArray(prod.colors)) {
+    // 1. Direct item.image_url stored with the order at checkout (check all possible field naming variants)
+    const directUrl = String(
+      item.image_url ||
+      (item as any).imageUrl ||
+      (item as any).image ||
+      (item as any).img ||
+      (item as any).product_image ||
+      (item as any).productImage ||
+      (item as any).thumbnail ||
+      ''
+    ).trim();
+
+    // 2. If color variant matches a specific color image
+    const selectedColor = String(item.selected_color || (item as any).color || '').trim().toLowerCase();
+    if (prod && selectedColor && Array.isArray(prod.colors)) {
       const matchedCol = prod.colors.find(
-        (c) => c.name?.toLowerCase().trim() === item.selected_color?.toLowerCase().trim()
+        (c) => c.name?.toLowerCase().trim() === selectedColor
       );
       if (matchedCol?.image_url && typeof matchedCol.image_url === 'string' && matchedCol.image_url.trim()) {
         return matchedCol.image_url.trim();
       }
     }
 
-    // 2. Direct item.image_url stored with the order at checkout
-    if (item.image_url && typeof item.image_url === 'string' && item.image_url.trim()) {
-      return item.image_url.trim();
+    // 3. Direct image url from item
+    if (directUrl && directUrl.length > 5) {
+      return directUrl;
     }
 
-    // 3. Product's primary image_url
+    // 4. Product's primary image_url
     if (prod?.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
       return prod.image_url.trim();
     }
 
-    // 4. Product's images array
+    // 5. Product's images array
     if (
       prod &&
       Array.isArray(prod.images) &&
@@ -126,6 +216,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       prod.images[0].trim()
     ) {
       return prod.images[0].trim();
+    }
+
+    // 6. Additional product image fields (og_image, thumbnail, photo)
+    const extraImg = String(
+      (prod as any)?.og_image ||
+      (prod as any)?.thumbnail ||
+      (prod as any)?.photo ||
+      ''
+    ).trim();
+    if (extraImg && extraImg.length > 5) {
+      return extraImg;
     }
 
     return '';
@@ -417,11 +518,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               {Array.isArray(order.items) && order.items.length > 0 ? (
                 order.items.map((item, index) => {
                   const matchedProduct = getItemProduct(item, index);
-                  const imageUrl = getItemImage(item, index, matchedProduct);
-                  const productUrl = getItemUrl(item, index, matchedProduct);
+                  const resolvedUrl = getItemImage(item, index, matchedProduct);
                   const itemKey = item.id || `item-${index}`;
                   const isImgFailed = Boolean(imageErrors[itemKey]);
-                  const hasValidImage = Boolean(imageUrl && !isImgFailed);
+                  const fallbackProductUrl = matchedProduct?.image_url || (matchedProduct?.images && matchedProduct.images[0]) || '';
+                  const displayImageUrl = (!isImgFailed && resolvedUrl) ? resolvedUrl : (fallbackProductUrl || resolvedUrl);
+                  const productUrl = getItemUrl(item, index, matchedProduct);
+                  const hasValidImage = Boolean(displayImageUrl);
 
                   return (
                     <tr key={itemKey} className="break-inside-avoid">
@@ -435,12 +538,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                             <button
                               type="button"
                               onClick={(e) => handleProductClick(e, item, index)}
-                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 hover:ring-2 hover:ring-emerald-500/20 transition-all cursor-pointer block bg-zinc-50"
+                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 hover:ring-2 hover:ring-emerald-500/20 transition-all cursor-pointer block bg-white"
                               title={`View & order ${item.product_name}`}
+                              style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px' }}
                             >
                               {hasValidImage ? (
                                 <img
-                                  src={imageUrl}
+                                  src={displayImageUrl}
                                   alt={item.product_name}
                                   width={48}
                                   height={48}
@@ -448,6 +552,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                                   decoding="async"
                                   referrerPolicy="no-referrer"
                                   onError={() => handleImageError(itemKey)}
+                                  style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px', objectFit: 'cover', display: 'block', borderRadius: '6px' }}
                                   className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg transition-transform hover:scale-105"
                                 />
                               ) : (
@@ -457,16 +562,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                               )}
                             </button>
                           ) : (
-                            <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-300">
+                            <div
+                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-300 bg-white"
+                              style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px' }}
+                            >
                               {hasValidImage ? (
                                 <img
-                                  src={imageUrl}
+                                  src={displayImageUrl}
                                   alt={item.product_name}
                                   width={48}
                                   height={48}
                                   loading="eager"
                                   decoding="sync"
                                   referrerPolicy="no-referrer"
+                                  style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px', objectFit: 'cover', display: 'block', borderRadius: '6px' }}
                                   className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg"
                                 />
                               ) : (

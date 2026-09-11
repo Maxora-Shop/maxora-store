@@ -542,7 +542,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadCategories();
       loadProducts(currentPassword);
     }
-    if (tab === 'orders') loadOrders(currentPassword);
+    if (tab === 'orders') {
+      loadOrders(currentPassword);
+      loadProducts(currentPassword);
+    }
     if (tab === 'customers') loadCustomers(currentPassword);
     if (tab === 'settings') {
       loadSettings(currentPassword);
@@ -604,6 +607,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const list = await storeService.getAllAdminOrders(orderStatusFilter, p);
       setOrders(list);
+      // Ensure products are always loaded for order item details and invoices
+      if (products.length === 0) {
+        storeService.getAllAdminProducts(p).then((prods) => {
+          if (prods && prods.length > 0) setProducts(prods);
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
       showToast('Failed to load orders', 'error');
