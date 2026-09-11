@@ -770,15 +770,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setLoading(true);
       await storeService.deleteOrder(orderId, password);
-      showToast(`Order #${orderNumber} deleted`, 'success');
+      setOrders((prev) => prev.filter((o) => String(o.id) !== String(orderId) && o.order_number !== String(orderNumber) && String(o.id) !== String(orderNumber)));
+      showToast(`Order #${orderNumber} deleted successfully`, 'success');
       if (editingOrder?.id === orderId) {
         setIsOrderModalOpen(false);
         setEditingOrder(null);
       }
-      loadOrders();
+      await loadOrders();
       if (currentTab === 'overview') loadOverview();
     } catch (err: any) {
       showToast('Failed to delete order: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePurgeDemoData = async () => {
+    if (!confirm('Are you sure you want to purge all demo orders and refresh cache?')) return;
+    try {
+      setLoading(true);
+      localStorage.setItem('maxora_orders_v1', JSON.stringify([]));
+      setOrders([]);
+      showToast('Demo cache purged successfully!', 'success');
+      await loadOverview();
+      await loadOrders();
+      await loadProducts();
+    } catch (e: any) {
+      showToast('Error purging demo data: ' + e.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -1302,6 +1320,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePurgeDemoData}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
+                  title="Purge legacy fake orders and refresh cache"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge Fake Data</span>
+                </button>
                 <button
                   onClick={() => loadOverview()}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
@@ -2192,13 +2218,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                onClick={() => loadOrders()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Refresh Orders</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePurgeDemoData}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
+                  title="Purge legacy fake orders and refresh cache"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge Fake Orders</span>
+                </button>
+                <button
+                  onClick={() => loadOrders()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Refresh Orders</span>
+                </button>
+              </div>
             </div>
 
             {/* Orders Filter Toolbar */}
