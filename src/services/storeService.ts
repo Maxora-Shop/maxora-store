@@ -1151,6 +1151,31 @@ export const storeService = {
       }
     } catch (e: any) {
       console.error('Firestore createOrder write error:', e?.message || e);
+      // Fallback attempt directly with clean object if any field failed
+      try {
+        if (db) {
+          const minimalDoc = {
+            id: orderId,
+            order_number: orderNo,
+            customer_name: orderPayload.customer_name || 'Customer',
+            phone: orderPayload.phone || '',
+            district: orderPayload.district || '',
+            area: orderPayload.area || '',
+            address: orderPayload.address || '',
+            delivery_charge: deliveryCharge,
+            subtotal,
+            total,
+            total_amount: total,
+            status: 'Pending',
+            payment_method: 'Cash on Delivery',
+            created_at: new Date().toISOString(),
+            items: orderItems,
+          };
+          await setDoc(doc(db, 'orders', orderId), minimalDoc);
+        }
+      } catch (fallbackErr) {
+        console.error('Firestore fallback write error:', fallbackErr);
+      }
     }
 
     // 2. Also forward to API with complete order details for backend persistence
