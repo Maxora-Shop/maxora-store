@@ -37,12 +37,12 @@ export const FloatingSupportButton: React.FC<FloatingSupportButtonProps> = ({ se
   };
 
   return (
-    <div id="floating-support-container" className="fixed bottom-5 right-5 z-40 flex flex-col items-end">
+    <div id="floating-support-container" className="fixed bottom-[68px] sm:bottom-5 right-2 xs:right-3 sm:right-5 z-40 flex flex-col items-end pointer-events-none">
       {/* Support Popup Card */}
       {isOpen && (
         <div
           id="floating-support-modal"
-          className="mb-3 w-[320px] sm:w-[360px] bg-white rounded-3xl shadow-2xl border border-zinc-200 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150"
+          className="mb-3 w-[calc(100vw-16px)] xs:w-[calc(100vw-24px)] sm:w-[360px] max-w-[360px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-zinc-200 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150 pointer-events-auto"
         >
           {/* Header */}
           <div className="bg-zinc-950 text-white p-4 relative">
@@ -159,7 +159,7 @@ export const FloatingSupportButton: React.FC<FloatingSupportButtonProps> = ({ se
         id="floating-support-button"
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="group relative flex items-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer active:scale-95"
+        className="group relative flex items-center gap-1.5 xs:gap-2 px-3 xs:px-4 py-2.5 xs:py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 cursor-pointer active:scale-95 pointer-events-auto"
         title="Live Chat Support"
         aria-label="Open support chat"
       >

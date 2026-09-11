@@ -61,9 +61,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   };
 
   return (
-    <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full">
+    <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0">
       {/* Product Image Area */}
-      <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-3 sm:p-4 overflow-hidden group/image">
+      <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-2.5 xs:p-3 sm:p-4 overflow-hidden group/image w-full min-w-0">
         <a
           href={fullProductUrl}
           target="_blank"
@@ -90,14 +90,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </a>
 
         {/* Floating Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[65%]">
+        <div className="absolute top-2 left-2 xs:top-2.5 xs:left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[70%]">
           {product.badge && (
-            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[9px] sm:text-[10px] uppercase tracking-wider px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md shadow-xs backdrop-blur-xs truncate">
+            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] uppercase tracking-wider px-1.5 py-0.5 xs:px-2 rounded-md shadow-xs backdrop-blur-xs truncate">
               {product.badge}
             </span>
           )}
           {hasDiscount && (
-            <span className="bg-rose-600 text-white font-extrabold text-[9px] sm:text-[10px] tracking-wide px-2 py-0.5 rounded-md shadow-xs">
+            <span className="bg-rose-600 text-white font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs shrink-0">
               {discountPercent > 0 ? `-${discountPercent}%` : `SAVE ৳${discount.toLocaleString('en-BD')}`}
             </span>
           )}
@@ -197,16 +197,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Product Content Area */}
-      <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
-        <div>
+      <div className="p-2.5 xs:p-3 sm:p-4 flex-1 flex flex-col justify-between min-w-0">
+        <div className="min-w-0">
           {/* Category & SKU */}
-          <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">
+          <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1 min-w-0">
             <span className="truncate">{product.category || "Essentials"}</span>
-            {product.sku && <span className="text-zinc-400 font-mono hidden sm:inline">{product.sku}</span>}
+            {product.sku && <span className="text-zinc-400 font-mono hidden sm:inline truncate">{product.sku}</span>}
           </div>
 
           {/* Average Rating Display */}
-          <div className="flex items-center gap-1.5 mb-1.5 min-h-[20px]">
+          <div className="flex items-center gap-1.5 mb-1.5 min-h-[20px] min-w-0">
             {ratingStats && ratingStats.count > 0 ? (
               <button
                 type="button"
@@ -215,16 +215,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   e.stopPropagation();
                   onQuickView(product, 'reviews');
                 }}
-                className="inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group/rating text-left"
+                className="inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group/rating text-left truncate min-w-0"
                 title={`${ratingStats.average.toFixed(1)} out of 5 stars (${ratingStats.count} review${ratingStats.count > 1 ? 's' : ''})`}
               >
-                <div className="flex items-center">
+                <div className="flex items-center shrink-0">
                   <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
                 </div>
-                <span className="text-xs font-black text-zinc-900">
+                <span className="text-xs font-black text-zinc-900 shrink-0">
                   {ratingStats.average.toFixed(1)}
                 </span>
-                <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium group-hover/rating:text-amber-700">
+                <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium group-hover/rating:text-amber-700 truncate">
                   ({ratingStats.count})
                 </span>
               </button>
@@ -236,23 +236,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   e.stopPropagation();
                   onQuickView(product, 'reviews');
                 }}
-                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-400 hover:text-amber-600 transition-colors cursor-pointer text-left"
+                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-400 hover:text-amber-600 transition-colors cursor-pointer text-left truncate min-w-0"
                 title="No reviews yet. Be the first to review!"
               >
-                <Star className="w-3 h-3 text-zinc-300" />
-                <span>No reviews yet</span>
+                <Star className="w-3 h-3 text-zinc-300 shrink-0" />
+                <span className="truncate">No reviews</span>
               </button>
             )}
           </div>
 
           {/* Product Name */}
-          <h3 className="mb-1.5 leading-snug">
+          <h3 className="mb-1.5 leading-snug min-w-0">
             <a
               href={fullProductUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleProductLinkClick}
-              className="font-bold text-zinc-900 text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] hover:text-emerald-700 transition-colors cursor-pointer block"
+              className="font-bold text-zinc-900 text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] hover:text-emerald-700 transition-colors cursor-pointer block break-words"
               title={`Open ${product.name} in separate tab`}
             >
               {product.name}
@@ -267,22 +267,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </span>
             ) : isLowStock ? (
               <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                Only {product.stock} left!
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                <span>Only {product.stock} left</span>
               </span>
             ) : (
               <span className="text-[10px] sm:text-[11px] font-medium text-emerald-700 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                In Stock ({product.stock})
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span>In Stock ({product.stock})</span>
               </span>
             )}
           </div>
 
           {/* Color Variants Swatches */}
           {Array.isArray(product.colors) && product.colors.length > 0 && (
-            <div className="flex items-center gap-1.5 mb-2.5">
-              <div className="flex items-center -space-x-1">
-                {product.colors.slice(0, 5).map((c, i) => (
+            <div className="flex items-center gap-1.5 mb-2.5 min-w-0">
+              <div className="flex items-center -space-x-1 shrink-0">
+                {product.colors.slice(0, 4).map((c, i) => (
                   <span
                     key={i}
                     title={c.name}
@@ -291,7 +291,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   />
                 ))}
               </div>
-              <span className="text-[10px] text-zinc-500 font-semibold">
+              <span className="text-[10px] text-zinc-500 font-semibold truncate">
                 {product.colors.length} {product.colors.length === 1 ? 'color' : 'colors'}
               </span>
             </div>
@@ -299,13 +299,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Pricing & Add to Cart button */}
-        <div className="pt-2">
-          <div className="flex items-baseline gap-1.5 sm:gap-2 mb-2.5 sm:mb-3 min-h-[26px]">
-            <span className="text-base sm:text-lg font-black text-zinc-950">
+        <div className="pt-1.5 min-w-0">
+          <div className="flex flex-wrap items-baseline gap-1 sm:gap-2 mb-2 sm:mb-2.5 min-h-[24px]">
+            <span className="text-sm xs:text-base sm:text-lg font-black text-zinc-950">
               ৳{finalPrice.toLocaleString('en-BD')}
             </span>
             {hasDiscount && (
-              <span className="text-[11px] sm:text-xs font-semibold text-zinc-400 line-through">
+              <span className="text-[10px] xs:text-[11px] sm:text-xs font-semibold text-zinc-400 line-through">
                 ৳{sellingPrice.toLocaleString('en-BD')}
               </span>
             )}
@@ -315,7 +315,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             type="button"
             disabled={isOutOfStock}
             onClick={() => onAddToCart(product)}
-            className={`w-full min-h-[40px] sm:min-h-[44px] py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 transition-all cursor-pointer ${
+            className={`w-full min-h-[38px] sm:min-h-[44px] py-1.5 sm:py-2.5 px-2 xs:px-3 sm:px-4 rounded-xl font-bold text-[11px] xs:text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer ${
               isOutOfStock
                 ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
                 : isAdded

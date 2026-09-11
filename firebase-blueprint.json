@@ -50,6 +50,24 @@
       },
       "required": ["id", "order_number", "customer_name"]
     },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer account profile with phone, delivery address, and order statistics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "alt_phone": { "type": "string" },
+        "email": { "type": "string" },
+        "district": { "type": "string" },
+        "area": { "type": "string" },
+        "address": { "type": "string" },
+        "total_orders": { "type": "number" },
+        "total_spent": { "type": "number" }
+      },
+      "required": ["id", "name", "phone"]
+    },
     "Category": {
       "title": "Category",
       "description": "Root Category taxonomy tier 1",

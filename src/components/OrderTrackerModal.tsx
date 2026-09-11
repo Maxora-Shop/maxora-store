@@ -54,10 +54,10 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-      <div className="relative bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2.5 sm:p-4 bg-zinc-950/70 backdrop-blur-sm">
+      <div className="relative bg-white w-full max-w-xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col my-auto max-h-[94vh]">
         {/* Header */}
-        <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+        <div className="p-4 sm:p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center">
               <Truck className="w-4 h-4" />

@@ -17,9 +17,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/75 backdrop-blur-sm animate-fade-in">
-      <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col">
+      <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col my-auto">
         {/* Modal Top Actions */}
-        <div className="p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 print:hidden">
+        <div className="p-3.5 sm:p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 print:hidden">
           <div className="flex items-center gap-2">
             <Package className="w-5 h-5 text-emerald-600" />
             <h3 className="font-extrabold text-sm text-zinc-900">
@@ -44,7 +44,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
         </div>
 
         {/* Printable Invoice Area */}
-        <div id="printable-invoice" className="p-8 overflow-y-auto space-y-6 text-zinc-900 bg-white">
+        <div id="printable-invoice" className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-6 text-zinc-900 bg-white">
           {/* Header */}
           <div className="flex items-start justify-between border-b border-zinc-200 pb-6">
             <div>

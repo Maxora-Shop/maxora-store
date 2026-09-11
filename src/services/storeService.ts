@@ -23,11 +23,18 @@ const SETTINGS_KEY = 'maxora_settings_v1';
 const PRODUCTS_KEY = 'maxora_products_v1';
 const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
+const CURRENT_CUSTOMER_KEY = 'maxora_current_customer_v1';
 const CATEGORIES_KEY = 'maxora_categories_v1';
 const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
 const PRODUCT_TYPES_KEY = 'maxora_product_types_v1';
 const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
+
+function notifyCustomerAuthChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_customer_auth_changed'));
+  }
+}
 
 function notifyProductsChanged(): void {
   if (typeof window !== 'undefined') {
@@ -1189,6 +1196,240 @@ export const storeService = {
     }
 
     return [...customers].sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+  },
+
+  // 4. CUSTOMER ACCOUNT & AUTHENTICATION
+  getCurrentCustomer(): Customer | null {
+    return getLocal<Customer | null>(CURRENT_CUSTOMER_KEY, null);
+  },
+
+  setCurrentCustomer(customer: Customer | null): void {
+    setLocal(CURRENT_CUSTOMER_KEY, customer);
+    notifyCustomerAuthChanged();
+  },
+
+  async customerLogin(phoneOrEmail: string, password?: string): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+    const cleanQuery = phoneOrEmail.trim();
+    if (!cleanQuery) {
+      return { success: false, error: 'Please enter your mobile phone number or email.' };
+    }
+
+    const cleanPhone = cleanQuery.replace(/[^0-9]/g, '');
+
+    // 1. Check local & Firestore
+    let allCustomers = await this.getAllCustomers();
+    let found = allCustomers.find((c) => {
+      const cPhone = (c.phone || '').replace(/[^0-9]/g, '');
+      const cEmail = (c.email || '').toLowerCase().trim();
+      return (cleanPhone && cPhone === cleanPhone) || (cEmail && cEmail === cleanQuery.toLowerCase());
+    });
+
+    // If not found in memory, try Firestore direct lookup
+    if (!found) {
+      try {
+        if (cleanPhone) {
+          const custDoc = await getDoc(doc(db, 'customers', `cust-${cleanPhone}`));
+          if (custDoc.exists()) {
+            found = custDoc.data() as Customer;
+          }
+        }
+      } catch (e) {
+        console.warn('Firestore direct customer lookup error:', e);
+      }
+    }
+
+    // Also check backend API if available
+    if (!found) {
+      try {
+        const apiRes = await tryApi<{ success: boolean; customer?: Customer; error?: string }>('/api/customer/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneOrEmail: cleanQuery, password }),
+        });
+        if (apiRes.success && apiRes.data?.customer) {
+          found = apiRes.data.customer;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!found) {
+      // If customer has previous orders with this phone, auto-link their profile
+      const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+      const matchingOrder = orders.find(o => (o.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+      if (matchingOrder) {
+        found = {
+          id: `cust-${cleanPhone}`,
+          name: matchingOrder.customer_name || 'Valued Customer',
+          phone: matchingOrder.phone,
+          district: matchingOrder.district,
+          area: matchingOrder.area,
+          address: matchingOrder.address,
+          total_orders: 1,
+          total_spent: matchingOrder.total || 0,
+          created_at: matchingOrder.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        // Persist to local & Firestore
+        const customersList = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+        customersList.push(found);
+        setLocal(CUSTOMERS_KEY, customersList);
+        try {
+          await setDoc(doc(db, 'customers', found.id), cleanForFirestore(found), { merge: true });
+        } catch {
+          // ignore
+        }
+      } else {
+        return {
+          success: false,
+          error: 'No account found with this phone or email. Please register a new account.',
+        };
+      }
+    }
+
+    // Optional password verification: if password was set on account and provided
+    if (found.password && password && found.password !== password) {
+      return { success: false, error: 'Incorrect password. Please try again or reset.' };
+    }
+
+    // If customer didn't have password set yet and entered one, save it
+    if (!found.password && password) {
+      found.password = password;
+      found.updated_at = new Date().toISOString();
+      await this.updateCustomerProfile(found.id, { password });
+    }
+
+    this.setCurrentCustomer(found);
+    return { success: true, customer: found };
+  },
+
+  async customerRegister(data: {
+    name: string;
+    phone: string;
+    email?: string;
+    password?: string;
+    district?: string;
+    area?: string;
+    address?: string;
+  }): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+    const name = (data.name || '').trim();
+    const phone = (data.phone || '').trim();
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    if (!name) {
+      return { success: false, error: 'Please enter your full name.' };
+    }
+    if (!cleanPhone || cleanPhone.length < 11) {
+      return { success: false, error: 'Please enter a valid 11-digit Bangladesh phone number (e.g. 017...)' };
+    }
+
+    const customerId = `cust-${cleanPhone}`;
+    const newCustomer: Customer = {
+      id: customerId,
+      name,
+      phone,
+      email: (data.email || '').trim().toLowerCase(),
+      password: data.password || '',
+      district: data.district || 'Dhaka',
+      area: data.area || '',
+      address: data.address || '',
+      total_orders: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'customers', customerId), cleanForFirestore(newCustomer), { merge: true });
+    } catch (e) {
+      console.warn('Firestore customerRegister error:', e);
+    }
+
+    // Save locally
+    const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    const existingIdx = customers.findIndex((c) => c.id === customerId || c.phone === phone);
+    if (existingIdx >= 0) {
+      customers[existingIdx] = { ...customers[existingIdx], ...newCustomer };
+    } else {
+      customers.unshift(newCustomer);
+    }
+    setLocal(CUSTOMERS_KEY, customers);
+
+    // Call backend API if running
+    tryApi<{ success: boolean; customer: Customer }>('/api/customer/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCustomer),
+    }).catch(() => {});
+
+    this.setCurrentCustomer(newCustomer);
+    return { success: true, customer: newCustomer };
+  },
+
+  customerLogout(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CURRENT_CUSTOMER_KEY);
+    }
+    notifyCustomerAuthChanged();
+  },
+
+  async updateCustomerProfile(customerId: string, updates: Partial<Customer>): Promise<{ success: boolean; customer?: Customer; error?: string }> {
+    const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    const idx = customers.findIndex((c) => c.id === customerId);
+    if (idx < 0) {
+      return { success: false, error: 'Customer not found.' };
+    }
+
+    const updated = {
+      ...customers[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    customers[idx] = updated;
+    setLocal(CUSTOMERS_KEY, customers);
+
+    // Update active session if this is the current customer
+    const current = this.getCurrentCustomer();
+    if (current && current.id === customerId) {
+      this.setCurrentCustomer(updated);
+    }
+
+    // Sync to Firestore
+    try {
+      await setDoc(doc(db, 'customers', customerId), cleanForFirestore(updated), { merge: true });
+    } catch (e) {
+      console.warn('Firestore updateCustomerProfile error:', e);
+    }
+
+    // Sync to API
+    tryApi('/api/customer/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerId, ...updates }),
+    }).catch(() => {});
+
+    return { success: true, customer: updated };
+  },
+
+  async getCustomerOrders(phoneOrCustomerId: string): Promise<Order[]> {
+    if (!phoneOrCustomerId) return [];
+    const clean = phoneOrCustomerId.trim();
+    const cleanDigits = clean.replace(/[^0-9]/g, '');
+
+    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    const matched = orders.filter((o) => {
+      const orderPhoneDigits = (o.phone || '').replace(/[^0-9]/g, '');
+      const custPhoneDigits = (o.customer_phone || '').replace(/[^0-9]/g, '');
+      return (
+        o.customer_id === clean ||
+        (cleanDigits && orderPhoneDigits === cleanDigits) ||
+        (cleanDigits && custPhoneDigits === cleanDigits)
+      );
+    });
+
+    return matched.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {

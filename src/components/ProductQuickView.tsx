@@ -231,19 +231,19 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
           onClose();
         }
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col md:flex-row"
+        className="relative bg-white w-full max-w-4xl rounded-2xl sm:rounded-3xl overflow-y-auto md:overflow-hidden shadow-2xl border border-zinc-200 max-h-[94vh] flex flex-col md:flex-row"
       >
         {/* Header Action Buttons */}
-        <div className="absolute top-3.5 right-3.5 z-30 flex items-center gap-2">
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 sm:gap-2">
           <a
             href={`/product/${getProductSlug(product)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="h-9 px-3 rounded-full bg-white/95 border border-zinc-200 hover:bg-zinc-100 flex items-center gap-1.5 text-zinc-700 hover:text-emerald-700 transition-colors shadow-sm text-xs font-bold"
+            className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-white/95 border border-zinc-200 hover:bg-zinc-100 flex items-center gap-1.5 text-zinc-700 hover:text-emerald-700 transition-colors shadow-sm text-xs font-bold"
             title="Open in separate tab (আলাদা ট্যাবে খুলুন)"
           >
             <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
@@ -253,7 +253,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
           <button
             type="button"
             onClick={() => onToggleWishlist?.(product)}
-            className={`w-9 h-9 rounded-full border transition-all flex items-center justify-center shadow-sm cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border transition-all flex items-center justify-center shadow-sm cursor-pointer ${
               isWishlisted
                 ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
                 : 'bg-white/95 border-zinc-200 text-zinc-600 hover:text-rose-600 hover:bg-zinc-100'
@@ -262,7 +262,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
             title={isWishlisted ? 'Remove from Saved Items' : 'Save to Wishlist'}
           >
             <Heart
-              className={`w-4.5 h-4.5 transition-transform ${
+              className={`w-4 h-4 sm:w-4.5 sm:h-4.5 transition-transform ${
                 isWishlisted ? 'fill-rose-500 text-rose-500 scale-110' : ''
               }`}
             />
@@ -270,15 +270,15 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white/95 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center text-zinc-700 transition-colors shadow-sm cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/95 border border-zinc-200 hover:bg-zinc-100 flex items-center justify-center text-zinc-700 transition-colors shadow-sm cursor-pointer"
             aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Product Media Column */}
-        <div className="w-full md:w-1/2 p-5 sm:p-6 bg-zinc-50 flex flex-col justify-between border-b md:border-b-0 md:border-r border-zinc-200">
+        <div className="w-full md:w-1/2 p-3.5 sm:p-6 bg-zinc-50 flex flex-col justify-between border-b md:border-b-0 md:border-r border-zinc-200 shrink-0">
           <div>
             <div className="aspect-square rounded-2xl overflow-hidden bg-white border border-zinc-200 shadow-inner flex items-center justify-center mb-4">
               <img

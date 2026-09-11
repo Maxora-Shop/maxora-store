@@ -237,6 +237,21 @@
       "total_spent": 2080,
       "created_at": "2026-08-30T14:37:22.504Z",
       "updated_at": "2026-08-30T14:37:22.504Z"
+    },
+    {
+      "id": "cust-01712345678",
+      "name": "Tanvir Rahman",
+      "phone": "01712345678",
+      "alt_phone": "",
+      "email": "tanvir@example.com",
+      "password": "password123",
+      "district": "Dhaka",
+      "area": "",
+      "address": "Mirpur 10, Road 5",
+      "total_orders": 0,
+      "total_spent": 0,
+      "created_at": "2026-09-11T05:58:46.149Z",
+      "updated_at": "2026-09-11T05:58:46.149Z"
     }
   ],
   "orders": [
@@ -351,24 +366,154 @@
     }
   ],
   "categories": [
-    { "id": "cat-smart-gadgets", "name": "Smart Gadgets", "slug": "smart-gadgets", "icon": "Watch", "active": 1, "display_order": 1 },
-    { "id": "cat-audio", "name": "Audio", "slug": "audio", "icon": "Headphones", "active": 1, "display_order": 2 },
-    { "id": "cat-lifestyle-bags", "name": "Lifestyle & Bags", "slug": "lifestyle-bags", "icon": "ShoppingBag", "active": 1, "display_order": 3 },
-    { "id": "cat-home-living", "name": "Home & Living", "slug": "home-living", "icon": "Home", "active": 1, "display_order": 4 },
-    { "id": "cat-accessories", "name": "Accessories", "slug": "accessories", "icon": "Shirt", "active": 1, "display_order": 5 },
-    { "id": "cat-gourmet-food", "name": "Gourmet & Food", "slug": "gourmet-food", "icon": "Coffee", "active": 1, "display_order": 6 }
+    {
+      "id": "cat-smart-gadgets",
+      "name": "Smart Gadgets",
+      "slug": "smart-gadgets",
+      "icon": "Watch",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "cat-audio",
+      "name": "Audio",
+      "slug": "audio",
+      "icon": "Headphones",
+      "active": 1,
+      "display_order": 2
+    },
+    {
+      "id": "cat-lifestyle-bags",
+      "name": "Lifestyle & Bags",
+      "slug": "lifestyle-bags",
+      "icon": "ShoppingBag",
+      "active": 1,
+      "display_order": 3
+    },
+    {
+      "id": "cat-home-living",
+      "name": "Home & Living",
+      "slug": "home-living",
+      "icon": "Home",
+      "active": 1,
+      "display_order": 4
+    },
+    {
+      "id": "cat-accessories",
+      "name": "Accessories",
+      "slug": "accessories",
+      "icon": "Shirt",
+      "active": 1,
+      "display_order": 5
+    },
+    {
+      "id": "cat-gourmet-food",
+      "name": "Gourmet & Food",
+      "slug": "gourmet-food",
+      "icon": "Coffee",
+      "active": 1,
+      "display_order": 6
+    }
   ],
   "subcategories": [
-    { "id": "subcat-smartwatches", "category_id": "cat-smart-gadgets", "category_slug": "smart-gadgets", "name": "Smartwatches", "slug": "smartwatches", "active": 1, "display_order": 1 },
-    { "id": "subcat-fitness-bands", "category_id": "cat-smart-gadgets", "category_slug": "smart-gadgets", "name": "Fitness Bands", "slug": "fitness-bands", "active": 1, "display_order": 2 },
-    { "id": "subcat-gaming-accessories", "category_id": "cat-smart-gadgets", "category_slug": "smart-gadgets", "name": "Gaming Accessories", "slug": "gaming-accessories", "active": 1, "display_order": 3 },
-    { "id": "subcat-wireless-earbuds", "category_id": "cat-audio", "category_slug": "audio", "name": "Wireless Earbuds", "slug": "wireless-earbuds", "active": 1, "display_order": 1 },
-    { "id": "subcat-bluetooth-speakers", "category_id": "cat-audio", "category_slug": "audio", "name": "Bluetooth Speakers", "slug": "bluetooth-speakers", "active": 1, "display_order": 2 },
-    { "id": "subcat-anti-theft-backpacks", "category_id": "cat-lifestyle-bags", "category_slug": "lifestyle-bags", "name": "Anti-Theft Backpacks", "slug": "anti-theft-backpacks", "active": 1, "display_order": 1 },
-    { "id": "subcat-drinkware-flasks", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Drinkware & Vacuum Flasks", "slug": "drinkware-flasks", "active": 1, "display_order": 1 },
-    { "id": "subcat-coffee-gear", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Coffee Gear", "slug": "coffee-gear", "active": 1, "display_order": 2 },
-    { "id": "subcat-home-appliances", "category_id": "cat-home-living", "category_slug": "home-living", "name": "Home Appliances", "slug": "home-appliances", "active": 1, "display_order": 3 },
-    { "id": "subcat-leather-wallets", "category_id": "cat-accessories", "category_slug": "accessories", "name": "Leather Wallets", "slug": "leather-wallets", "active": 1, "display_order": 1 },
-    { "id": "subcat-organic-tea", "category_id": "cat-gourmet-food", "category_slug": "gourmet-food", "name": "Organic Tea", "slug": "organic-tea", "active": 1, "display_order": 1 }
+    {
+      "id": "subcat-smartwatches",
+      "category_id": "cat-smart-gadgets",
+      "category_slug": "smart-gadgets",
+      "name": "Smartwatches",
+      "slug": "smartwatches",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "subcat-fitness-bands",
+      "category_id": "cat-smart-gadgets",
+      "category_slug": "smart-gadgets",
+      "name": "Fitness Bands",
+      "slug": "fitness-bands",
+      "active": 1,
+      "display_order": 2
+    },
+    {
+      "id": "subcat-gaming-accessories",
+      "category_id": "cat-smart-gadgets",
+      "category_slug": "smart-gadgets",
+      "name": "Gaming Accessories",
+      "slug": "gaming-accessories",
+      "active": 1,
+      "display_order": 3
+    },
+    {
+      "id": "subcat-wireless-earbuds",
+      "category_id": "cat-audio",
+      "category_slug": "audio",
+      "name": "Wireless Earbuds",
+      "slug": "wireless-earbuds",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "subcat-bluetooth-speakers",
+      "category_id": "cat-audio",
+      "category_slug": "audio",
+      "name": "Bluetooth Speakers",
+      "slug": "bluetooth-speakers",
+      "active": 1,
+      "display_order": 2
+    },
+    {
+      "id": "subcat-anti-theft-backpacks",
+      "category_id": "cat-lifestyle-bags",
+      "category_slug": "lifestyle-bags",
+      "name": "Anti-Theft Backpacks",
+      "slug": "anti-theft-backpacks",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "subcat-drinkware-flasks",
+      "category_id": "cat-home-living",
+      "category_slug": "home-living",
+      "name": "Drinkware & Vacuum Flasks",
+      "slug": "drinkware-flasks",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "subcat-coffee-gear",
+      "category_id": "cat-home-living",
+      "category_slug": "home-living",
+      "name": "Coffee Gear",
+      "slug": "coffee-gear",
+      "active": 1,
+      "display_order": 2
+    },
+    {
+      "id": "subcat-home-appliances",
+      "category_id": "cat-home-living",
+      "category_slug": "home-living",
+      "name": "Home Appliances",
+      "slug": "home-appliances",
+      "active": 1,
+      "display_order": 3
+    },
+    {
+      "id": "subcat-leather-wallets",
+      "category_id": "cat-accessories",
+      "category_slug": "accessories",
+      "name": "Leather Wallets",
+      "slug": "leather-wallets",
+      "active": 1,
+      "display_order": 1
+    },
+    {
+      "id": "subcat-organic-tea",
+      "category_id": "cat-gourmet-food",
+      "category_slug": "gourmet-food",
+      "name": "Organic Tea",
+      "slug": "organic-tea",
+      "active": 1,
+      "display_order": 1
+    }
   ]
 }

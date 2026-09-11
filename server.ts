@@ -795,6 +795,166 @@ app.get('/api/orders/track/:query', (req, res) => {
 });
 
 // ==========================================
+// CUSTOMER ACCOUNT & AUTHENTICATION ENDPOINTS
+// ==========================================
+
+// POST /api/customer/login
+app.post('/api/customer/login', (req, res) => {
+  const { phoneOrEmail, phone, identifier, email, password } = req.body || {};
+  const query = String(phoneOrEmail || phone || identifier || email || '').trim();
+  if (!query) {
+    return res.status(400).json({ success: false, error: 'Phone number or email is required.' });
+  }
+
+  const cleanPhone = query.replace(/[^0-9]/g, '');
+  let customer = db.customers.find(c => {
+    const cPhone = (c.phone || '').replace(/[^0-9]/g, '');
+    const cEmail = (c.email || '').toLowerCase().trim();
+    return (cleanPhone && cPhone === cleanPhone) || (cEmail && cEmail === query.toLowerCase());
+  });
+
+  if (!customer) {
+    // Check if customer placed an order earlier
+    const prevOrder = db.orders.find(o => (o.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+    if (prevOrder) {
+      customer = {
+        id: `cust-${cleanPhone}`,
+        name: prevOrder.customer_name || 'Valued Customer',
+        phone: prevOrder.phone,
+        alt_phone: prevOrder.alt_phone || '',
+        email: prevOrder.email || '',
+        district: prevOrder.district || '',
+        area: prevOrder.area || '',
+        address: prevOrder.address || '',
+        total_orders: 1,
+        total_spent: prevOrder.total || 0,
+        created_at: prevOrder.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      db.customers.push(customer);
+      saveDB();
+    } else {
+      return res.status(404).json({ success: false, error: 'No customer account found with this phone or email.' });
+    }
+  }
+
+  if (customer.password && password && customer.password !== password) {
+    return res.status(401).json({ success: false, error: 'Incorrect password.' });
+  }
+
+  if (!customer.password && password) {
+    customer.password = password;
+    customer.updated_at = new Date().toISOString();
+    saveDB();
+  }
+
+  const { password: _, ...safeCustomer } = customer;
+  res.json({ success: true, customer: safeCustomer });
+});
+
+// POST /api/customer/register
+app.post('/api/customer/register', (req, res) => {
+  const body = req.body || {};
+  const name = String(body.name || '').trim();
+  const phone = String(body.phone || '').trim();
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'Full name is required.' });
+  }
+  if (!cleanPhone || cleanPhone.length < 11) {
+    return res.status(400).json({ success: false, error: 'Valid 11-digit phone number is required.' });
+  }
+
+  const customerId = `cust-${cleanPhone}`;
+  let customer = db.customers.find(c => c.id === customerId || (c.phone || '').replace(/[^0-9]/g, '') === cleanPhone);
+
+  if (customer) {
+    customer.name = name;
+    if (body.email) customer.email = body.email.trim().toLowerCase();
+    if (body.password) customer.password = body.password;
+    if (body.district) customer.district = body.district;
+    if (body.area) customer.area = body.area;
+    if (body.address) customer.address = body.address;
+    customer.updated_at = new Date().toISOString();
+  } else {
+    customer = {
+      id: customerId,
+      name,
+      phone,
+      alt_phone: body.alt_phone || '',
+      email: (body.email || '').trim().toLowerCase(),
+      password: body.password || '',
+      district: body.district || 'Dhaka',
+      area: body.area || '',
+      address: body.address || '',
+      total_orders: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    db.customers.push(customer);
+  }
+
+  saveDB();
+  const { password: _, ...safeCustomer } = customer;
+  res.status(201).json({ success: true, customer: safeCustomer });
+});
+
+// PUT /api/customer/profile
+app.put('/api/customer/profile', (req, res) => {
+  const { customerId, name, phone, alt_phone, email, district, area, address, password } = req.body || {};
+  if (!customerId) {
+    return res.status(400).json({ success: false, error: 'Customer ID is required.' });
+  }
+
+  const customer = db.customers.find(c => c.id === customerId);
+  if (!customer) {
+    return res.status(404).json({ success: false, error: 'Customer not found.' });
+  }
+
+  if (name) customer.name = name.trim();
+  if (phone) customer.phone = phone.trim();
+  if (alt_phone !== undefined) customer.alt_phone = alt_phone.trim();
+  if (email !== undefined) customer.email = email.trim().toLowerCase();
+  if (district) customer.district = district;
+  if (area !== undefined) customer.area = area;
+  if (address !== undefined) customer.address = address;
+  if (password) customer.password = password;
+  customer.updated_at = new Date().toISOString();
+
+  saveDB();
+  const { password: _, ...safeCustomer } = customer;
+  res.json({ success: true, customer: safeCustomer });
+});
+
+// GET /api/customer/orders
+app.get('/api/customer/orders', (req, res) => {
+  const phone = String(req.query.phone || '').trim();
+  const customerId = String(req.query.customerId || '').trim();
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+  if (!cleanPhone && !customerId) {
+    return res.status(400).json({ success: false, error: 'Phone or customerId required.' });
+  }
+
+  const matched = db.orders.filter(o => {
+    const oPhone = (o.phone || '').replace(/[^0-9]/g, '');
+    return o.customer_id === customerId || (cleanPhone && oPhone === cleanPhone);
+  });
+
+  const ordersWithItems = matched.map(order => ({
+    ...order,
+    items: db.order_items.filter(i => i.order_id === order.id)
+  }));
+
+  res.json({
+    success: true,
+    orders: ordersWithItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  });
+});
+
+// ==========================================
 // ADMIN API ENDPOINTS
 // ==========================================
 

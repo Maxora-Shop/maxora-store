@@ -119,6 +119,8 @@ export interface Customer {
   phone: string;
   alt_phone?: string;
   email?: string;
+  password?: string;
+  avatar?: string;
   district?: string;
   area?: string;
   address?: string;

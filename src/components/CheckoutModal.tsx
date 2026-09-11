@@ -141,19 +141,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-      <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 my-8 max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-2.5 sm:p-4 bg-zinc-950/70 backdrop-blur-sm">
+      <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 my-auto max-h-[94vh] flex flex-col">
         {/* Modal Header */}
-        <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+        <div className="p-3.5 sm:p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white flex items-center justify-center font-bold text-sm">
+            <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white flex items-center justify-center font-bold text-sm shrink-0">
               MX
             </div>
-            <div>
-              <h2 className="font-extrabold text-lg text-zinc-900">
+            <div className="min-w-0">
+              <h2 className="font-extrabold text-base sm:text-lg text-zinc-900 truncate">
                 {completedOrder ? 'Order Confirmed' : 'Checkout & Cash on Delivery'}
               </h2>
-              <p className="text-xs text-zinc-500">
+              <p className="text-[11px] sm:text-xs text-zinc-500 truncate">
                 {completedOrder
                   ? 'Thank you for choosing Maxora'
                   : 'Fast delivery across all 64 districts of Bangladesh'}
@@ -163,14 +163,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           {completedOrder ? (
             /* Success State */
             <div className="text-center py-4 space-y-6">

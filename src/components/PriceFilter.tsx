@@ -44,7 +44,7 @@ export const PriceFilter: React.FC<PriceFilterProps> = ({
   return (
     <div
       id="price-filter-section"
-      className="p-3.5 sm:p-4 bg-zinc-50 border border-zinc-200/90 rounded-2xl mb-6 shadow-2xs"
+      className="p-3 sm:p-4 bg-zinc-50 border border-zinc-200/90 rounded-2xl mb-6 shadow-2xs max-w-full overflow-hidden"
     >
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
@@ -89,7 +89,7 @@ export const PriceFilter: React.FC<PriceFilterProps> = ({
       </div>
 
       {/* Preset Price Filtering Buttons */}
-      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-none">
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 max-w-full scrollbar-none">
         {PRESET_PRICE_OPTIONS.map((preset) => {
           const isSelected = selectedPreset === preset.id;
           return (

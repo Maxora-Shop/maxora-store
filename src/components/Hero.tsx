@@ -141,13 +141,13 @@ export const Hero: React.FC<HeroProps> = ({
   };
 
   return (
-    <section className="my-4 sm:my-6 mx-auto max-w-7xl px-3 sm:px-6">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-stretch">
+    <section className="my-3 sm:my-6 w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 lg:gap-6 items-stretch">
         {/* ====================================================
             MAIN MARKETPLACE HERO / BANNER SECTION (8 Cols on Desktop)
         ==================================================== */}
         <div
-          className="lg:col-span-8 relative bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 text-white rounded-3xl p-6 sm:p-8 lg:p-10 shadow-sm border border-zinc-800 overflow-hidden flex flex-col justify-between"
+          className="lg:col-span-8 relative bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 lg:p-10 shadow-sm border border-zinc-800 overflow-hidden flex flex-col justify-between"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -247,12 +247,12 @@ export const Hero: React.FC<HeroProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-2 w-full">
                     <a
                       href={`/product/${getProductSlug(currentProduct)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-6 py-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer"
+                      className="flex-1 sm:flex-initial px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-zinc-100 text-zinc-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer text-center"
                     >
                       <span>Shop Now</span>
                       <ExternalLink className="w-4 h-4 text-emerald-600" />
@@ -261,7 +261,7 @@ export const Hero: React.FC<HeroProps> = ({
                     <button
                       type="button"
                       onClick={() => onAddToCart && onAddToCart(currentProduct)}
-                      className="px-5 py-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95 cursor-pointer"
+                      className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all border border-zinc-700 active:scale-95 cursor-pointer text-center"
                     >
                       <ShoppingBag className="w-4 h-4 text-emerald-400" />
                       <span>Add to Cart</span>
@@ -275,7 +275,7 @@ export const Hero: React.FC<HeroProps> = ({
                     href={`/product/${getProductSlug(currentProduct)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="relative w-full aspect-square max-w-[280px] sm:max-w-[320px] rounded-2xl bg-zinc-900/70 border border-zinc-800 p-4 flex items-center justify-center group cursor-pointer overflow-hidden shadow-inner block"
+                    className="relative w-full aspect-square max-w-[210px] xs:max-w-[250px] sm:max-w-[320px] rounded-2xl bg-zinc-900/70 border border-zinc-800 p-3 sm:p-4 flex items-center justify-center group cursor-pointer overflow-hidden shadow-inner block mx-auto"
                     title={`Open ${currentProduct.name} in separate tab`}
                   >
                     <img
@@ -338,7 +338,7 @@ export const Hero: React.FC<HeroProps> = ({
         ==================================================== */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           {/* Promo Card 1: Fast Cash on Delivery */}
-          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-zinc-200/90 shadow-xs flex flex-col justify-between h-full group hover:border-emerald-500/40 transition-all">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-zinc-200/90 shadow-xs flex flex-col justify-between h-full group hover:border-emerald-500/40 transition-all">
             <div className="space-y-2.5">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-[11px] font-extrabold uppercase">
                 <Truck className="w-3.5 h-3.5 text-emerald-600" />
@@ -369,7 +369,7 @@ export const Hero: React.FC<HeroProps> = ({
           </div>
 
           {/* Promo Card 2: 100% Quality & Easy Exchange */}
-          <div className="bg-gradient-to-br from-zinc-50 to-emerald-50/40 rounded-3xl p-5 sm:p-6 border border-zinc-200/90 shadow-xs flex flex-col justify-between h-full group hover:border-emerald-500/40 transition-all">
+          <div className="bg-gradient-to-br from-zinc-50 to-emerald-50/40 rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-zinc-200/90 shadow-xs flex flex-col justify-between h-full group hover:border-emerald-500/40 transition-all">
             <div className="space-y-2.5">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 text-white text-[11px] font-extrabold uppercase">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

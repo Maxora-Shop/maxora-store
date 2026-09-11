@@ -11,7 +11,9 @@ import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 import { AdminDashboard } from './components/AdminDashboard';
-import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review } from './types';
+import { CustomerAccountModal } from './components/CustomerAccountModal';
+import { InvoiceModal } from './components/InvoiceModal';
+import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
@@ -79,6 +81,18 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+  const [isCustomerAccountOpen, setIsCustomerAccountOpen] = useState(false);
+  const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(() => storeService.getCurrentCustomer());
+  const [customerInvoiceOrder, setCustomerInvoiceOrder] = useState<Order | null>(null);
+
+  // Sync customer authentication across events
+  useEffect(() => {
+    const handleCustomerSync = () => {
+      setCurrentCustomer(storeService.getCurrentCustomer());
+    };
+    window.addEventListener('maxora_customer_auth_changed', handleCustomerSync);
+    return () => window.removeEventListener('maxora_customer_auth_changed', handleCustomerSync);
+  }, []);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [quickViewInitialTab, setQuickViewInitialTab] = useState<'details' | 'reviews'>('details');
   const [isProductNotFound, setIsProductNotFound] = useState(false);
@@ -852,6 +866,8 @@ export default function App() {
         settings={settings}
         cartCount={totalCartCount}
         wishlistCount={wishlistIds.length}
+        customer={currentCustomer}
+        onOpenCustomerAccount={() => setIsCustomerAccountOpen(true)}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
@@ -875,7 +891,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 w-full">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 w-full">
         {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
         {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
           <Hero
@@ -891,7 +907,7 @@ export default function App() {
         <section ref={productSectionRef} className="mt-6 sm:mt-8 mb-8 sm:mb-10 scroll-mt-24" id="products-catalog-section">
           {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category */}
           {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) && (
-            <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3.5 py-2.5 rounded-xl border border-zinc-200/90">
+            <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-200/90 max-w-full overflow-hidden">
               <button
                 type="button"
                 onClick={handleClearAllTaxonomy}
@@ -1091,7 +1107,7 @@ export default function App() {
 
           {/* Products List Grid */}
           {loadingProducts ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-6">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                 <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 animate-pulse">
                   <div className="aspect-square bg-zinc-200 rounded-xl" />
@@ -1103,7 +1119,7 @@ export default function App() {
             </div>
           ) : filteredProducts.length > 0 ? (
             <div
-              className={`grid gap-4 sm:gap-6 ${
+              className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
                 filteredProducts.length === 1
                   ? 'grid-cols-1 max-w-xs sm:max-w-sm mx-auto sm:mx-0'
                   : filteredProducts.length === 2
@@ -1212,8 +1228,8 @@ export default function App() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-8 border-t border-zinc-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-zinc-800">
+      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-24 sm:pb-8 border-t border-zinc-800">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-zinc-800">
           {/* Col 1 */}
           <div className="space-y-3 md:col-span-2">
             <div className="flex items-center gap-2">
@@ -1319,6 +1335,8 @@ export default function App() {
         settings={settings}
         cart={cart}
         wishlistCount={wishlistIds.length}
+        customer={currentCustomer}
+        onOpenCustomerAccount={() => setIsCustomerAccountOpen(true)}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenCheckout={() => {
@@ -1435,6 +1453,27 @@ export default function App() {
         isOpen={isTrackerOpen}
         onClose={() => setIsTrackerOpen(false)}
       />
+
+      {/* Customer Account & Order History Modal */}
+      <CustomerAccountModal
+        isOpen={isCustomerAccountOpen}
+        onClose={() => setIsCustomerAccountOpen(false)}
+        settings={settings}
+        wishlistProducts={savedProducts}
+        onRemoveWishlist={handleToggleWishlist}
+        onAddToCart={(p) => handleAddToCart(p, 1)}
+        onOpenInvoice={(order) => setCustomerInvoiceOrder(order)}
+        onOpenProduct={(p) => handleOpenProductDetail(p)}
+      />
+
+      {/* Customer Invoice Slip Modal */}
+      {customerInvoiceOrder && (
+        <InvoiceModal
+          order={customerInvoiceOrder}
+          settings={settings}
+          onClose={() => setCustomerInvoiceOrder(null)}
+        />
+      )}
 
       {/* Floating WhatsApp / Live Chat Support Button */}
       <FloatingSupportButton settings={settings} />
