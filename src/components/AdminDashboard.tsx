@@ -2228,11 +2228,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
-                  Orders Management
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  Process orders, verify phone numbers, update delivery status & print packaging slips
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
+                    Orders Management
+                  </h2>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Cloud Sync ({orders.length} orders)
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Live real-time synced with Firebase database. Process orders, print slips & update status.
                 </p>
               </div>
 
