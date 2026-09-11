@@ -1142,11 +1142,15 @@ export const storeService = {
     const firestoreCustomer = cleanForFirestore(customerData);
 
     try {
-      await setDoc(doc(db, 'orders', orderId), firestoreOrder);
-      await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
-      console.log('Order successfully synced to Firestore:', orderId);
-    } catch (e) {
-      console.warn('Firestore createOrder notice (syncing via API fallback):', e);
+      if (db) {
+        await setDoc(doc(db, 'orders', orderId), firestoreOrder);
+        await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
+        console.log('Order successfully synced to Firestore:', orderId);
+      } else {
+        console.warn('Firestore db instance not available on order creation.');
+      }
+    } catch (e: any) {
+      console.error('Firestore createOrder write error:', e?.message || e);
     }
 
     // 2. Also forward to API with complete order details for backend persistence
