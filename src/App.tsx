@@ -921,10 +921,6 @@ export default function App() {
         onOpenCart={() => setIsCartOpen(true)}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
-        onOpenAdmin={() => {
-          setIsAdminView(true);
-          window.history.pushState({}, '', '/admin');
-        }}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         categories={reconciledCategories}
