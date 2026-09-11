@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
 
 const app = express();
 const PORT = 3000;
@@ -1587,14 +1588,18 @@ ${productUrls}
 </urlset>`;
 }
 
-// GET /sitemap.xml (Dynamic Google XML Sitemap)
-app.get(['/sitemap.xml', '/api/sitemap.xml'], (req, res) => {
+// GET /sitemap.xml (Dynamic Google XML Sitemap from live Firestore)
+app.get(['/sitemap.xml', '/api/sitemap.xml'], async (req, res) => {
   const baseUrl = 'https://maxora-store-ruby.vercel.app';
-  const sitemap = buildDynamicSitemap(baseUrl);
-
-  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
-  res.send(sitemap);
+  try {
+    const sitemap = await generateDynamicSitemapXml(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    res.send(sitemap);
+  } catch (error) {
+    console.error('Error generating dynamic Firestore sitemap in server.ts:', error);
+    res.status(500).send('Error generating dynamic sitemap');
+  }
 });
 
 function cleanSlug(text: string): string {
