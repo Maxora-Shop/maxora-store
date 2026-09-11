@@ -4,7 +4,8 @@ import { Hero } from './components/Hero';
 import { PriceFilter, PriceRange } from './components/PriceFilter';
 import { FloatingSupportButton } from './components/FloatingSupportButton';
 import { ProductCard } from './components/ProductCard';
-import { ProductQuickView } from './components/ProductQuickView';
+import { ProductDetailsPage } from './components/ProductDetailsPage';
+import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { OrderTrackerModal } from './components/OrderTrackerModal';
@@ -496,6 +497,7 @@ export default function App() {
         window.history.pushState({ slug, productId: product.id }, '', newPath);
       }
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     // Fire Ad Pixels ViewContent event for product page views
     pixelService.trackViewContent(product);
   };
@@ -514,6 +516,7 @@ export default function App() {
         window.history.pushState({}, '', '/');
       }
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleUpdateQuantity = (productId: string, delta: number, selectedColor?: string) => {
@@ -891,20 +894,57 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 w-full">
-        {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
-        {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
-          <Hero
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 w-full min-h-[60vh]">
+        {quickViewProduct ? (
+          <ProductDetailsPage
+            product={quickViewProduct}
             settings={settings}
-            products={products}
-            onExploreClick={scrollToProducts}
-            onOpenProduct={handleOpenProductDetail}
-            onAddToCart={(p) => handleAddToCart(p, 1)}
+            allProducts={products}
+            onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
+            onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
+            isWishlisted={quickViewProduct ? wishlistIds.includes(quickViewProduct.id) : false}
+            onToggleWishlist={handleToggleWishlist}
+            ratingStats={quickViewProduct ? ratingStatsMap[quickViewProduct.id] : undefined}
+            onBackToHome={handleCloseProductDetail}
+            onSelectProduct={(p) => handleOpenProductDetail(p, true)}
+            initialTab={quickViewInitialTab}
           />
-        )}
+        ) : pendingSlugRef.current ? (
+          <ProductDetailsSkeleton />
+        ) : isProductNotFound && typeof window !== 'undefined' && window.location.pathname.startsWith('/product/') ? (
+          <div className="py-20 text-center space-y-4 max-w-md mx-auto animate-fade-in">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center shadow-xs">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-zinc-950">
+              Product Not Found
+            </h2>
+            <p className="text-xs sm:text-sm text-zinc-600 leading-relaxed font-medium">
+              The product you are looking for is unavailable, may have been removed, or the link is incorrect.
+            </p>
+            <button
+              type="button"
+              onClick={handleCloseProductDetail}
+              className="py-3.5 px-7 rounded-2xl font-bold text-xs sm:text-sm bg-zinc-950 hover:bg-zinc-800 text-white transition-colors cursor-pointer shadow-md active:scale-98"
+            >
+              Browse All Products
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
+            {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
+              <Hero
+                settings={settings}
+                products={products}
+                onExploreClick={scrollToProducts}
+                onOpenProduct={handleOpenProductDetail}
+                onAddToCart={(p) => handleAddToCart(p, 1)}
+              />
+            )}
 
-        {/* Product Grid Section */}
-        <section ref={productSectionRef} className="mt-6 sm:mt-8 mb-8 sm:mb-10 scroll-mt-24" id="products-catalog-section">
+            {/* Product Grid Section */}
+            <section ref={productSectionRef} className="mt-6 sm:mt-8 mb-8 sm:mb-10 scroll-mt-24" id="products-catalog-section">
           {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category */}
           {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) && (
             <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-200/90 max-w-full overflow-hidden">
@@ -1184,6 +1224,8 @@ export default function App() {
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
 
       {/* Trust & Guarantee Banner */}
@@ -1376,17 +1418,6 @@ export default function App() {
         onOrderSuccess={handleOrderSuccess}
       />
 
-      <ProductQuickView
-        product={quickViewProduct}
-        initialTab={quickViewInitialTab}
-        onClose={handleCloseProductDetail}
-        onAddToCart={(p, qty, col) => handleAddToCart(p, qty, col)}
-        onBuyNow={(p, qty, col) => handleBuyNow(p, qty, col)}
-        onReviewSubmitted={loadReviewsData}
-        isWishlisted={quickViewProduct ? wishlistIds.includes(quickViewProduct.id) : false}
-        onToggleWishlist={handleToggleWishlist}
-      />
-
       {/* Saved Items / Wishlist Slide-Over Drawer */}
       <SavedItemsDrawer
         isOpen={isWishlistOpen}
@@ -1409,45 +1440,6 @@ export default function App() {
         }}
         ratingStatsMap={ratingStatsMap}
       />
-
-      {/* Product Not Found Modal for Invalid Product URLs */}
-      {isProductNotFound && (
-        <div
-          onClick={() => {
-            setIsProductNotFound(false);
-            if (window.location.pathname.startsWith('/product/')) {
-              window.history.pushState({}, '', '/');
-            }
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm animate-fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative bg-white w-full max-w-md rounded-3xl p-6 sm:p-8 text-center shadow-2xl border border-zinc-200 animate-scale-up"
-          >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <AlertCircle className="w-8 h-8" />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-zinc-900 mb-2">
-              Product Not Found
-            </h2>
-            <p className="text-sm text-zinc-600 mb-6 leading-relaxed">
-              The product you are looking for is unavailable, may have been removed, or the link is incorrect.
-            </p>
-            <button
-              onClick={() => {
-                setIsProductNotFound(false);
-                if (window.location.pathname.startsWith('/product/')) {
-                  window.history.pushState({}, '', '/');
-                }
-              }}
-              className="w-full py-3.5 px-6 rounded-xl font-bold text-sm bg-zinc-950 hover:bg-zinc-800 text-white transition-colors cursor-pointer shadow-md"
-            >
-              Browse All Products
-            </button>
-          </div>
-        </div>
-      )}
 
       <OrderTrackerModal
         isOpen={isTrackerOpen}
