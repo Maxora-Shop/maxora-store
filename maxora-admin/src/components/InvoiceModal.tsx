@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Order, OrderItem, StoreSettings, Product } from '../types';
-import { Printer, X, Package, Loader2 } from 'lucide-react';
+import { Printer, X, Package, Loader2, ArrowRight } from 'lucide-react';
 import { storeService } from '../services/storeService';
 import { getProductSlug, generateSlug, findProductBySlugOrId, SITE_URL } from '../utils/seo';
 
@@ -9,6 +10,7 @@ interface InvoiceModalProps {
   settings: StoreSettings;
   products?: Product[];
   onClose: () => void;
+  onOpenProduct?: (product: Product) => void;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -16,13 +18,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   settings,
   products = [],
   onClose,
+  onOpenProduct,
 }) => {
   if (!order) return null;
 
   const [loadedProducts, setLoadedProducts] = useState<Product[]>(products);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [isPreloadingPrint, setIsPreloadingPrint] = useState(false);
-  const printableRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const printPortalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Sync or fetch products from store product database
   useEffect(() => {
@@ -48,96 +56,120 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
    * Universally resolves the real product record belonging to this order item from the store's product database.
    */
   const getItemProduct = (item: OrderItem, index: number): Product | null => {
-    if (!loadedProducts || loadedProducts.length === 0) return null;
+    const pool = loadedProducts && loadedProducts.length > 0 ? loadedProducts : products;
+    if (!pool || pool.length === 0) return null;
 
     if (item.product_id) {
-      const byId = loadedProducts.find((p) => String(p.id) === String(item.product_id));
+      const byId = pool.find((p) => String(p.id) === String(item.product_id));
       if (byId) return byId;
     }
 
     if (item.sku && item.sku.trim()) {
-      const bySku = loadedProducts.find(
+      const bySku = pool.find(
         (p) => p.sku && p.sku.toLowerCase().trim() === item.sku?.toLowerCase().trim()
       );
       if (bySku) return bySku;
     }
 
     if (item.product_name && item.product_name.trim()) {
-      const byName = loadedProducts.find(
+      const byName = pool.find(
         (p) => p.name && p.name.toLowerCase().trim() === item.product_name?.toLowerCase().trim()
       );
       if (byName) return byName;
     }
 
     if (item.product_id) {
-      const byHelper = findProductBySlugOrId(loadedProducts, item.product_id);
+      const byHelper = findProductBySlugOrId(pool, item.product_id);
       if (byHelper) return byHelper;
+    }
+
+    if ((item as any).slug) {
+      const bySlug = findProductBySlugOrId(pool, (item as any).slug);
+      if (bySlug) return bySlug;
     }
 
     return null;
   };
 
   /**
-   * Retrieves the product's actual image from the store's product database.
+   * Retrieves the product's actual image from the store's product database or order item snapshot.
    */
   const getItemImage = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
-    // 1. Prioritize actual image from store product database
     const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
-    if (prod) {
-      if (item.selected_color && Array.isArray(prod.colors)) {
-        const matchedCol = prod.colors.find(
-          (c) => c.name?.toLowerCase().trim() === item.selected_color?.toLowerCase().trim()
-        );
-        if (matchedCol?.image_url && matchedCol.image_url.trim()) {
-          return matchedCol.image_url.trim();
-        }
-      }
-      if (prod.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
-        return prod.image_url.trim();
-      }
-      if (Array.isArray(prod.images) && prod.images.length > 0 && prod.images[0]?.trim()) {
-        return prod.images[0].trim();
+
+    // 1. If color variant matches a specific color image
+    if (prod && item.selected_color && Array.isArray(prod.colors)) {
+      const matchedCol = prod.colors.find(
+        (c) => c.name?.toLowerCase().trim() === item.selected_color?.toLowerCase().trim()
+      );
+      if (matchedCol?.image_url && typeof matchedCol.image_url === 'string' && matchedCol.image_url.trim()) {
+        return matchedCol.image_url.trim();
       }
     }
 
-    // 2. Fallback to image saved on the order item if not found in catalog
+    // 2. Direct item.image_url stored with the order at checkout
     if (item.image_url && typeof item.image_url === 'string' && item.image_url.trim()) {
       return item.image_url.trim();
+    }
+
+    // 3. Product's primary image_url
+    if (prod?.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
+      return prod.image_url.trim();
+    }
+
+    // 4. Product's images array
+    if (
+      prod &&
+      Array.isArray(prod.images) &&
+      prod.images.length > 0 &&
+      typeof prod.images[0] === 'string' &&
+      prod.images[0].trim()
+    ) {
+      return prod.images[0].trim();
     }
 
     return '';
   };
 
   /**
-   * Dynamically constructs the real product details URL according to the application routing system.
+   * Seamlessly handles clicking on a product from the invoice:
+   * Opens the product details page directly so the customer or admin can view and order the product.
    */
-  const getItemUrl = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
-    const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
-    let slug = '';
+  const handleProductClick = (e: React.MouseEvent, item: OrderItem, index: number) => {
+    e.preventDefault();
+    const prod = getItemProduct(item, index);
 
-    if (prod) {
-      slug = getProductSlug(prod);
-    } else if ((item as any).slug && typeof (item as any).slug === 'string' && (item as any).slug.trim()) {
-      slug = (item as any).slug.trim();
-    } else if (item.product_id && item.product_id.trim() && item.product_id !== 'custom') {
-      slug = generateSlug(item.product_id) || item.product_id;
-    } else if (item.product_name && item.product_name.trim() && item.product_name !== 'Custom Order Package') {
-      slug = generateSlug(item.product_name);
-    }
-
-    if (!slug) return '';
-
-    if (typeof window !== 'undefined') {
-      const isExternalAdmin =
-        window.location.hostname.includes('admin') && !window.location.pathname.startsWith('/admin');
-      if (isExternalAdmin) {
-        const storeBase =
-          (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STORE_URL) || SITE_URL;
-        return `${storeBase.replace(/\/$/, '')}/product/${slug}`;
+    if (onOpenProduct) {
+      if (prod) {
+        onClose();
+        onOpenProduct(prod);
+        return;
       }
+
+      // Build a fallback product object so the customer can still view and order
+      const fallbackProd: Product = {
+        id: item.product_id || `prod-${index}`,
+        name: item.product_name || 'Product',
+        slug: (item as any).slug || generateSlug(item.product_name || 'product'),
+        selling_price: Number(item.unit_price) || 0,
+        buying_price: Number(item.buying_price) || 0,
+        discount: 0,
+        stock: 99,
+        image_url: getItemImage(item, index, null) || '',
+        category: 'All',
+        category_slug: 'all',
+      };
+      onClose();
+      onOpenProduct(fallbackProd);
+      return;
     }
 
-    return `/product/${slug}`;
+    // Default: in admin panel, open product in new window/tab on live customer store
+    const slug = prod ? getProductSlug(prod) : ((item as any).slug || generateSlug(item.product_name));
+    if (slug && typeof window !== 'undefined') {
+      const url = `${SITE_URL.replace(/\/$/, '')}/product/${slug}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   // Eagerly preload images in the background on modal mount
@@ -154,12 +186,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }, [order, loadedProducts]);
 
   /**
-   * Ensures all product thumbnails are fully loaded and decoded in memory before invoking the browser print dialog.
+   * Ensures all product thumbnails are loaded before invoking the browser print dialog.
    */
   const handlePrint = async () => {
     setIsPreloadingPrint(true);
     try {
-      // 1. Collect all product image URLs for this order
       const urls: string[] = [];
       if (Array.isArray(order?.items)) {
         order.items.forEach((item, idx) => {
@@ -171,13 +202,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         });
       }
 
-      // 2. Preload and decode images via Image constructor
       if (urls.length > 0) {
         await Promise.all(
           urls.map((url) => {
             return new Promise<void>((resolve) => {
               const img = new Image();
-              img.crossOrigin = 'anonymous';
               img.referrerPolicy = 'no-referrer';
               let finished = false;
               const complete = () => {
@@ -205,55 +234,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 }
               }
 
-              // Guard against stalled images (max 2 seconds)
-              setTimeout(complete, 2000);
+              // Guard against stalled images (max 1.5 seconds)
+              setTimeout(complete, 1500);
             });
           })
         );
       }
 
-      // 3. Ensure all rendered DOM <img> elements inside the printable invoice are complete and decoded
-      const printContainer = printableRef.current || document.getElementById('printable-invoice');
-      if (printContainer) {
-        const domImages = Array.from(printContainer.querySelectorAll<HTMLImageElement>('img'));
-        await Promise.all(
-          domImages.map((domImg: HTMLImageElement) => {
-            return new Promise<void>((resolve) => {
-              let finished = false;
-              const complete = () => {
-                if (!finished) {
-                  finished = true;
-                  resolve();
-                }
-              };
-
-              if (domImg.complete && domImg.naturalWidth > 0) {
-                if ('decode' in domImg && typeof domImg.decode === 'function') {
-                  domImg.decode().then(complete).catch(complete);
-                } else {
-                  complete();
-                }
-              } else {
-                domImg.addEventListener(
-                  'load',
-                  () => {
-                    if ('decode' in domImg && typeof domImg.decode === 'function') {
-                      domImg.decode().then(complete).catch(complete);
-                    } else {
-                      complete();
-                    }
-                  },
-                  { once: true }
-                );
-                domImg.addEventListener('error', complete, { once: true });
-                setTimeout(complete, 2000);
-              }
-            });
-          })
-        );
-      }
-
-      // 4. Brief delay to allow browser layout and painting
+      // Brief delay to allow browser painting
       await new Promise((resolve) => setTimeout(resolve, 150));
     } catch (e) {
       console.warn('Image preload before print warning:', e);
@@ -264,350 +252,416 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     window.print();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/75 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:static print:overflow-visible">
-      {/* Printable styles to guarantee exact 50x50px thumbnails, colors, borders, and images appear in print & PDF */}
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            @media print {
-              @page {
-                margin: 10mm;
-                size: auto;
-              }
-              body * {
-                visibility: hidden;
-              }
-              #printable-invoice, #printable-invoice * {
-                visibility: visible;
-              }
-              #printable-invoice {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                margin: 0;
-                padding: 0;
-                background: white !important;
-                color: black !important;
-              }
-              a {
-                text-decoration: none !important;
-                color: inherit !important;
-              }
-              img {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .invoice-thumb {
-                width: 50px !important;
-                height: 50px !important;
-                min-width: 50px !important;
-                min-height: 50px !important;
-                max-width: 50px !important;
-                max-height: 50px !important;
-                object-fit: cover !important;
-                border-radius: 8px !important;
-              }
-            }
-          `,
-        }}
-      />
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-BD', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dateStr;
+    }
+  };
 
-      <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col my-auto print:max-h-none print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full">
-        {/* Modal Top Actions */}
-        <div className="p-3.5 sm:p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 print:hidden">
-          <div className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-emerald-600" />
-            <h3 className="font-extrabold text-sm text-zinc-900">
-              Customer Invoice & Packaging Slip
-            </h3>
+  const formatTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString('en-BD', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const deliveryAreaLabel =
+    order.delivery_area === 'inside_dhaka'
+      ? 'Inside Dhaka City'
+      : order.delivery_area === 'sub_dhaka'
+      ? 'Dhaka Suburbs'
+      : order.delivery_area === 'outside_dhaka'
+      ? 'Outside Dhaka'
+      : order.delivery_area || (order.district === 'Dhaka' ? 'Inside Dhaka City' : 'Outside Dhaka');
+
+  /**
+   * Reusable core layout rendering the invoice details.
+   * Shared between on-screen preview and the body print portal.
+   */
+  const renderInvoiceContent = (isForPrint: boolean = false) => {
+    return (
+      <div className={`space-y-5 text-zinc-950 bg-white ${isForPrint ? 'w-full p-0' : 'p-4 sm:p-8'}`}>
+        {/* Header with Store & Order Details */}
+        <div className="flex items-start justify-between border-b-2 border-zinc-900 pb-5">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white font-black text-lg flex items-center justify-center print:bg-black print:text-white">
+                M
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-zinc-950">
+                {settings.store_name || 'MAXORA'}
+              </h1>
+            </div>
+            <p className="text-xs text-zinc-600 font-medium">
+              {settings.store_tagline || 'Premium Online Store Bangladesh'}
+            </p>
+            {settings.phone && (
+              <p className="text-xs text-zinc-700 font-semibold mt-1">
+                Helpline: {settings.phone}
+              </p>
+            )}
+            <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
+              {SITE_URL.replace(/^https?:\/\//, '')}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrint}
-              disabled={isPreloadingPrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-            >
-              {isPreloadingPrint ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Preparing Print...</span>
-                </>
-              ) : (
-                <>
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Invoice</span>
-                </>
+
+          <div className="text-right">
+            <div className="inline-block px-3 py-1 bg-zinc-100 text-zinc-900 font-extrabold text-[11px] rounded-md uppercase tracking-wider mb-2 border border-zinc-300 print:border-zinc-400">
+              INVOICE / PACKING SLIP
+            </div>
+            <div className="font-mono font-black text-base sm:text-lg text-zinc-950">
+              Order #{order.order_number || order.id}
+            </div>
+            <div className="text-xs text-zinc-700 font-medium mt-1">
+              Date: <span className="font-bold">{formatDate(order.created_at)}</span>
+              {order.created_at && (
+                <span className="text-zinc-500 font-normal"> ({formatTime(order.created_at)})</span>
               )}
-            </button>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            </div>
+            <div className="flex items-center justify-end gap-1.5 mt-2">
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-zinc-300 bg-zinc-50 text-zinc-800">
+                Status: {order.status || 'Pending'}
+              </span>
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-zinc-300 bg-zinc-50 text-zinc-800">
+                Payment: {order.payment_method || 'Cash on Delivery'}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Printable Invoice Area */}
-        <div
-          ref={printableRef}
-          id="printable-invoice"
-          className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-6 text-zinc-900 bg-white print:p-0 print:overflow-visible"
-        >
-          {/* Header */}
-          <div className="flex items-start justify-between border-b border-zinc-200 pb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white font-black text-lg flex items-center justify-center">
-                  M
-                </div>
-                <h1 className="text-xl font-black tracking-tight">
-                  {settings.store_name || 'MAXORA'}
-                </h1>
-              </div>
-              <p className="text-xs text-zinc-500">
-                {settings.store_tagline || 'Premium Online Store Bangladesh'}
-              </p>
-              {settings.phone && (
-                <p className="text-xs text-zinc-600 font-medium mt-1">Helpline: {settings.phone}</p>
-              )}
+        {/* Customer & Delivery Address Card */}
+        <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-zinc-50 border border-zinc-200 text-xs print-avoid-break print:bg-zinc-50 print:border-zinc-300">
+          <div className="space-y-1">
+            <span className="font-black uppercase tracking-wider text-[10px] text-zinc-500 block mb-1">
+              Deliver To (Customer)
+            </span>
+            <div className="font-bold text-sm text-zinc-950">{order.customer_name}</div>
+            <div className="font-semibold text-zinc-900 text-xs flex items-center gap-1.5">
+              <span>Phone:</span>
+              <span className="font-mono font-bold text-zinc-950">{order.phone}</span>
             </div>
-
-            <div className="text-right">
-              <span className="inline-block px-3 py-1 bg-zinc-100 text-zinc-800 font-bold text-xs rounded-lg uppercase tracking-wider mb-2">
-                Cash on Delivery
-              </span>
-              <div className="font-mono font-bold text-base text-zinc-950">
-                Order #{order.order_number}
+            {order.alt_phone && (
+              <div className="text-zinc-600 text-xs flex items-center gap-1.5">
+                <span>Alt Phone:</span>
+                <span className="font-mono">{order.alt_phone}</span>
               </div>
-              <div className="text-xs text-zinc-500">
-                Date:{' '}
-                {new Date(order.created_at).toLocaleDateString('en-BD', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </div>
-            </div>
+            )}
+            {order.email && (
+              <div className="text-zinc-600 text-[11px] truncate">Email: {order.email}</div>
+            )}
           </div>
 
-          {/* Customer & Delivery Address */}
-          <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-zinc-50 border border-zinc-200 text-xs">
-            <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">
-                Deliver To
-              </span>
-              <div className="font-bold text-sm text-zinc-900">{order.customer_name}</div>
-              <div className="font-semibold text-zinc-800">{order.phone}</div>
-              {order.alt_phone && (
-                <div className="text-zinc-500">Alt Phone: {order.alt_phone}</div>
-              )}
-              {order.email && <div className="text-zinc-500">{order.email}</div>}
+          <div className="space-y-1">
+            <span className="font-black uppercase tracking-wider text-[10px] text-zinc-500 block mb-1">
+              Shipping & Delivery Info
+            </span>
+            <div className="text-zinc-800 leading-relaxed font-medium">{order.address}</div>
+            <div className="font-bold text-zinc-950 pt-0.5">
+              {order.area ? `${order.area}, ` : ''}{order.district}
             </div>
-
-            <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">
-                Shipping Details
-              </span>
-              <div className="text-zinc-700 leading-relaxed font-medium">{order.address}</div>
-              <div className="font-bold text-zinc-900">
-                {order.area}, {order.district}
-              </div>
-              <div className="text-emerald-700 font-semibold text-[11px] pt-1">
-                Area: {order.delivery_area || (order.district === 'Dhaka' ? 'Dhaka City' : 'Outside Dhaka')}
-              </div>
+            <div className="text-emerald-800 font-bold text-[11px] pt-1">
+              Delivery Zone: {deliveryAreaLabel}
             </div>
           </div>
+        </div>
 
-          {/* Ordered Products Table */}
-          <div className="border border-zinc-200 rounded-2xl overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="p-3">#</th>
-                  <th className="p-3">Item Description</th>
-                  <th className="p-3 text-center">SKU</th>
-                  <th className="p-3 text-center">Qty</th>
-                  <th className="p-3 text-right">Unit Price</th>
-                  <th className="p-3 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 font-medium">
-                {Array.isArray(order.items) && order.items.length > 0 ? (
-                  order.items.map((item, index) => {
-                    const matchedProduct = getItemProduct(item, index);
-                    const imageUrl = getItemImage(item, index, matchedProduct);
-                    const productUrl = getItemUrl(item, index, matchedProduct);
-                    const itemKey = item.id || `item-${index}`;
-                    const isImgFailed = Boolean(imageErrors[itemKey]);
-                    const hasValidImage = Boolean(imageUrl && !isImgFailed);
-                    const hasUrl = Boolean(productUrl);
+        {/* Ordered Products Table */}
+        <div className="border border-zinc-200 rounded-xl overflow-hidden print:border-zinc-300">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-100 border-b border-zinc-200 text-zinc-700 font-bold uppercase tracking-wider print:bg-zinc-100 print:border-zinc-300">
+              <tr>
+                <th className="p-2.5 w-8 text-center">#</th>
+                <th className="p-2.5">Item Description</th>
+                <th className="p-2.5 text-center w-24">SKU</th>
+                <th className="p-2.5 text-center w-14">Qty</th>
+                <th className="p-2.5 text-right w-24">Unit Price</th>
+                <th className="p-2.5 text-right w-28">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 font-medium print:divide-zinc-200">
+              {Array.isArray(order.items) && order.items.length > 0 ? (
+                order.items.map((item, index) => {
+                  const matchedProduct = getItemProduct(item, index);
+                  const imageUrl = getItemImage(item, index, matchedProduct);
+                  const itemKey = item.id || `item-${index}`;
+                  const isImgFailed = Boolean(imageErrors[itemKey]);
+                  const hasValidImage = Boolean(imageUrl && !isImgFailed);
 
-                    return (
-                      <tr key={itemKey}>
-                        <td className="p-3 text-zinc-400 align-middle">{index + 1}</td>
-                        <td className="p-3 align-middle text-zinc-900">
-                          <div className="flex items-center gap-3">
-                            {/* 50x50px Clean Product Thumbnail */}
-                            {hasUrl ? (
-                              <a
-                                href={productUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] shrink-0 block rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 transition-all focus:outline-none print:border-zinc-200"
-                                title={`View product: ${item.product_name}`}
-                              >
-                                {hasValidImage ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt={item.product_name}
-                                    width={50}
-                                    height={50}
-                                    loading="eager"
-                                    decoding="sync"
-                                    referrerPolicy="no-referrer"
-                                    onError={() => handleImageError(itemKey)}
-                                    className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] object-cover bg-zinc-50 block invoice-thumb"
-                                  />
-                                ) : (
-                                  <div className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50">
-                                    <Package className="w-5 h-5 text-zinc-400" />
-                                  </div>
-                                )}
-                              </a>
-                            ) : (
-                              <div className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] shrink-0 rounded-lg overflow-hidden border border-zinc-200 print:border-zinc-200">
-                                {hasValidImage ? (
-                                  <img
-                                    src={imageUrl}
-                                    alt={item.product_name}
-                                    width={50}
-                                    height={50}
-                                    loading="eager"
-                                    decoding="sync"
-                                    referrerPolicy="no-referrer"
-                                    onError={() => handleImageError(itemKey)}
-                                    className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] object-cover bg-zinc-50 block invoice-thumb"
-                                  />
-                                ) : (
-                                  <div className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50">
-                                    <Package className="w-5 h-5 text-zinc-400" />
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Product Name & Details */}
-                            <div className="min-w-0 flex-1">
-                              {hasUrl ? (
-                                <a
-                                  href={productUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="font-bold text-zinc-900 hover:text-emerald-700 hover:underline transition-colors block text-xs leading-snug print:text-zinc-900 print:no-underline"
-                                  title={`View product: ${item.product_name}`}
-                                >
-                                  {item.product_name}
-                                </a>
+                  return (
+                    <tr key={itemKey} className="break-inside-avoid">
+                      <td className="p-2.5 text-zinc-500 text-center align-middle font-mono">
+                        {index + 1}
+                      </td>
+                      <td className="p-2.5 align-middle text-zinc-950">
+                        <div className="flex items-center gap-3">
+                          {/* 48x48px Clean Product Thumbnail */}
+                          {!isForPrint ? (
+                            <button
+                              type="button"
+                              onClick={(e) => handleProductClick(e, item, index)}
+                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 hover:ring-2 hover:ring-emerald-500/20 transition-all cursor-pointer block bg-zinc-50"
+                              title={`View & order ${item.product_name}`}
+                            >
+                              {hasValidImage ? (
+                                <img
+                                  src={imageUrl}
+                                  alt={item.product_name}
+                                  width={48}
+                                  height={48}
+                                  loading="eager"
+                                  decoding="async"
+                                  referrerPolicy="no-referrer"
+                                  onError={() => handleImageError(itemKey)}
+                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg transition-transform hover:scale-105"
+                                />
                               ) : (
-                                <span className="font-bold text-zinc-900 block text-xs leading-snug">
-                                  {item.product_name}
-                                </span>
+                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-100 flex items-center justify-center text-zinc-400">
+                                  <Package className="w-5 h-5 text-zinc-400" />
+                                </div>
                               )}
-                              {item.selected_color && (
-                                <div className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1 font-normal print:text-zinc-600">
-                                  <span>Color:</span>
-                                  <span className="font-medium text-zinc-700">
-                                    {item.selected_color}
-                                  </span>
+                            </button>
+                          ) : (
+                            <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-300">
+                              {hasValidImage ? (
+                                <img
+                                  src={imageUrl}
+                                  alt={item.product_name}
+                                  width={48}
+                                  height={48}
+                                  loading="eager"
+                                  decoding="sync"
+                                  referrerPolicy="no-referrer"
+                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-50 flex items-center justify-center text-zinc-400">
+                                  <Package className="w-5 h-5 text-zinc-400" />
                                 </div>
                               )}
                             </div>
+                          )}
+
+                          {/* Product Name & Variant & Clickable Actions */}
+                          <div className="min-w-0 flex-1">
+                            {!isForPrint ? (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProductClick(e, item, index)}
+                                className="text-left font-bold text-zinc-950 hover:text-emerald-700 hover:underline transition-colors block text-xs leading-snug cursor-pointer group"
+                                title={`View & order ${item.product_name}`}
+                              >
+                                <span>{item.product_name}</span>
+                              </button>
+                            ) : (
+                              <span className="font-bold text-zinc-950 block text-xs leading-snug">
+                                {item.product_name}
+                              </span>
+                            )}
+
+                            {item.selected_color && (
+                              <div className="text-[11px] text-zinc-600 mt-0.5 flex items-center gap-1 font-normal">
+                                <span>Color/Variant:</span>
+                                <span className="font-semibold text-zinc-900">
+                                  {item.selected_color}
+                                </span>
+                              </div>
+                            )}
+
+                            {!isForPrint && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProductClick(e, item, index)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1 cursor-pointer"
+                                title="Open product to view and order"
+                              >
+                                <span>প্রোডাক্ট দেখুন / অর্ডার করুন</span>
+                                <ArrowRight className="w-3 h-3 text-emerald-700" />
+                              </button>
+                            )}
                           </div>
-                        </td>
-                        <td className="p-3 text-center font-mono text-zinc-500 align-middle">
-                          {item.sku || '-'}
-                        </td>
-                        <td className="p-3 text-center font-bold text-zinc-900 align-middle">
-                          {item.quantity}
-                        </td>
-                        <td className="p-3 text-right align-middle">
-                          ৳{Number(item.unit_price || 0).toLocaleString('en-BD')}
-                        </td>
-                        <td className="p-3 text-right font-bold text-zinc-950 align-middle">
-                          ৳{Number(item.line_total || Number(item.unit_price) * Number(item.quantity)).toLocaleString('en-BD')}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td className="p-3 text-zinc-400 align-middle">1</td>
-                    <td className="p-3 align-middle text-zinc-900">
-                      <div className="flex items-center gap-3">
-                        <div className="w-[50px] h-[50px] min-w-[50px] min-h-[50px] max-w-[50px] max-h-[50px] shrink-0 rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50 print:border-zinc-200">
-                          <Package className="w-5 h-5 text-zinc-400" />
                         </div>
-                        <span className="font-bold text-zinc-900 block text-xs leading-snug">
-                          Custom Order Package
-                        </span>
+                      </td>
+                      <td className="p-2.5 text-center font-mono text-zinc-600 align-middle text-xs">
+                        {item.sku || matchedProduct?.sku || '-'}
+                      </td>
+                      <td className="p-2.5 text-center font-bold text-zinc-950 align-middle font-mono text-xs">
+                        {item.quantity}
+                      </td>
+                      <td className="p-2.5 text-right align-middle text-zinc-800 font-mono">
+                        ৳{Number(item.unit_price || 0).toLocaleString('en-BD')}
+                      </td>
+                      <td className="p-2.5 text-right font-bold text-zinc-950 align-middle font-mono">
+                        ৳{Number(item.line_total || Number(item.unit_price) * Number(item.quantity)).toLocaleString('en-BD')}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td className="p-2.5 text-zinc-500 text-center align-middle font-mono">1</td>
+                  <td className="p-2.5 align-middle text-zinc-950">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50 print:border-zinc-300">
+                        <Package className="w-5 h-5 text-zinc-400" />
                       </div>
-                    </td>
-                    <td className="p-3 text-center font-mono text-zinc-500 align-middle">-</td>
-                    <td className="p-3 text-center font-bold text-zinc-900 align-middle">1</td>
-                    <td className="p-3 text-right align-middle">
-                      ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
-                    </td>
-                    <td className="p-3 text-right font-bold text-zinc-950 align-middle">
-                      ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                      <span className="font-bold text-zinc-950 block text-xs leading-snug">
+                        Custom Order Package
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-2.5 text-center font-mono text-zinc-500 align-middle">-</td>
+                  <td className="p-2.5 text-center font-bold text-zinc-950 align-middle font-mono">1</td>
+                  <td className="p-2.5 text-right align-middle font-mono">
+                    ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+                  </td>
+                  <td className="p-2.5 text-right font-bold text-zinc-950 align-middle font-mono">
+                    ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          {/* Pricing Totals */}
-          <div className="flex justify-end pt-2">
-            <div className="w-64 space-y-2 text-xs">
-              <div className="flex justify-between text-zinc-600">
-                <span>Subtotal:</span>
-                <span className="font-semibold">
-                  ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
-                </span>
+        {/* Pricing Totals Card */}
+        <div className="flex justify-end pt-1 print-avoid-break">
+          <div className="w-72 space-y-2 text-xs p-3.5 rounded-xl bg-zinc-50 border border-zinc-200 print:bg-white print:border-zinc-300">
+            <div className="flex justify-between text-zinc-700">
+              <span>Subtotal:</span>
+              <span className="font-semibold font-mono">
+                ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+              </span>
+            </div>
+            <div className="flex justify-between text-zinc-700">
+              <span>Delivery Charge:</span>
+              <span className="font-semibold font-mono">
+                ৳{Number(order.delivery_charge || 0).toLocaleString('en-BD')}
+              </span>
+            </div>
+            {order.discount && Number(order.discount) > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Discount:</span>
+                <span className="font-mono">- ৳{Number(order.discount).toLocaleString('en-BD')}</span>
               </div>
-              <div className="flex justify-between text-zinc-600">
-                <span>Delivery Charge:</span>
-                <span className="font-semibold">
-                  ৳{Number(order.delivery_charge || 0).toLocaleString('en-BD')}
-                </span>
+            )}
+            <div className="border-t-2 border-zinc-900 pt-2 flex justify-between text-sm font-black text-zinc-950">
+              <span>Amount Payable:</span>
+              <span className="text-zinc-950 font-mono">
+                ৳{Number(order.total || 0).toLocaleString('en-BD')}
+              </span>
+            </div>
+            <div className="text-right text-[11px] text-zinc-600 font-bold uppercase tracking-wider pt-0.5">
+              Payment: {order.payment_method || 'Cash on Delivery'}
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Remarks Note if available */}
+        {order.note && (
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-950 print-avoid-break print:bg-zinc-50 print:border-zinc-300">
+            <span className="font-bold text-amber-900">Customer Note:</span> {order.note}
+          </div>
+        )}
+
+        {/* Signatures & Packing Slip Footer */}
+        <div className="pt-8 print-avoid-break space-y-6">
+          <div className="grid grid-cols-2 gap-12 text-xs pt-6">
+            <div className="text-center">
+              <div className="border-t border-dashed border-zinc-400 w-48 mx-auto pt-2 text-zinc-600 font-semibold">
+                Customer Signature
               </div>
-              <div className="border-t border-zinc-200 pt-2 flex justify-between text-sm font-black text-zinc-950">
-                <span>Amount Payable:</span>
-                <span className="text-emerald-700">
-                  ৳{Number(order.total || 0).toLocaleString('en-BD')}
-                </span>
+            </div>
+            <div className="text-center">
+              <div className="border-t border-dashed border-zinc-400 w-48 mx-auto pt-2 text-zinc-600 font-semibold">
+                Authorized Signature & Seal
               </div>
             </div>
           </div>
 
-          {/* Remarks & Footer Note */}
-          {order.note && (
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
-              <span className="font-bold">Customer Note:</span> {order.note}
-            </div>
-          )}
-
-          <div className="border-t border-zinc-200 pt-4 text-center text-[11px] text-zinc-400 space-y-1">
-            <p className="font-semibold text-zinc-600">
-              Thank you for shopping with {settings.store_name || 'Maxora'}!
+          <div className="border-t border-zinc-200 pt-3 text-center text-[11px] text-zinc-500 space-y-0.5 print:border-zinc-300">
+            <p className="font-bold text-zinc-700">
+              Thank you for shopping with {settings.store_name || 'MAXORA'}!
             </p>
-            <p>Please inspect your package in front of the courier delivery officer before payment.</p>
+            <p className="text-zinc-500">
+              Please inspect the parcel in front of the courier delivery officer before payment.
+            </p>
           </div>
         </div>
       </div>
-    </div>
+    );
+  };
+
+  return (
+    <>
+      {/* 1. Dedicated Print Portal injected directly into document.body for Chrome print & PDF */}
+      {isMounted &&
+        createPortal(
+          <div id="admin-print-invoice-portal" ref={printPortalRef}>
+            {renderInvoiceContent(true)}
+          </div>,
+          document.body
+        )}
+
+      {/* 2. On-Screen Interactive Modal Dialog */}
+      <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/75 backdrop-blur-sm animate-fade-in no-print">
+        <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col my-auto">
+          {/* Modal Header Actions */}
+          <div className="p-3.5 sm:p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-extrabold text-sm text-zinc-900">
+                Customer Invoice & Packaging Slip
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrint}
+                disabled={isPreloadingPrint}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+              >
+                {isPreloadingPrint ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Preparing Print...</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Invoice</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* On-Screen Scrollable Invoice Area */}
+          <div className="p-0 overflow-y-auto max-h-[calc(95vh-70px)]">
+            {renderInvoiceContent(false)}
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
