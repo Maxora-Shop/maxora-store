@@ -16,7 +16,7 @@ import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand } from './types';
-import { storeService } from './services/storeService';
+import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import {
   INITIAL_SETTINGS,
@@ -338,6 +338,9 @@ export default function App() {
 
   // Load Settings, Products & Categories on startup and listen for live updates
   useEffect(() => {
+    // Start global real-time cloud sync listeners
+    initRealtimeFirestoreListeners();
+
     fetchSettings();
     fetchProducts();
     fetchCategories();
