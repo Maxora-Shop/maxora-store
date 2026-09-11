@@ -199,9 +199,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       {/* Product Content Area */}
       <div className="p-2.5 xs:p-3 sm:p-4 flex-1 flex flex-col justify-between min-w-0">
         <div className="min-w-0">
-          {/* Category & SKU */}
+          {/* Brand, Category & SKU */}
           <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1 min-w-0">
-            <span className="truncate">{product.category || "Essentials"}</span>
+            <div className="flex items-center gap-1.5 truncate">
+              {product.brand && product.brand !== 'Other' && (
+                <span className="text-orange-600 font-bold truncate">
+                  {product.brand}
+                </span>
+              )}
+              {product.brand && product.brand !== 'Other' && <span className="text-zinc-300">•</span>}
+              <span className="truncate">{product.category || "Essentials"}</span>
+            </div>
             {product.sku && <span className="text-zinc-400 font-mono hidden sm:inline truncate">{product.sku}</span>}
           </div>
 

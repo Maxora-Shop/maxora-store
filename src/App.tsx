@@ -14,7 +14,8 @@ import { SEOHead } from './components/SEOHead';
 import { AdminDashboard } from './components/AdminDashboard';
 import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
-import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order } from './types';
+import { BrandSidebarFilter } from './components/BrandSidebarFilter';
+import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import {
@@ -25,7 +26,7 @@ import {
   INITIAL_PRODUCT_TYPES,
   INITIAL_CHILD_CATEGORIES,
 } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
@@ -88,6 +89,7 @@ export default function App() {
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [selectedProductType, setSelectedProductType] = useState('');
   const [selectedChildCategory, setSelectedChildCategory] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
 
   // Price Filter State
   const [priceRange, setPriceRange] = useState<PriceRange>({ min: 0, max: 50000 });
@@ -231,13 +233,15 @@ export default function App() {
           const sub = searchParams.get('subcategory') || searchParams.get('subCategory') || '';
           const type = searchParams.get('productType') || searchParams.get('product_type') || searchParams.get('type') || '';
           const child = searchParams.get('childCategory') || searchParams.get('child_category') || searchParams.get('child') || '';
+          const brand = searchParams.get('brand') || '';
 
           setSelectedCategory(cat);
           setSelectedSubCategory(sub);
           setSelectedProductType(type);
           setSelectedChildCategory(child);
+          setSelectedBrand(brand);
 
-          if (cat || sub || type || child || path.startsWith('/products')) {
+          if (cat || sub || type || child || brand || path.startsWith('/products')) {
             setTimeout(() => {
               productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 80);
@@ -273,6 +277,7 @@ export default function App() {
           setSelectedSubCategory('');
           setSelectedProductType('');
           setSelectedChildCategory('');
+          setSelectedBrand('');
         }
       }
     };
@@ -736,6 +741,7 @@ export default function App() {
     setSelectedSubCategory('');
     setSelectedProductType('');
     setSelectedChildCategory('');
+    setSelectedBrand('');
     setSearchQuery('');
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/');
@@ -834,6 +840,14 @@ export default function App() {
         }
       }
 
+      // 5b. Brand matching
+      if (selectedBrand) {
+        const brandMatch =
+          (p.brand && p.brand.toLowerCase().trim() === selectedBrand.toLowerCase().trim()) ||
+          (p.brand_slug && p.brand_slug.toLowerCase().trim() === selectedBrand.toLowerCase().trim());
+        if (!brandMatch) return false;
+      }
+
       // 6. Price Range Filter
       const discount = Number(p.discount || 0);
       const price = Number(p.selling_price || 0);
@@ -851,6 +865,7 @@ export default function App() {
     selectedSubCategory,
     selectedProductType,
     selectedChildCategory,
+    selectedBrand,
     activeCategoryObj,
     activeSubCategoryObj,
     activeProductTypeObj,
@@ -1121,8 +1136,17 @@ export default function App() {
             </div>
 
             {/* Active Filters Badges & Clear Controls */}
-            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
+            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
               <div className="flex items-center flex-wrap gap-2">
+                {selectedBrand && (
+                  <button
+                    onClick={() => setSelectedBrand('')}
+                    className="text-xs font-bold text-orange-900 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Tag className="w-3 h-3 text-orange-600" />
+                    <span>Brand: {selectedBrand} ✕</span>
+                  </button>
+                )}
                 {selectedChildCategory && (
                   <button
                     onClick={() => updateTaxonomyFilter({ childCategory: '' })}
@@ -1167,84 +1191,137 @@ export default function App() {
             )}
           </div>
 
-          {/* Products List Grid */}
-          {loadingProducts ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-6">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 animate-pulse">
-                  <div className="aspect-square bg-zinc-200 rounded-xl" />
-                  <div className="h-4 bg-zinc-200 rounded w-3/4" />
-                  <div className="h-4 bg-zinc-200 rounded w-1/2" />
-                  <div className="h-9 bg-zinc-200 rounded-xl mt-4" />
-                </div>
-              ))}
+          {/* Products List Grid with Brand Sidebar */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+            {/* Left Sidebar Filter for Brands (desktop) */}
+            <div className="hidden lg:block lg:col-span-1 space-y-4 sticky top-24">
+              <BrandSidebarFilter
+                products={products}
+                selectedBrand={selectedBrand}
+                onSelectBrand={setSelectedBrand}
+              />
             </div>
-          ) : filteredProducts.length > 0 ? (
-            <div
-              className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
-                filteredProducts.length === 1
-                  ? 'grid-cols-1 max-w-xs sm:max-w-sm mx-auto sm:mx-0'
-                  : filteredProducts.length === 2
-                  ? 'grid-cols-2 max-w-xl'
-                  : filteredProducts.length === 3
-                  ? 'grid-cols-2 sm:grid-cols-3 max-w-4xl'
-                  : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
-              }`}
-            >
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  ratingStats={ratingStatsMap[product.id]}
-                  isWishlisted={wishlistIds.includes(product.id)}
-                  onToggleWishlist={handleToggleWishlist}
-                  onAddToCart={(p) => handleAddToCart(p, 1)}
-                  onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
-                  isAdded={recentlyAddedId === product.id}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white rounded-3xl border border-zinc-200 p-12 text-center max-w-lg mx-auto shadow-xs">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                showSavedOnly ? 'bg-rose-50 text-rose-500' : 'bg-zinc-100 text-zinc-400'
-              }`}>
-                {showSavedOnly ? <Heart className="w-8 h-8 fill-rose-500" /> : <ShoppingBag className="w-8 h-8" />}
-              </div>
-              <h3 className="text-lg font-bold text-zinc-900 mb-1">
-                {showSavedOnly
-                  ? 'Your Wishlist is Empty'
-                  : selectedChildCategory
-                  ? `No Products in "${activeChildCategoryObj?.name || selectedChildCategory}"`
-                  : selectedProductType
-                  ? `No Products in "${activeProductTypeObj?.name || selectedProductType}"`
-                  : selectedCategory
-                  ? `No Products in "${activeCategoryObj?.name || selectedCategory}"`
-                  : 'No Products Found'}
-              </h3>
-              <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
-                {showSavedOnly
-                  ? "You haven't saved any items yet. Tap the heart icon on any product in the store to save it here!"
-                  : "We couldn't find any products matching the selected category. Try selecting another category or view all products."}
-              </p>
-              <div className="flex items-center justify-center gap-3 flex-wrap">
-                <button
-                  onClick={handleClearAllTaxonomy}
-                  className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
-                >
-                  {showSavedOnly ? 'Browse All Products' : 'View All Products'}
-                </button>
-                {(selectedChildCategory || selectedProductType) && (
+
+            {/* Product Cards Grid & Mobile Filter */}
+            <div className="lg:col-span-3">
+              {/* Mobile Brand Chips Bar */}
+              <div className="lg:hidden mb-4 overflow-x-auto pb-1 scrollbar-thin">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => updateTaxonomyFilter({ childCategory: '', productType: '' })}
-                    className="px-5 py-2.5 rounded-full bg-zinc-100 text-zinc-800 text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
+                    type="button"
+                    onClick={() => setSelectedBrand('')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      !selectedBrand
+                        ? 'bg-zinc-950 text-white shadow-xs'
+                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                    }`}
                   >
-                    View Parent Category
+                    All Brands
                   </button>
-                )}
+                  {Array.from(new Set(products.map((p) => (p.brand || '').trim()).filter(Boolean))).map((bName) => (
+                    <button
+                      key={bName}
+                      type="button"
+                      onClick={() => setSelectedBrand(selectedBrand === bName ? '' : bName)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
+                        selectedBrand === bName
+                          ? 'bg-orange-600 text-white shadow-xs'
+                          : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                      }`}
+                    >
+                      <Tag className="w-3 h-3" />
+                      <span>{bName}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {loadingProducts ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4 lg:gap-6">
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 animate-pulse">
+                      <div className="aspect-square bg-zinc-200 rounded-xl" />
+                      <div className="h-4 bg-zinc-200 rounded w-3/4" />
+                      <div className="h-4 bg-zinc-200 rounded w-1/2" />
+                      <div className="h-9 bg-zinc-200 rounded-xl mt-4" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredProducts.length > 0 ? (
+                <div
+                  className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
+                    filteredProducts.length === 1
+                      ? 'grid-cols-1 max-w-xs sm:max-w-sm'
+                      : filteredProducts.length === 2
+                      ? 'grid-cols-2'
+                      : 'grid-cols-2 sm:grid-cols-3'
+                  }`}
+                >
+                  {filteredProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      ratingStats={ratingStatsMap[product.id]}
+                      isWishlisted={wishlistIds.includes(product.id)}
+                      onToggleWishlist={handleToggleWishlist}
+                      onAddToCart={(p) => handleAddToCart(p, 1)}
+                      onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
+                      isAdded={recentlyAddedId === product.id}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl border border-zinc-200 p-8 sm:p-12 text-center max-w-lg mx-auto shadow-xs">
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                    showSavedOnly ? 'bg-rose-50 text-rose-500' : 'bg-zinc-100 text-zinc-400'
+                  }`}>
+                    {showSavedOnly ? <Heart className="w-8 h-8 fill-rose-500" /> : <ShoppingBag className="w-8 h-8" />}
+                  </div>
+                  <h3 className="text-lg font-bold text-zinc-900 mb-1">
+                    {showSavedOnly
+                      ? 'Your Wishlist is Empty'
+                      : selectedBrand
+                      ? `No Products found for brand "${selectedBrand}"`
+                      : selectedChildCategory
+                      ? `No Products in "${activeChildCategoryObj?.name || selectedChildCategory}"`
+                      : selectedProductType
+                      ? `No Products in "${activeProductTypeObj?.name || selectedProductType}"`
+                      : selectedCategory
+                      ? `No Products in "${activeCategoryObj?.name || selectedCategory}"`
+                      : 'No Products Found'}
+                  </h3>
+                  <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
+                    {showSavedOnly
+                      ? "You haven't saved any items yet. Tap the heart icon on any product in the store to save it here!"
+                      : "We couldn't find any products matching your current filters. Try changing or clearing your search, brand or category filters."}
+                  </p>
+                  <div className="flex items-center justify-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => {
+                        handleClearAllTaxonomy();
+                        handleResetPrice();
+                        setSelectedBrand('');
+                      }}
+                      className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+                    >
+                      {showSavedOnly ? 'Browse All Products' : 'Clear All Filters'}
+                    </button>
+                    {(selectedChildCategory || selectedProductType || selectedBrand) && (
+                      <button
+                        onClick={() => {
+                          updateTaxonomyFilter({ childCategory: '', productType: '' });
+                          setSelectedBrand('');
+                        }}
+                        className="px-5 py-2.5 rounded-full bg-zinc-100 text-zinc-800 text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
+                      >
+                        Reset Sub-filters
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </section>
           </>
         )}

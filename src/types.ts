@@ -1,3 +1,19 @@
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  image_url?: string;
+  description?: string;
+  display_order?: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  meta_keywords?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ProductColor {
   name: string;
   code?: string;
@@ -110,6 +126,8 @@ export interface Product {
   meta_keywords?: string;
   slug?: string;
   brand?: string;
+  brand_id?: string;
+  brand_slug?: string;
   og_image?: string;
 }
 

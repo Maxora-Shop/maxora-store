@@ -50,12 +50,14 @@ import {
   Palette,
   FolderTree
 } from 'lucide-react';
-import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory } from '../types';
+import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
+import { AdminBrands } from './AdminBrands';
+import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
 import { generateSlug, getProductSlug } from '../utils/seo';
@@ -137,7 +139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -149,6 +151,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
   const [dbProductTypes, setDbProductTypes] = useState<ProductType[]>([]);
   const [dbChildCategories, setDbChildCategories] = useState<ChildCategory[]>([]);
+  const [dbBrands, setDbBrands] = useState<Brand[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
@@ -159,6 +162,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Filters & Search
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('');
+  const [productBrandFilter, setProductBrandFilter] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
   const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
   const [currentTaxonomyFilter, setCurrentTaxonomyFilter] = useState<{
@@ -506,16 +510,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadCategories = async () => {
     try {
-      const [cats, subs, types, childs] = await Promise.all([
+      const [cats, subs, types, childs, brands] = await Promise.all([
         storeService.getCategories(),
         storeService.getSubCategories(),
         storeService.getProductTypes(),
         storeService.getChildCategories(),
+        storeService.getBrands(false),
       ]);
       setDbCategories(cats);
       setDbSubCategories(subs);
       setDbProductTypes(types);
       setDbChildCategories(childs);
+      setDbBrands(brands);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadBrands = async () => {
+    try {
+      const brands = await storeService.getBrands(false);
+      setDbBrands(brands);
     } catch (e) {
       console.error(e);
     }
@@ -537,9 +552,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'products') {
       loadProducts(currentPassword);
       loadCategories();
+      loadBrands();
     }
     if (tab === 'categories') {
       loadCategories();
+      loadProducts(currentPassword);
+    }
+    if (tab === 'brands') {
+      loadBrands();
       loadProducts(currentPassword);
     }
     if (tab === 'orders') {
@@ -550,11 +570,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'settings') {
       loadSettings(currentPassword);
       loadCategories();
+      loadBrands();
       loadProducts(currentPassword);
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
@@ -871,6 +892,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       productSearch === '' ||
       p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (p.brand && p.brand.toLowerCase().includes(productSearch.toLowerCase())) ||
       p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
@@ -879,6 +901,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (Array.isArray(p.colors) && p.colors.some((c) => c.name.toLowerCase().includes(productSearch.toLowerCase())));
     const matchesCategory =
       productCategoryFilter === '' || p.category === productCategoryFilter;
+    const matchesBrand =
+      productBrandFilter === '' ||
+      (p.brand || 'Other').toLowerCase().trim() === productBrandFilter.toLowerCase().trim() ||
+      (p.brand_slug && p.brand_slug.toLowerCase().trim() === productBrandFilter.toLowerCase().trim());
     const matchesProductType =
       productTypeFilter === '' || p.product_type === productTypeFilter;
     const matchesStatus =
@@ -914,10 +940,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return true;
     })();
 
-    return matchesSearch && matchesCategory && matchesProductType && matchesStatus && matchesTaxonomy;
+    return matchesSearch && matchesCategory && matchesBrand && matchesProductType && matchesStatus && matchesTaxonomy;
   });
 
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
+  const brandsListFromProducts = Array.from(
+    new Set([
+      ...dbBrands.map((b) => b.name),
+      ...products.map((p) => p.brand || 'Other'),
+    ].filter(Boolean))
+  );
 
   // Filtered Orders
   const filteredOrders = orders.filter((o) => {
@@ -1158,6 +1190,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {dbCategories.length > 0 && (
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                   {dbCategories.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('brands')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'brands'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Tag className="w-4 h-4 shrink-0" />
+              <span>🏷️ Brands</span>
+              {dbBrands.length > 0 && (
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'brands' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {dbBrands.length}
                 </span>
               )}
             </button>
@@ -1787,6 +1836,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </select>
 
                 <select
+                  value={productBrandFilter}
+                  onChange={(e) => setProductBrandFilter(e.target.value)}
+                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
+                >
+                  <option value="">All Brands ({brandsListFromProducts.length})</option>
+                  {brandsListFromProducts.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+
+                <select
                   value={productTypeFilter}
                   onChange={(e) => setProductTypeFilter(e.target.value)}
                   className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
@@ -1826,6 +1888,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                     <tr>
                       <th className="p-4">Item</th>
+                      <th className="p-4">Brand</th>
                       <th className="p-4">Category</th>
                       <th className="p-4">SKU</th>
                       <th className="p-4">Buying Price</th>
@@ -1856,6 +1919,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 )}
                               </div>
                             </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-800 border border-amber-500/20 text-xs font-bold whitespace-nowrap">
+                              <Tag className="w-3 h-3 text-amber-600" />
+                              <span>{p.brand || 'Other'}</span>
+                            </span>
                           </td>
                           <td className="p-4">
                             <div className="flex flex-col gap-0.5 min-w-[130px]">
@@ -2409,6 +2478,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ====================================================
+            4b. TAB: BRAND MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'brands' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminBrands
+              password={password}
+              products={products}
+              onUpdated={() => {
+                loadProducts(password);
+                loadBrands();
+              }}
+              onFilterByBrand={(brandName) => {
+                setProductBrandFilter(brandName);
+                handleTabChange('products');
+              }}
+            />
           </div>
         )}
 
@@ -3113,6 +3202,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         });
                       }}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  {/* Brand Select Dropdown */}
+                  <div className="bg-amber-500/5 p-3.5 rounded-2xl border border-amber-500/20">
+                    <BrandSelectDropdown
+                      value={editingProduct?.brand || 'Other'}
+                      required
+                      brandsList={dbBrands}
+                      onChange={(brandName, brandId, brandSlug) => {
+                        setEditingProduct((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                brand: brandName,
+                                brand_id: brandId,
+                                brand_slug: brandSlug,
+                              }
+                            : prev
+                        );
+                      }}
                     />
                   </div>
 

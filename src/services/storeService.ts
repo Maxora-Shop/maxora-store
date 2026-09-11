@@ -1,5 +1,5 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats } from '../types';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand } from '../types';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug, getProductSlug } from '../utils/seo';
 import { matchesTaxonomyField } from '../utils/taxonomy';
@@ -29,6 +29,7 @@ const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
 const PRODUCT_TYPES_KEY = 'maxora_product_types_v1';
 const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
+const BRANDS_KEY = 'maxora_brands_v1';
 
 function notifyCustomerAuthChanged(): void {
   if (typeof window !== 'undefined') {
@@ -81,6 +82,12 @@ function notifyChildCategoriesChanged(): void {
 function notifyReviewsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
+  }
+}
+
+function notifyBrandsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
   }
 }
 
@@ -443,7 +450,21 @@ export async function seedInitialDataIfNeeded() {
       notifyReviewsChanged();
     }
 
-    // 7. Store Settings
+    // 7. Seed Brands if empty
+    const brandSnap = await getDocs(collection(db, 'brands'));
+    if (brandSnap.empty) {
+      const batch = writeBatch(db);
+      for (const b of INITIAL_BRANDS) {
+        const ref = doc(db, 'brands', b.id);
+        batch.set(ref, b);
+      }
+      await batch.commit();
+      console.log('Seeded initial brands to Firestore');
+      setLocal(BRANDS_KEY, INITIAL_BRANDS);
+      notifyBrandsChanged();
+    }
+
+    // 8. Store Settings
     const settingsDoc = await getDoc(doc(db, 'settings', 'store_settings'));
     if (!settingsDoc.exists()) {
       await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
@@ -474,6 +495,9 @@ export const storeService = {
   },
   getCachedChildCategories(): ChildCategory[] {
     return getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+  },
+  getCachedBrands(): Brand[] {
+    return getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
   },
 
   // 1. SETTINGS
@@ -2488,5 +2512,238 @@ export const storeService = {
       };
     }
     return result;
+  },
+
+  // 7. BRAND MANAGEMENT
+  async getBrands(activeOnly: boolean = false): Promise<Brand[]> {
+    let brands: Brand[] = [];
+    let firestoreSuccess = false;
+
+    // 1. Firestore
+    try {
+      const snap = await getDocs(collection(db, 'brands'));
+      if (!snap.empty) {
+        firestoreSuccess = true;
+        snap.forEach((d) => {
+          const item = d.data() as Brand;
+          brands.push({ ...item, id: String(item.id || d.id) });
+        });
+        if (brands.length > 0) {
+          setLocal(BRANDS_KEY, brands);
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore getBrands error:', e);
+    }
+
+    // 2. REST API fallback
+    if (!firestoreSuccess || brands.length === 0) {
+      try {
+        const apiResult = await tryApi<{ success: boolean; brands: Brand[] }>('/api/brands?all=true');
+        if (apiResult.success && Array.isArray(apiResult.data?.brands) && apiResult.data.brands.length > 0) {
+          brands = apiResult.data.brands;
+          setLocal(BRANDS_KEY, brands);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. Local Cache fallback
+    if (brands.length === 0) {
+      brands = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    }
+
+    // Ensure all brands from products are represented
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const existingBrandNames = new Set(brands.map((b) => b.name.toLowerCase().trim()));
+    let newBrandsFound = false;
+
+    prods.forEach((p) => {
+      const brandName = (p.brand || '').trim();
+      if (brandName && brandName.toLowerCase() !== 'unbranded' && !existingBrandNames.has(brandName.toLowerCase())) {
+        existingBrandNames.add(brandName.toLowerCase());
+        const slug = generateSlug(brandName);
+        brands.push({
+          id: `brand-${slug || Date.now()}`,
+          name: brandName,
+          slug: slug || 'brand',
+          active: 1,
+          display_order: 99,
+          description: `${brandName} genuine products with authentic warranty.`,
+        });
+        newBrandsFound = true;
+      }
+    });
+
+    if (newBrandsFound) {
+      setLocal(BRANDS_KEY, brands);
+    }
+
+    const sorted = [...brands].sort((a, b) => {
+      const orderA = a.display_order ?? 999;
+      const orderB = b.display_order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (activeOnly) {
+      return sorted.filter((b) => b.active !== 0 && b.active !== false && String(b.active) !== '0');
+    }
+    return sorted;
+  },
+
+  async saveBrand(brandData: Partial<Brand>, adminPassword?: string): Promise<{ success: boolean; brand: Brand }> {
+    const rawName = (brandData.name || '').trim();
+    const slug = (brandData.slug && brandData.slug.trim()) ? generateSlug(brandData.slug) : generateSlug(rawName);
+    const id = brandData.id || `brand-${slug || Date.now()}`;
+
+    const newBrand: Brand = {
+      id,
+      name: rawName || 'Other',
+      slug: slug || 'other',
+      logo_url: brandData.logo_url || '',
+      description: brandData.description || '',
+      display_order: Number(brandData.display_order ?? 99),
+      active: brandData.active !== undefined ? (brandData.active ? 1 : 0) : 1,
+      meta_title: brandData.meta_title || `${rawName} Products in Bangladesh | Maxora`,
+      meta_description: brandData.meta_description || `Buy authentic ${rawName} products in Bangladesh at best prices on Maxora.`,
+      meta_keywords: brandData.meta_keywords || `${rawName}, Maxora, Bangladesh, online shop`,
+      created_at: brandData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. Persist to Firestore
+    try {
+      await setDoc(doc(db, 'brands', id), newBrand, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveBrand error:', e);
+    }
+
+    // 2. Cascade update products if Brand name or slug changed
+    const current = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    const existing = current.find((b) => b.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newBrand.name || oldSlug !== newBrand.slug)) {
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.brand_id === id ||
+          (oldSlug && p.brand_slug === oldSlug) ||
+          (oldName && p.brand && p.brand.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.brand = newBrand.name;
+          p.brand_id = newBrand.id;
+          p.brand_slug = newBrand.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+    }
+
+    // 3. Update local cache
+    const idx = current.findIndex((b) => b.id === id || b.slug === slug);
+    let updated: Brand[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newBrand;
+    } else {
+      updated = [...current, newBrand];
+    }
+    setLocal(BRANDS_KEY, updated);
+    notifyBrandsChanged();
+
+    // 4. REST API sync
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi('/api/admin/brands', {
+        method: 'POST',
+        headers: getAuthHeaders(pass),
+        body: JSON.stringify(newBrand),
+      });
+    } catch {
+      // non-blocking
+    }
+
+    return { success: true, brand: newBrand };
+  },
+
+  async deleteBrand(brandId: string, adminPassword?: string): Promise<{ success: boolean; affectedProductsCount: number }> {
+    // 1. Delete from Firestore
+    try {
+      await deleteDoc(doc(db, 'brands', brandId));
+    } catch (e) {
+      console.warn('Firestore deleteBrand error:', e);
+    }
+
+    const current = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    const brandToDelete = current.find((b) => b.id === brandId);
+    const brandName = brandToDelete?.name?.toLowerCase().trim();
+    const brandSlug = brandToDelete?.slug?.toLowerCase().trim();
+
+    const updated = current.filter((b) => b.id !== brandId);
+    setLocal(BRANDS_KEY, updated);
+    notifyBrandsChanged();
+
+    // 2. Re-assign products belonging to this brand to "Other" so product data is never lost or orphaned
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let affectedCount = 0;
+    let prodsChanged = false;
+
+    prods.forEach((p) => {
+      if (
+        p.brand_id === brandId ||
+        (brandSlug && (p.brand_slug || '').toLowerCase().trim() === brandSlug) ||
+        (brandName && (p.brand || '').toLowerCase().trim() === brandName)
+      ) {
+        p.brand = 'Other';
+        p.brand_id = 'brand-other';
+        p.brand_slug = 'other';
+        affectedCount++;
+        prodsChanged = true;
+        setDoc(doc(db, 'products', String(p.id)), {
+          brand: 'Other',
+          brand_id: 'brand-other',
+          brand_slug: 'other',
+        }, { merge: true }).catch(() => {});
+      }
+    });
+
+    if (prodsChanged) {
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }
+
+    // 3. REST API delete
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/brands/${brandId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(pass),
+      });
+    } catch {
+      // non-blocking
+    }
+
+    return { success: true, affectedProductsCount: affectedCount };
+  },
+
+  async getProductsByBrand(brandSlugOrName: string): Promise<Product[]> {
+    const prods = await this.getProducts();
+    const target = brandSlugOrName.toLowerCase().trim();
+    return prods.filter((p) => {
+      if (!p.active && p.active !== undefined && p.active !== 1) return false;
+      const bName = (p.brand || '').toLowerCase().trim();
+      const bSlug = (p.brand_slug || generateSlug(p.brand || '')).toLowerCase().trim();
+      const bId = (p.brand_id || '').toLowerCase().trim();
+      return bName === target || bSlug === target || bId === target;
+    });
   },
 };

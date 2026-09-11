@@ -27,6 +27,7 @@ import {
   Sparkles,
   Send,
   User,
+  Tag,
 } from 'lucide-react';
 import { Product, StoreSettings, Review, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
@@ -559,9 +560,15 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
 
         {/* RIGHT COLUMN: PRODUCT INFORMATION & PURCHASE OPTIONS */}
         <div className="lg:col-span-6 space-y-6">
-          {/* Top Info Bar: Category + SKU */}
+          {/* Top Info Bar: Brand + Category + SKU */}
           <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-semibold text-zinc-500 border-b border-zinc-100 pb-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center flex-wrap gap-2">
+              {product.brand && (
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 border border-amber-500/20 text-[10px] font-extrabold flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-amber-600" />
+                  <span>Brand: {product.brand}</span>
+                </span>
+              )}
               <span className="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-800 uppercase tracking-wider text-[10px] font-bold">
                 {product.category || 'General'}
               </span>

@@ -1,3 +1,18 @@
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  image_url?: string;
+  description?: string;
+  display_order?: number;
+  active: boolean | number;
+  meta_title?: string;
+  meta_description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ProductColor {
   name: string;
   code?: string;

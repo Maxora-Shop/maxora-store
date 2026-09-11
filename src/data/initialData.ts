@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand } from '../types';
 
 export const INITIAL_CATEGORIES: Category[] = [
   {
@@ -1034,5 +1034,106 @@ export const INITIAL_REVIEWS: Review[] = [
     user_name: "Imtiaz Karim",
     created_at: new Date(Date.now() - 86400000 * 8).toISOString(),
     verified_purchase: true
+  }
+];
+
+export const INITIAL_BRANDS: Brand[] = [
+  {
+    id: "brand-sokany",
+    name: "Sokany",
+    slug: "sokany",
+    logo_url: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=200&auto=format&fit=crop&q=80",
+    description: "Quality home & kitchen appliances from Sokany.",
+    display_order: 1,
+    active: 1,
+    meta_title: "Sokany Products in Bangladesh | Maxora",
+    meta_description: "Shop genuine Sokany kitchen appliances, air fryers, blenders, and beauty care items at best prices."
+  },
+  {
+    id: "brand-miyako",
+    name: "Miyako",
+    slug: "miyako",
+    logo_url: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=200&auto=format&fit=crop&q=80",
+    description: "Household and kitchen appliances by Miyako.",
+    display_order: 2,
+    active: 1,
+    meta_title: "Miyako Appliances in Bangladesh | Maxora",
+    meta_description: "Explore Miyako blenders, electric kettles, room heaters, and kitchen essentials in BD."
+  },
+  {
+    id: "brand-jysuper",
+    name: "JYSUPER",
+    slug: "jysuper",
+    logo_url: "https://images.unsplash.com/photo-1584281722572-888981f440ee?w=200&auto=format&fit=crop&q=80",
+    description: "Rechargeable emergency lights, desk fans, and electronic gadgets.",
+    display_order: 3,
+    active: 1,
+    meta_title: "JYSUPER Rechargeable Fans & Gadgets | Maxora",
+    meta_description: "Authentic JYSUPER emergency fans, portable lighting, and rechargeable electronics with fast BD delivery."
+  },
+  {
+    id: "brand-xiaomi",
+    name: "Xiaomi",
+    slug: "xiaomi",
+    logo_url: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=200&auto=format&fit=crop&q=80",
+    description: "Smart wearables, smart home devices, and audio accessories.",
+    display_order: 4,
+    active: 1,
+    meta_title: "Xiaomi Gadgets & Wearables in BD | Maxora",
+    meta_description: "Buy original Xiaomi smartwatches, earbuds, power banks, and smart lifestyle products in Bangladesh."
+  },
+  {
+    id: "brand-samsung",
+    name: "Samsung",
+    slug: "samsung",
+    logo_url: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=200&auto=format&fit=crop&q=80",
+    description: "Innovative consumer electronics, wearables, and appliances.",
+    display_order: 5,
+    active: 1,
+    meta_title: "Samsung Electronics & Accessories | Maxora",
+    meta_description: "Shop Samsung wireless chargers, earbuds, displays, and smart accessories in Bangladesh."
+  },
+  {
+    id: "brand-philips",
+    name: "Philips",
+    slug: "philips",
+    logo_url: "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=200&auto=format&fit=crop&q=80",
+    description: "Personal grooming, health, lighting, and home appliances.",
+    display_order: 6,
+    active: 1,
+    meta_title: "Philips Grooming & Home Appliances | Maxora",
+    meta_description: "Genuine Philips trimmers, shavers, hair dryers, and kitchen appliances with warranty."
+  },
+  {
+    id: "brand-walton",
+    name: "Walton",
+    slug: "walton",
+    logo_url: "https://images.unsplash.com/photo-1526738549149-8e07eca6c147?w=200&auto=format&fit=crop&q=80",
+    description: "Proudly manufactured electronics and home appliances for Bangladesh.",
+    display_order: 7,
+    active: 1,
+    meta_title: "Walton Electronics in Bangladesh | Maxora",
+    meta_description: "Explore Walton electronics, appliances, and accessories with nationwide service support."
+  },
+  {
+    id: "brand-maxora",
+    name: "Maxora",
+    slug: "maxora",
+    logo_url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&auto=format&fit=crop&q=80",
+    description: "Maxora signature series lifestyle, tech, and travel essentials.",
+    display_order: 8,
+    active: 1,
+    meta_title: "Maxora Exclusive Signature Products | Maxora",
+    meta_description: "Maxora premium brand products crafted for style, durability, and top daily performance."
+  },
+  {
+    id: "brand-other",
+    name: "Other",
+    slug: "other",
+    description: "Other quality manufacturers and unbranded goods.",
+    display_order: 9,
+    active: 1,
+    meta_title: "All Other Brands | Maxora",
+    meta_description: "Browse products from assorted trusted global and local brands."
   }
 ];
