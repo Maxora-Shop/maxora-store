@@ -133,6 +133,23 @@ function setLocal<T>(key: string, value: T): void {
   }
 }
 
+const DELETED_ORDERS_KEY = 'maxora_deleted_orders_ids';
+
+export function getDeletedOrderIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  const list = getLocal<string[]>(DELETED_ORDERS_KEY, []);
+  return new Set((list || []).map(String));
+}
+
+export function markOrderDeleted(id: string | number, orderNo?: string) {
+  if (typeof window === 'undefined') return;
+  const list = getLocal<string[]>(DELETED_ORDERS_KEY, []);
+  const set = new Set(list.map(String));
+  if (id) set.add(String(id));
+  if (orderNo) set.add(String(orderNo));
+  setLocal(DELETED_ORDERS_KEY, Array.from(set));
+}
+
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
   if (!localStorage.getItem(SETTINGS_KEY)) {
@@ -142,10 +159,34 @@ export function initLocalStorage(): void {
     setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
-    setLocal(ORDERS_KEY, INITIAL_ORDERS);
+    setLocal(ORDERS_KEY, []);
+  } else {
+    // Purge legacy hardcoded demo orders if present
+    const existingOrders = getLocal<Order[]>(ORDERS_KEY, []);
+    if (Array.isArray(existingOrders) && existingOrders.length > 0) {
+      const cleaned = existingOrders.filter(
+        (o) => !['ord-001', 'ord-002', 'ord-003'].includes(String(o.id)) &&
+               !['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)
+      );
+      if (cleaned.length !== existingOrders.length) {
+        setLocal(ORDERS_KEY, cleaned);
+      }
+    }
   }
   if (!localStorage.getItem(CUSTOMERS_KEY)) {
-    setLocal(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    setLocal(CUSTOMERS_KEY, []);
+  } else {
+    // Purge legacy demo customers if present
+    const existingCusts = getLocal<Customer[]>(CUSTOMERS_KEY, []);
+    if (Array.isArray(existingCusts) && existingCusts.length > 0) {
+      const cleanedCusts = existingCusts.filter(
+        (c) => !['cust-001', 'cust-002'].includes(String(c.id)) &&
+               !['Tanvir Ahmed', 'Farhana Yasmin'].includes(c.name)
+      );
+      if (cleanedCusts.length !== existingCusts.length) {
+        setLocal(CUSTOMERS_KEY, cleanedCusts);
+      }
+    }
   }
   if (!localStorage.getItem(CATEGORIES_KEY)) {
     setLocal(CATEGORIES_KEY, INITIAL_CATEGORIES);
@@ -202,26 +243,36 @@ export function initRealtimeFirestoreListeners() {
       }
     }, (err) => console.warn('Settings Firestore snapshot warning:', err));
 
-    // 3. Listen for orders changes
+    // 3. Listen for orders changes (realtime cloud sync)
     onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const deletedIds = getDeletedOrderIds();
       const orders: Order[] = [];
       snapshot.forEach((docSnap) => {
         const o = docSnap.data() as Order;
+        const oId = String(o.id || docSnap.id);
+        const oNum = String(o.order_number || '');
+        if (deletedIds.has(oId) || (oNum && deletedIds.has(oNum))) {
+          return;
+        }
+        if (['ord-001', 'ord-002', 'ord-003'].includes(oId) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
+          return;
+        }
         orders.push({
           ...o,
-          id: String(o.id || docSnap.id),
+          id: oId,
+          order_number: oNum || `MX-${oId.slice(-6)}`,
           phone: o.phone || (o as any).customer_phone || '',
           customer_phone: o.phone || (o as any).customer_phone || '',
-          total: o.total !== undefined ? o.total : (o as any).total_amount || 0,
-          total_amount: o.total !== undefined ? o.total : (o as any).total_amount || 0,
+          total: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
+          total_amount: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
           status: (o.status || (o as any).order_status || 'Pending') as OrderStatus,
+          items: Array.isArray(o.items) ? o.items : [],
+          created_at: o.created_at || new Date().toISOString(),
         });
       });
-      if (orders.length > 0) {
-        orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        setLocal(ORDERS_KEY, orders);
-        notifyOrdersChanged();
-      }
+      orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLocal(ORDERS_KEY, orders);
+      notifyOrdersChanged();
     }, (err) => console.warn('Orders Firestore snapshot warning:', err));
 
     // 4. Listen for categories changes
@@ -1131,8 +1182,61 @@ export const storeService = {
 
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
     const orderMap = new Map<string, Order>();
+    const deletedIds = getDeletedOrderIds();
 
-    // 1. Fetch from REST API (server source of truth)
+    // Helper to validate and add an order
+    const registerOrder = (o: any, sourceDocId?: string) => {
+      if (!o) return;
+      const id = String(o.id || sourceDocId || '');
+      const orderNumber = String(o.order_number || (id ? `MX-${id.slice(-6)}` : ''));
+      if (!id && !orderNumber) return;
+
+      // Filter out explicitly deleted orders
+      if (deletedIds.has(id) || (orderNumber && deletedIds.has(orderNumber))) {
+        return;
+      }
+
+      // Filter out legacy dummy demo orders
+      if (['ord-001', 'ord-002', 'ord-003'].includes(id) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
+        return;
+      }
+
+      const mappedOrder: Order = {
+        id: id || orderNumber,
+        order_number: orderNumber || `MX-${id.slice(-6)}`,
+        customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
+        customer_name: o.customer_name || 'Customer',
+        phone: o.phone || o.customer_phone || '',
+        alt_phone: o.alt_phone || '',
+        email: o.email || '',
+        district: o.district || '',
+        area: o.area || '',
+        address: o.address || '',
+        delivery_area: o.delivery_area || 'inside_dhaka',
+        delivery_charge: Number(o.delivery_charge || 0),
+        subtotal: Number(o.subtotal || 0),
+        total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+        total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+        status: (o.status || o.order_status || 'Pending') as OrderStatus,
+        payment_method: o.payment_method || 'Cash on Delivery',
+        note: o.note || '',
+        items: Array.isArray(o.items) ? o.items : [],
+        created_at: o.created_at || new Date().toISOString(),
+        updated_at: o.updated_at || new Date().toISOString(),
+      };
+
+      const key = mappedOrder.id;
+      if (!orderMap.has(key)) {
+        orderMap.set(key, mappedOrder);
+      } else {
+        const existing = orderMap.get(key)!;
+        if ((!existing.items || existing.items.length === 0) && mappedOrder.items.length > 0) {
+          orderMap.set(key, { ...existing, items: mappedOrder.items });
+        }
+      }
+    };
+
+    // 1. Fetch from REST API (server database source of truth)
     try {
       const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
       const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
@@ -1141,43 +1245,18 @@ export const storeService = {
       });
 
       if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
-        apiResult.data.orders.forEach((o) => {
-          const key = String(o.id || o.order_number || '');
-          if (key) orderMap.set(key, o);
-        });
+        apiResult.data.orders.forEach((o) => registerOrder(o));
       }
     } catch (e) {
       console.warn('API getAllAdminOrders notice:', e);
     }
 
-    // 2. Fetch from Firestore (quota-tolerant)
+    // 2. Fetch from Firestore (quota-tolerant cloud DB)
     try {
       const snap = await getDocs(collection(db, 'orders'));
       if (!snap.empty) {
         snap.forEach((d) => {
-          const o = d.data() as any;
-          const mappedOrder: Order = {
-            ...o,
-            id: String(o.id || d.id),
-            customer_name: o.customer_name || 'Customer',
-            phone: o.phone || o.customer_phone || '',
-            customer_phone: o.phone || o.customer_phone || '',
-            total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-            total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-            status: (o.status || o.order_status || 'Pending') as OrderStatus,
-            order_number: o.order_number || `MX-${String(o.id || d.id).slice(-6)}`,
-            items: Array.isArray(o.items) ? o.items : [],
-            created_at: o.created_at || new Date().toISOString(),
-          };
-          const key = String(mappedOrder.id || mappedOrder.order_number);
-          if (!orderMap.has(key)) {
-            orderMap.set(key, mappedOrder);
-          } else {
-            const existing = orderMap.get(key)!;
-            if ((!existing.items || existing.items.length === 0) && mappedOrder.items.length > 0) {
-              orderMap.set(key, { ...existing, items: mappedOrder.items });
-            }
-          }
+          registerOrder(d.data(), d.id);
         });
       }
     } catch (e) {
@@ -1185,42 +1264,16 @@ export const storeService = {
     }
 
     // 3. Merge local cached orders
-    const localOrders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    const localOrders = getLocal<Order[]>(ORDERS_KEY, []);
     if (Array.isArray(localOrders)) {
-      localOrders.forEach((o) => {
-        const key = String(o.id || o.order_number || '');
-        if (key && !orderMap.has(key)) {
-          orderMap.set(key, o);
-        } else if (key && orderMap.has(key)) {
-          const existing = orderMap.get(key)!;
-          if ((!existing.items || existing.items.length === 0) && o.items && o.items.length > 0) {
-            orderMap.set(key, { ...existing, items: o.items });
-          }
-        }
-      });
-    }
-
-    // 4. Ensure INITIAL_ORDERS are also merged if still missing
-    if (Array.isArray(INITIAL_ORDERS)) {
-      INITIAL_ORDERS.forEach((o) => {
-        const key = String(o.id || o.order_number || '');
-        if (key && !orderMap.has(key)) {
-          orderMap.set(key, o);
-        }
-      });
+      localOrders.forEach((o) => registerOrder(o));
     }
 
     let orders = Array.from(orderMap.values());
-    if (orders.length === 0) {
-      orders = INITIAL_ORDERS;
-    }
-
     orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-    // Update local cache
-    if (orders.length > 0) {
-      setLocal(ORDERS_KEY, orders);
-    }
+    // Update local cache with sanitized orders
+    setLocal(ORDERS_KEY, orders);
 
     if (statusFilter) {
       const filterLower = statusFilter.toLowerCase().trim();
@@ -1241,8 +1294,8 @@ export const storeService = {
     }
 
     // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const index = orders.findIndex((o) => String(o.id) === idStr);
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
     if (index !== -1) {
       orders[index].status = status;
       orders[index].updated_at = new Date().toISOString();
@@ -1250,15 +1303,18 @@ export const storeService = {
     }
 
     // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
+          'x-admin-password': pass,
         },
         body: JSON.stringify({ status }),
-      }).catch(() => {});
+      });
+    } catch (e) {
+      console.warn('API update order status error:', e);
     }
 
     notifyOrdersChanged();
@@ -1276,8 +1332,8 @@ export const storeService = {
     }
 
     // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const index = orders.findIndex((o) => String(o.id) === idStr);
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
     if (index !== -1) {
       orders[index] = {
         ...orders[index],
@@ -1288,15 +1344,18 @@ export const storeService = {
     }
 
     // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
+          'x-admin-password': pass,
         },
         body: JSON.stringify(orderData),
-      }).catch(() => {});
+      });
+    } catch (e) {
+      console.warn('API update order error:', e);
     }
 
     notifyOrdersChanged();
@@ -1310,24 +1369,39 @@ export const storeService = {
   async deleteOrder(orderId: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderId);
 
-    // 1. Firestore
+    // Find matching order in local storage to also record its order_number
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const target = orders.find((o) => String(o.id) === idStr || String(o.order_number) === idStr);
+    const orderNo = target?.order_number;
+
+    // Mark as deleted in cache tracking
+    markOrderDeleted(idStr, orderNo);
+
+    // 1. Firestore: Delete by ID and by order number doc ref if different
     try {
       await deleteDoc(doc(db, 'orders', idStr));
+      if (orderNo && orderNo !== idStr) {
+        await deleteDoc(doc(db, 'orders', orderNo)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Firestore delete order error:', e);
     }
 
-    // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const filtered = orders.filter((o) => String(o.id) !== idStr && o.order_number !== idStr);
+    // 2. Local storage: Filter out matching order
+    const filtered = orders.filter(
+      (o) => String(o.id) !== idStr && o.order_number !== idStr && String(o.id) !== target?.id
+    );
     setLocal(ORDERS_KEY, filtered);
 
-    // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    // 3. API backend delete
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword },
-      }).catch(() => {});
+        headers: { 'x-admin-password': pass },
+      });
+    } catch (e) {
+      console.warn('API delete order error:', e);
     }
 
     notifyOrdersChanged();

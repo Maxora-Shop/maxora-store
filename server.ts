@@ -216,149 +216,11 @@ const defaultProducts = [
   }
 ];
 
-const defaultCustomers = [
-  {
-    id: "cust-001",
-    name: "Tanvir Ahmed",
-    phone: "01711223344",
-    alt_phone: "01811223344",
-    email: "tanvir.ahmed@example.com",
-    district: "Dhaka",
-    area: "Dhanmondi",
-    address: "House 32, Road 9/A, Dhanmondi, Dhaka",
-    total_orders: 2,
-    total_spent: 4950,
-    created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
-  },
-  {
-    id: "cust-002",
-    name: "Farhana Yasmin",
-    phone: "01988776655",
-    alt_phone: "",
-    email: "farhana.y@example.com",
-    district: "Chattogram",
-    area: "Panchlaish",
-    address: "Avenue 4, Nasirabad Housing Society, Chattogram",
-    total_orders: 1,
-    total_spent: 2080,
-    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 6).toISOString()
-  }
-];
+const defaultCustomers: any[] = [];
 
-const defaultOrders = [
-  {
-    id: "ord-001",
-    order_number: "MX-20260828-9843B",
-    customer_id: "cust-001",
-    customer_name: "Tanvir Ahmed",
-    phone: "01711223344",
-    alt_phone: "01811223344",
-    email: "tanvir.ahmed@example.com",
-    district: "Dhaka",
-    area: "Dhanmondi",
-    address: "House 32, Road 9/A, Dhanmondi, Dhaka",
-    delivery_area: "inside_dhaka",
-    delivery_charge: 70,
-    subtotal: 2500,
-    total: 2570,
-    status: "Delivered",
-    payment_method: "Cash on Delivery",
-    note: "Please call before arriving",
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
-  },
-  {
-    id: "ord-002",
-    order_number: "MX-20260829-4512A",
-    customer_id: "cust-002",
-    customer_name: "Farhana Yasmin",
-    phone: "01988776655",
-    alt_phone: "",
-    email: "farhana.y@example.com",
-    district: "Chattogram",
-    area: "Panchlaish",
-    address: "Avenue 4, Nasirabad Housing Society, Chattogram",
-    delivery_area: "outside_dhaka",
-    delivery_charge: 130,
-    subtotal: 1950,
-    total: 2080,
-    status: "Processing",
-    payment_method: "Cash on Delivery",
-    note: "",
-    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: "ord-003",
-    order_number: "MX-20260830-7790K",
-    customer_id: "cust-001",
-    customer_name: "Tanvir Ahmed",
-    phone: "01711223344",
-    alt_phone: "",
-    email: "tanvir.ahmed@example.com",
-    district: "Dhaka",
-    area: "Dhanmondi",
-    address: "House 32, Road 9/A, Dhanmondi, Dhaka",
-    delivery_area: "inside_dhaka",
-    delivery_charge: 70,
-    subtotal: 2310,
-    total: 2380,
-    status: "Pending",
-    payment_method: "Cash on Delivery",
-    note: "Deliver after 5 PM if possible",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-];
+const defaultOrders: any[] = [];
 
-const defaultOrderItems = [
-  {
-    id: "item-001",
-    order_id: "ord-001",
-    product_id: "prod-001",
-    product_name: "Maxora Ultra AMOLED Smartwatch Series 9",
-    sku: "MX-SW-09",
-    quantity: 1,
-    unit_price: 2500,
-    buying_price: 1800,
-    line_total: 2500
-  },
-  {
-    id: "item-002",
-    order_id: "ord-002",
-    product_id: "prod-002",
-    product_name: "Acoustic Pro ANC Wireless Earbuds",
-    sku: "MX-EB-ANC",
-    quantity: 1,
-    unit_price: 1700,
-    buying_price: 1200,
-    line_total: 1700
-  },
-  {
-    id: "item-003",
-    order_id: "ord-003",
-    product_id: "prod-003",
-    product_name: "Urban Explorer Anti-Theft Backpack",
-    sku: "MX-BP-URBAN",
-    quantity: 1,
-    unit_price: 1700,
-    buying_price: 1100,
-    line_total: 1700
-  },
-  {
-    id: "item-004",
-    order_id: "ord-003",
-    product_id: "prod-008",
-    product_name: "Pure Organic Sylhet Sreemangal Black Tea 500g",
-    sku: "MX-TEA-500",
-    quantity: 1,
-    unit_price: 520,
-    buying_price: 320,
-    line_total: 520
-  }
-];
+const defaultOrderItems: any[] = [];
 
 const defaultCategories = [
   { id: "cat-smart-gadgets", name: "Smart Gadgets", slug: "smart-gadgets", icon: "Watch", active: 1, display_order: 1 },
@@ -400,9 +262,9 @@ try {
     db = {
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
       products: parsed.products || defaultProducts,
-      customers: parsed.customers || defaultCustomers,
-      orders: parsed.orders || defaultOrders,
-      order_items: parsed.order_items || defaultOrderItems,
+      customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
+      order_items: Array.isArray(parsed.order_items) ? parsed.order_items : [],
       categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : defaultCategories,
       subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories
     };
@@ -1596,9 +1458,13 @@ app.put('/api/admin/orders/:id', requireAdmin, (req, res) => {
 
 // DELETE /api/admin/orders/:id
 app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
-  const orderId = req.params.id;
-  db.orders = db.orders.filter(o => o.id !== orderId && o.order_number !== orderId);
-  db.order_items = db.order_items.filter(i => i.order_id !== orderId);
+  const orderId = String(req.params.id);
+  const matchedOrders = db.orders.filter(o => String(o.id) === orderId || String(o.order_number) === orderId);
+  const matchedIds = new Set(matchedOrders.map(o => String(o.id)));
+  matchedIds.add(orderId);
+
+  db.orders = db.orders.filter(o => String(o.id) !== orderId && String(o.order_number) !== orderId);
+  db.order_items = db.order_items.filter(i => !matchedIds.has(String(i.order_id)));
   saveDB();
   res.json({
     success: true,
