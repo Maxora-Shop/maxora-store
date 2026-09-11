@@ -50,10 +50,16 @@ export default function App() {
   // Admin View State
   const [isAdminView, setIsAdminView] = useState(() => {
     if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname.toLowerCase();
       const path = window.location.pathname;
       const hash = window.location.hash;
       const search = window.location.search;
-      return path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true');
+      return (
+        hostname.includes('admin') ||
+        path.startsWith('/admin') ||
+        hash === '#admin' ||
+        search.includes('admin=true')
+      );
     }
     return false;
   });
@@ -177,7 +183,8 @@ export default function App() {
       const search = window.location.search;
 
       // Admin check
-      if (path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
+      const hostname = window.location.hostname.toLowerCase();
+      if (hostname.includes('admin') || path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
         setIsAdminView(true);
         setQuickViewProduct(null);
         setIsProductNotFound(false);
