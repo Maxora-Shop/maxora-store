@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Order, OrderItem, StoreSettings, Product } from '../types';
-import { Printer, X, Package, Loader2 } from 'lucide-react';
+import { Printer, X, Package, Loader2, ArrowRight } from 'lucide-react';
 import { storeService } from '../services/storeService';
 import { getProductSlug, generateSlug, findProductBySlugOrId, SITE_URL } from '../utils/seo';
 
@@ -10,6 +10,7 @@ interface InvoiceModalProps {
   settings: StoreSettings;
   products?: Product[];
   onClose: () => void;
+  onOpenProduct?: (product: Product) => void;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -17,6 +18,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   settings,
   products = [],
   onClose,
+  onOpenProduct,
 }) => {
   if (!order) return null;
 
@@ -54,59 +56,76 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
    * Universally resolves the real product record belonging to this order item from the store's product database.
    */
   const getItemProduct = (item: OrderItem, index: number): Product | null => {
-    if (!loadedProducts || loadedProducts.length === 0) return null;
+    const pool = loadedProducts && loadedProducts.length > 0 ? loadedProducts : products;
+    if (!pool || pool.length === 0) return null;
 
     if (item.product_id) {
-      const byId = loadedProducts.find((p) => String(p.id) === String(item.product_id));
+      const byId = pool.find((p) => String(p.id) === String(item.product_id));
       if (byId) return byId;
     }
 
     if (item.sku && item.sku.trim()) {
-      const bySku = loadedProducts.find(
+      const bySku = pool.find(
         (p) => p.sku && p.sku.toLowerCase().trim() === item.sku?.toLowerCase().trim()
       );
       if (bySku) return bySku;
     }
 
     if (item.product_name && item.product_name.trim()) {
-      const byName = loadedProducts.find(
+      const byName = pool.find(
         (p) => p.name && p.name.toLowerCase().trim() === item.product_name?.toLowerCase().trim()
       );
       if (byName) return byName;
     }
 
     if (item.product_id) {
-      const byHelper = findProductBySlugOrId(loadedProducts, item.product_id);
+      const byHelper = findProductBySlugOrId(pool, item.product_id);
       if (byHelper) return byHelper;
+    }
+
+    if ((item as any).slug) {
+      const bySlug = findProductBySlugOrId(pool, (item as any).slug);
+      if (bySlug) return bySlug;
     }
 
     return null;
   };
 
   /**
-   * Retrieves the product's actual image from the store's product database.
+   * Retrieves the product's actual image from the store's product database or order item snapshot.
    */
   const getItemImage = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
     const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
-    if (prod) {
-      if (item.selected_color && Array.isArray(prod.colors)) {
-        const matchedCol = prod.colors.find(
-          (c) => c.name?.toLowerCase().trim() === item.selected_color?.toLowerCase().trim()
-        );
-        if (matchedCol?.image_url && matchedCol.image_url.trim()) {
-          return matchedCol.image_url.trim();
-        }
-      }
-      if (prod.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
-        return prod.image_url.trim();
-      }
-      if (Array.isArray(prod.images) && prod.images.length > 0 && prod.images[0]?.trim()) {
-        return prod.images[0].trim();
+
+    // 1. If color variant matches a specific color image
+    if (prod && item.selected_color && Array.isArray(prod.colors)) {
+      const matchedCol = prod.colors.find(
+        (c) => c.name?.toLowerCase().trim() === item.selected_color?.toLowerCase().trim()
+      );
+      if (matchedCol?.image_url && typeof matchedCol.image_url === 'string' && matchedCol.image_url.trim()) {
+        return matchedCol.image_url.trim();
       }
     }
 
+    // 2. Direct item.image_url stored with the order at checkout
     if (item.image_url && typeof item.image_url === 'string' && item.image_url.trim()) {
       return item.image_url.trim();
+    }
+
+    // 3. Product's primary image_url
+    if (prod?.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
+      return prod.image_url.trim();
+    }
+
+    // 4. Product's images array
+    if (
+      prod &&
+      Array.isArray(prod.images) &&
+      prod.images.length > 0 &&
+      typeof prod.images[0] === 'string' &&
+      prod.images[0].trim()
+    ) {
+      return prod.images[0].trim();
     }
 
     return '';
@@ -130,18 +149,47 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
 
     if (!slug) return '';
+    return `/product/${slug}`;
+  };
 
-    if (typeof window !== 'undefined') {
-      const isExternalAdmin =
-        window.location.hostname.includes('admin') && !window.location.pathname.startsWith('/admin');
-      if (isExternalAdmin) {
-        const storeBase =
-          (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STORE_URL) || SITE_URL;
-        return `${storeBase.replace(/\/$/, '')}/product/${slug}`;
+  /**
+   * Seamlessly handles clicking on a product from the invoice:
+   * Opens the product details page directly so the customer or admin can view and order the product.
+   */
+  const handleProductClick = (e: React.MouseEvent, item: OrderItem, index: number) => {
+    e.preventDefault();
+    const prod = getItemProduct(item, index);
+
+    if (onOpenProduct) {
+      if (prod) {
+        onClose();
+        onOpenProduct(prod);
+        return;
       }
+
+      // Build a fallback product object so the customer can still view and order
+      const fallbackProd: Product = {
+        id: item.product_id || `prod-${index}`,
+        name: item.product_name || 'Product',
+        slug: (item as any).slug || generateSlug(item.product_name || 'product'),
+        selling_price: Number(item.unit_price) || 0,
+        buying_price: Number(item.buying_price) || 0,
+        discount: 0,
+        stock: 99,
+        image_url: getItemImage(item, index, null) || '',
+        category: 'All',
+        category_slug: 'all',
+      };
+      onClose();
+      onOpenProduct(fallbackProd);
+      return;
     }
 
-    return `/product/${slug}`;
+    // Default: if no onOpenProduct handler (e.g. admin panel), open product in new window/tab
+    const slug = prod ? getProductSlug(prod) : ((item as any).slug || generateSlug(item.product_name));
+    if (slug && typeof window !== 'undefined') {
+      window.open(`/product/${slug}`, '_blank', 'noopener,noreferrer');
+    }
   };
 
   // Eagerly preload images in the background on modal mount
@@ -158,12 +206,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   }, [order, loadedProducts]);
 
   /**
-   * Ensures all product thumbnails are fully loaded and decoded in memory before invoking the browser print dialog.
+   * Ensures all product thumbnails are loaded before invoking the browser print dialog.
    */
   const handlePrint = async () => {
     setIsPreloadingPrint(true);
     try {
-      // 1. Collect all product image URLs for this order
       const urls: string[] = [];
       if (Array.isArray(order?.items)) {
         order.items.forEach((item, idx) => {
@@ -175,13 +222,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         });
       }
 
-      // 2. Preload and decode images via Image constructor
       if (urls.length > 0) {
         await Promise.all(
           urls.map((url) => {
             return new Promise<void>((resolve) => {
               const img = new Image();
-              img.crossOrigin = 'anonymous';
               img.referrerPolicy = 'no-referrer';
               let finished = false;
               const complete = () => {
@@ -216,48 +261,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         );
       }
 
-      // 3. Ensure all rendered DOM <img> elements inside the printable portal are complete and decoded
-      const portalEl = document.getElementById('admin-print-invoice-portal');
-      if (portalEl) {
-        const domImages = Array.from(portalEl.querySelectorAll<HTMLImageElement>('img'));
-        await Promise.all(
-          domImages.map((domImg: HTMLImageElement) => {
-            return new Promise<void>((resolve) => {
-              let finished = false;
-              const complete = () => {
-                if (!finished) {
-                  finished = true;
-                  resolve();
-                }
-              };
-
-              if (domImg.complete && domImg.naturalWidth > 0) {
-                if ('decode' in domImg && typeof domImg.decode === 'function') {
-                  domImg.decode().then(complete).catch(complete);
-                } else {
-                  complete();
-                }
-              } else {
-                domImg.addEventListener(
-                  'load',
-                  () => {
-                    if ('decode' in domImg && typeof domImg.decode === 'function') {
-                      domImg.decode().then(complete).catch(complete);
-                    } else {
-                      complete();
-                    }
-                  },
-                  { once: true }
-                );
-                domImg.addEventListener('error', complete, { once: true });
-                setTimeout(complete, 1500);
-              }
-            });
-          })
-        );
-      }
-
-      // 4. Brief delay to allow browser layout and painting
+      // Brief delay to allow browser painting
       await new Promise((resolve) => setTimeout(resolve, 150));
     } catch (e) {
       console.warn('Image preload before print warning:', e);
@@ -418,7 +422,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   const itemKey = item.id || `item-${index}`;
                   const isImgFailed = Boolean(imageErrors[itemKey]);
                   const hasValidImage = Boolean(imageUrl && !isImgFailed);
-                  const hasUrl = Boolean(productUrl) && !isForPrint;
 
                   return (
                     <tr key={itemKey} className="break-inside-avoid">
@@ -428,13 +431,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                       <td className="p-2.5 align-middle text-zinc-950">
                         <div className="flex items-center gap-3">
                           {/* 48x48px Clean Product Thumbnail */}
-                          {hasUrl ? (
-                            <a
-                              href={productUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 block rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 transition-all focus:outline-none print:border-zinc-300"
-                              title={`View product: ${item.product_name}`}
+                          {!isForPrint ? (
+                            <button
+                              type="button"
+                              onClick={(e) => handleProductClick(e, item, index)}
+                              className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 hover:ring-2 hover:ring-emerald-500/20 transition-all cursor-pointer block bg-zinc-50"
+                              title={`View & order ${item.product_name}`}
                             >
                               {hasValidImage ? (
                                 <img
@@ -443,20 +445,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                                   width={48}
                                   height={48}
                                   loading="eager"
-                                  decoding="sync"
-                                  crossOrigin="anonymous"
+                                  decoding="async"
                                   referrerPolicy="no-referrer"
                                   onError={() => handleImageError(itemKey)}
-                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover bg-zinc-50 block rounded-lg"
+                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg transition-transform hover:scale-105"
                                 />
                               ) : (
-                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50">
+                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-100 flex items-center justify-center text-zinc-400">
                                   <Package className="w-5 h-5 text-zinc-400" />
                                 </div>
                               )}
-                            </a>
+                            </button>
                           ) : (
-                            <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-200 print:border-zinc-300">
+                            <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 shrink-0 rounded-lg overflow-hidden border border-zinc-300">
                               {hasValidImage ? (
                                 <img
                                   src={imageUrl}
@@ -465,36 +466,34 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                                   height={48}
                                   loading="eager"
                                   decoding="sync"
-                                  crossOrigin="anonymous"
                                   referrerPolicy="no-referrer"
-                                  onError={() => handleImageError(itemKey)}
-                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover bg-zinc-50 block rounded-lg"
+                                  className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 object-cover block rounded-lg"
                                 />
                               ) : (
-                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50">
+                                <div className="w-12 h-12 min-w-12 min-h-12 max-w-12 max-h-12 bg-zinc-50 flex items-center justify-center text-zinc-400">
                                   <Package className="w-5 h-5 text-zinc-400" />
                                 </div>
                               )}
                             </div>
                           )}
 
-                          {/* Product Name & Variant */}
+                          {/* Product Name & Variant & Clickable Actions */}
                           <div className="min-w-0 flex-1">
-                            {hasUrl ? (
-                              <a
-                                href={productUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-bold text-zinc-950 hover:text-emerald-700 hover:underline transition-colors block text-xs leading-snug print:no-underline"
-                                title={`View product: ${item.product_name}`}
+                            {!isForPrint ? (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProductClick(e, item, index)}
+                                className="text-left font-bold text-zinc-950 hover:text-emerald-700 hover:underline transition-colors block text-xs leading-snug cursor-pointer group"
+                                title={`View & order ${item.product_name}`}
                               >
-                                {item.product_name}
-                              </a>
+                                <span>{item.product_name}</span>
+                              </button>
                             ) : (
                               <span className="font-bold text-zinc-950 block text-xs leading-snug">
                                 {item.product_name}
                               </span>
                             )}
+
                             {item.selected_color && (
                               <div className="text-[11px] text-zinc-600 mt-0.5 flex items-center gap-1 font-normal">
                                 <span>Color/Variant:</span>
@@ -502,6 +501,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                                   {item.selected_color}
                                 </span>
                               </div>
+                            )}
+
+                            {!isForPrint && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleProductClick(e, item, index)}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline mt-1 cursor-pointer"
+                                title="Open product to view and order"
+                              >
+                                <span>প্রোডাক্ট দেখুন / অর্ডার করুন</span>
+                                <ArrowRight className="w-3 h-3 text-emerald-700" />
+                              </button>
                             )}
                           </div>
                         </div>
@@ -618,7 +629,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   return (
     <>
-      {/* 1. Dedicated Print Portal injected directly into document.body */}
+      {/* 1. Dedicated Print Portal injected directly into document.body for Chrome print & PDF */}
       {isMounted &&
         createPortal(
           <div id="admin-print-invoice-portal" ref={printPortalRef}>

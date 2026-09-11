@@ -1487,6 +1487,10 @@ export default function App() {
           settings={settings}
           products={products}
           onClose={() => setCustomerInvoiceOrder(null)}
+          onOpenProduct={(p) => {
+            setCustomerInvoiceOrder(null);
+            handleOpenProductDetail(p);
+          }}
         />
       )}
 

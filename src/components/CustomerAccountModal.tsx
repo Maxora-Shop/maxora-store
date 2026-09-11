@@ -731,23 +731,44 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                         {Array.isArray(order.items) && order.items.length > 0 && (
                           <div className="py-2 border-t border-zinc-100 space-y-1.5">
                             {order.items.slice(0, 3).map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-xs text-zinc-700">
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  if (onOpenProduct) {
+                                    onClose();
+                                    const found = wishlistProducts?.find(p => String(p.id) === String(item.product_id)) || {
+                                      id: item.product_id,
+                                      name: item.product_name,
+                                      selling_price: item.unit_price || 0,
+                                      buying_price: item.buying_price || 0,
+                                      slug: (item as any).slug || item.product_id,
+                                      image_url: item.image_url || '',
+                                      stock: 99,
+                                      category: 'All',
+                                      category_slug: 'all',
+                                    } as Product;
+                                    onOpenProduct(found);
+                                  }
+                                }}
+                                className="flex items-center justify-between text-xs text-zinc-700 hover:text-emerald-700 cursor-pointer group transition-colors"
+                                title="Click to view & order product"
+                              >
                                 <div className="flex items-center gap-2 min-w-0">
                                   {item.image_url ? (
                                     <img
                                       src={item.image_url}
                                       alt={item.product_name}
-                                      className="w-6 h-6 rounded-md object-cover border border-zinc-200 shrink-0"
+                                      className="w-6 h-6 rounded-md object-cover border border-zinc-200 shrink-0 group-hover:border-emerald-500"
                                     />
                                   ) : (
                                     <div className="w-6 h-6 rounded-md bg-zinc-100 flex items-center justify-center text-[9px] font-bold shrink-0">
                                       📦
                                     </div>
                                   )}
-                                  <span className="truncate max-w-[200px] sm:max-w-xs">{item.product_name}</span>
+                                  <span className="truncate max-w-[200px] sm:max-w-xs font-medium group-hover:underline">{item.product_name}</span>
                                   <span className="text-zinc-400 font-medium">×{item.quantity}</span>
                                 </div>
-                                <span className="font-bold text-zinc-900 shrink-0">
+                                <span className="font-bold text-zinc-900 shrink-0 group-hover:text-emerald-700">
                                   ৳{((item.unit_price || 0) * (item.quantity || 1)).toLocaleString('en-BD')}
                                 </span>
                               </div>

@@ -58,7 +58,7 @@ import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
-import { generateSlug } from '../utils/seo';
+import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
@@ -4923,6 +4923,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         settings={settingsForm}
         products={products}
         onClose={() => setSelectedOrderForInvoice(null)}
+        onOpenProduct={(p) => {
+          setSelectedOrderForInvoice(null);
+          const slug = getProductSlug(p);
+          if (slug && typeof window !== 'undefined') {
+            window.open(`/product/${slug}`, '_blank', 'noopener,noreferrer');
+          }
+        }}
       />
     </div>
   );
