@@ -1466,6 +1466,74 @@ export const storeService = {
     return { success: true };
   },
 
+  subscribeToOrders(callback: (orders: Order[]) => void): () => void {
+    if (!db) return () => {};
+    try {
+      const q = collection(db, 'orders');
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const orderMap = new Map<string, Order>();
+          const deletedIds = getDeletedOrderIds();
+
+          snapshot.forEach((d) => {
+            const o = d.data() as any;
+            if (!o) return;
+            const id = String(o.id || d.id || '');
+            const orderNumber = String(o.order_number || (id ? `MX-${id.slice(-6)}` : ''));
+            if (!id && !orderNumber) return;
+            if (deletedIds.has(id) || (orderNumber && deletedIds.has(orderNumber))) return;
+            if (
+              ['ord-001', 'ord-002', 'ord-003'].includes(id) ||
+              ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)
+            ) {
+              return;
+            }
+
+            const mappedOrder: Order = {
+              id: id || orderNumber,
+              order_number: orderNumber || `MX-${id.slice(-6)}`,
+              customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
+              customer_name: o.customer_name || 'Customer',
+              phone: o.phone || o.customer_phone || '',
+              alt_phone: o.alt_phone || '',
+              email: o.email || '',
+              district: o.district || '',
+              area: o.area || '',
+              address: o.address || '',
+              delivery_area: o.delivery_area || 'inside_dhaka',
+              delivery_charge: Number(o.delivery_charge || 0),
+              subtotal: Number(o.subtotal || 0),
+              total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+              total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+              status: (o.status || o.order_status || 'Pending') as OrderStatus,
+              payment_method: o.payment_method || 'Cash on Delivery',
+              note: o.note || '',
+              items: Array.isArray(o.items) ? o.items : [],
+              created_at: o.created_at || new Date().toISOString(),
+              updated_at: o.updated_at || new Date().toISOString(),
+            };
+            orderMap.set(mappedOrder.id, mappedOrder);
+          });
+
+          const orders = Array.from(orderMap.values());
+          orders.sort(
+            (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          );
+          setLocal(ORDERS_KEY, orders);
+          callback(orders);
+        },
+        (err) => {
+          console.warn('Real-time order subscription notice:', err);
+        }
+      );
+      return unsubscribe;
+    } catch (e) {
+      console.warn('Failed to setup real-time orders subscription:', e);
+      return () => {};
+    }
+  },
+
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
     let customers: Customer[] = [];
 

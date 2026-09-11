@@ -430,17 +430,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
     window.addEventListener('storage', handleOrdersUpdated);
 
-    // Auto-refresh orders every 10 seconds for real-time order tracking
+    // Live real-time Firestore synchronization for orders
+    const unsubscribeOrders = storeService.subscribeToOrders((realtimeOrders) => {
+      setOrders(realtimeOrders);
+      setRecentOrders(realtimeOrders.slice(0, 8));
+      // update totals dynamically
+      const pending = realtimeOrders.filter((o) => o.status === 'Pending').length;
+      const completed = realtimeOrders.filter((o) => o.status === 'Delivered').length;
+      const revenue = realtimeOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      setTotals((prev) => ({
+        ...prev,
+        total_orders: realtimeOrders.length,
+        pending_orders: pending,
+        delivered_orders: completed,
+        total_revenue: revenue,
+      }));
+    });
+
+    // Auto-refresh orders every 8 seconds for background polling fallback
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadTabData(currentTab);
       }
-    }, 10000);
+    }, 8000);
 
     return () => {
       window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
       window.removeEventListener('storage', handleOrdersUpdated);
+      unsubscribeOrders();
       clearInterval(pollInterval);
     };
   }, [isAuthenticated, currentTab]);
