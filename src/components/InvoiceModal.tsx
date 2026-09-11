@@ -78,13 +78,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     const candidateList: Product[] = [];
     if (Array.isArray(loadedProducts) && loadedProducts.length > 0) candidateList.push(...loadedProducts);
     if (Array.isArray(products) && products.length > 0) candidateList.push(...products);
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('maxora_products') : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) candidateList.push(...parsed);
-      }
-    } catch {}
+    const localKeys = ['maxora_products_v1', 'maxora_products', 'products'];
+    localKeys.forEach((k) => {
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) candidateList.push(...parsed);
+        }
+      } catch {}
+    });
     if (Array.isArray(INITIAL_PRODUCTS)) candidateList.push(...INITIAL_PRODUCTS);
 
     if (candidateList.length === 0) return null;
@@ -227,6 +230,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     ).trim();
     if (extraImg && extraImg.length > 5) {
       return extraImg;
+    }
+
+    // 7. Intelligent contextual fallback based on item product name keywords
+    const nameLower = String(item.product_name || '').toLowerCase();
+    if (nameLower.includes('knife') || nameLower.includes('board') || nameLower.includes('apron') || nameLower.includes('kitchen')) {
+      return 'https://images.unsplash.com/photo-1593618998160-e34014e67546?w=800&auto=format&fit=crop&q=80';
+    }
+    if (nameLower.includes('watch')) {
+      return 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80';
+    }
+    if (nameLower.includes('earbud') || nameLower.includes('headphone') || nameLower.includes('audio')) {
+      return 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80';
+    }
+    if (nameLower.includes('bag') || nameLower.includes('backpack')) {
+      return 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&auto=format&fit=crop&q=80';
+    }
+    if (nameLower.includes('fan')) {
+      return 'https://images.unsplash.com/photo-1617469767053-d3b523a0b982?w=800&auto=format&fit=crop&q=80';
+    }
+    if (nameLower.includes('tea')) {
+      return 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80';
     }
 
     return '';

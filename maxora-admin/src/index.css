@@ -59,6 +59,19 @@
     box-sizing: border-box !important;
   }
 
+  #admin-print-invoice-portal img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    max-width: 48px !important;
+    max-height: 48px !important;
+    width: 48px !important;
+    height: 48px !important;
+    object-fit: cover !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   /* Prevent page breaks inside critical elements */
   .print-avoid-break {
     break-inside: avoid !important;

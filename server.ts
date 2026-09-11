@@ -602,7 +602,112 @@ app.get('/api/products/:id', (req, res) => {
 
 // POST /api/orders
 app.post('/api/orders', (req, res) => {
-  const body = req.body;
+  const body = req.body || {};
+
+  // Support direct synchronization of an order object from client
+  const directOrder = body.order || (body.order_number && (Array.isArray(body.items) || body.total) ? body : null);
+  if (directOrder) {
+    const oId = directOrder.id || `ord-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`;
+    const oNum = directOrder.order_number || generateOrderNumber();
+    const custPhone = directOrder.phone || directOrder.customer_phone || "";
+    const custId = directOrder.customer_id || `cust-${custPhone.replace(/[^0-9]/g, '') || Date.now().toString(36)}`;
+
+    // Upsert customer
+    let cust = db.customers.find(c => c.phone === custPhone);
+    if (cust) {
+      cust.name = directOrder.customer_name || cust.name;
+      cust.alt_phone = directOrder.alt_phone || cust.alt_phone;
+      cust.email = directOrder.email || cust.email;
+      cust.district = directOrder.district || cust.district;
+      cust.area = directOrder.area || cust.area;
+      cust.address = directOrder.address || cust.address;
+      cust.total_orders = (cust.total_orders || 0) + 1;
+      cust.total_spent = (cust.total_spent || 0) + Number(directOrder.total || directOrder.total_amount || 0);
+      cust.updated_at = new Date().toISOString();
+    } else {
+      cust = {
+        id: custId,
+        name: directOrder.customer_name || "Customer",
+        phone: custPhone,
+        alt_phone: directOrder.alt_phone || "",
+        email: directOrder.email || "",
+        district: directOrder.district || "",
+        area: directOrder.area || "",
+        address: directOrder.address || "",
+        total_orders: 1,
+        total_spent: Number(directOrder.total || directOrder.total_amount || 0),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      db.customers.unshift(cust);
+    }
+
+    // Upsert order
+    const existingIdx = db.orders.findIndex(o => o.id === oId || o.order_number === oNum);
+    const orderRecord = {
+      id: oId,
+      order_number: oNum,
+      customer_id: custId,
+      customer_name: directOrder.customer_name || "Customer",
+      phone: custPhone,
+      alt_phone: directOrder.alt_phone || "",
+      email: directOrder.email || "",
+      district: directOrder.district || "",
+      area: directOrder.area || "",
+      address: directOrder.address || "",
+      delivery_area: directOrder.delivery_area || "inside_dhaka",
+      delivery_charge: Number(directOrder.delivery_charge || 70),
+      subtotal: Number(directOrder.subtotal || 0),
+      total: Number(directOrder.total !== undefined ? directOrder.total : directOrder.total_amount || 0),
+      status: directOrder.status || directOrder.order_status || "Pending",
+      payment_method: directOrder.payment_method || "Cash on Delivery",
+      note: directOrder.note || "",
+      created_at: directOrder.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (existingIdx !== -1) {
+      db.orders[existingIdx] = orderRecord;
+    } else {
+      db.orders.unshift(orderRecord);
+    }
+
+    // Upsert items
+    if (Array.isArray(directOrder.items)) {
+      db.order_items = db.order_items.filter(i => i.order_id !== oId);
+      for (const item of directOrder.items) {
+        const prod = db.products.find(p => p.id === item.product_id || (p.sku && p.sku === item.sku) || p.name === (item.name || item.product_name));
+        const img = item.image_url || prod?.image_url || (Array.isArray(prod?.images) ? prod.images[0] : "") || "";
+        db.order_items.push({
+          id: item.id || `item-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`,
+          order_id: oId,
+          product_id: item.product_id || prod?.id || "",
+          product_name: item.product_name || item.name || prod?.name || "Product",
+          sku: item.sku || prod?.sku || "",
+          quantity: Math.max(1, Number(item.quantity || 1)),
+          unit_price: Number(item.unit_price || item.price || prod?.selling_price || 0),
+          buying_price: Number(item.buying_price || prod?.buying_price || 0),
+          line_total: Number(item.line_total || ((item.unit_price || item.price || 0) * (item.quantity || 1))),
+          image_url: img,
+          selected_color: item.selected_color || "",
+          selected_color_code: item.selected_color_code || "",
+          slug: item.slug || prod?.slug || ""
+        });
+      }
+    }
+
+    saveDB();
+    return res.status(201).json({
+      success: true,
+      message: "Order synchronized successfully.",
+      order: {
+        ...orderRecord,
+        items: db.order_items.filter(i => i.order_id === oId)
+      }
+    });
+  }
+
+  // Standard checkout request flow
   if (!body.customer_name || !body.phone || !body.district || !body.area || !body.address) {
     return res.status(400).json({
       success: false,
@@ -622,33 +727,38 @@ app.post('/api/orders', (req, res) => {
   const finalItems: any[] = [];
 
   for (const item of items) {
-    const product = db.products.find(p => p.id === item.product_id && p.active !== 0);
-    if (!product) {
-      return res.status(400).json({
-        success: false,
-        error: `Product '${item.name || item.product_id}' was not found.`
-      });
+    let product = db.products.find(p => p.id === item.product_id);
+    if (!product && item.sku) {
+      product = db.products.find(p => p.sku && p.sku.toLowerCase() === String(item.sku).toLowerCase());
+    }
+    if (!product && (item.name || item.product_name)) {
+      const itmName = (item.name || item.product_name || '').toLowerCase();
+      product = db.products.find(p => p.name && p.name.toLowerCase() === itmName);
     }
 
     const quantity = Math.max(1, Number(item.quantity || 1));
-    if (Number(product.stock) < quantity) {
-      return res.status(400).json({
-        success: false,
-        error: `${product.name} only has ${product.stock} items remaining in stock.`
-      });
-    }
-
-    const discount = Number(product.discount || 0);
-    const sellingPrice = Number(product.selling_price || 0);
+    const discount = Number(product?.discount || 0);
+    const sellingPrice = Number(product?.selling_price || item.unit_price || item.price || 0);
     const finalPrice = Math.max(0, sellingPrice - discount);
     const lineTotal = finalPrice * quantity;
 
     subtotal += lineTotal;
+    const resolvedImage = item.image_url || product?.image_url || (Array.isArray(product?.images) && product.images[0]) || "";
+
     finalItems.push({
-      product,
+      product: product || {
+        id: item.product_id || `prod-${Date.now().toString(36)}`,
+        name: item.name || item.product_name || "Product",
+        sku: item.sku || "",
+        image_url: resolvedImage,
+        selling_price: sellingPrice,
+        buying_price: 0
+      },
+      item,
+      resolvedImage,
       quantity,
       unitPrice: finalPrice,
-      buyingPrice: Number(product.buying_price || 0),
+      buyingPrice: Number(product?.buying_price || 0),
       lineTotal
     });
   }
@@ -693,12 +803,12 @@ app.post('/api/orders', (req, res) => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    db.customers.push(customer);
+    db.customers.unshift(customer);
   }
 
   // Create Order
-  const orderId = `ord-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`;
-  const orderNo = generateOrderNumber();
+  const orderId = body.id || `ord-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`;
+  const orderNo = body.order_number || generateOrderNumber();
 
   const newOrder = {
     id: orderId,
@@ -724,25 +834,29 @@ app.post('/api/orders', (req, res) => {
 
   db.orders.unshift(newOrder);
 
-  // Insert Order Items and reduce product stock
-  for (const item of finalItems) {
+  // Insert Order Items and safely adjust product stock if exists
+  for (const fItem of finalItems) {
     const orderItemId = `item-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`;
     db.order_items.push({
       id: orderItemId,
       order_id: orderId,
-      product_id: item.product.id,
-      product_name: item.product.name,
-      sku: item.product.sku || "",
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-      buying_price: item.buyingPrice,
-      line_total: item.lineTotal
+      product_id: fItem.product.id,
+      product_name: fItem.product.name,
+      sku: fItem.product.sku || fItem.item.sku || "",
+      quantity: fItem.quantity,
+      unit_price: fItem.unitPrice,
+      buying_price: fItem.buyingPrice,
+      line_total: fItem.lineTotal,
+      image_url: fItem.resolvedImage,
+      selected_color: fItem.item.selected_color || "",
+      selected_color_code: fItem.item.selected_color_code || "",
+      slug: fItem.product.slug || fItem.item.slug || ""
     });
 
-    // Update Stock
-    const pIndex = db.products.findIndex(p => p.id === item.product.id);
-    if (pIndex !== -1) {
-      db.products[pIndex].stock = Math.max(0, db.products[pIndex].stock - item.quantity);
+    // Update Stock if product has valid stock count
+    const pIndex = db.products.findIndex(p => p.id === fItem.product.id);
+    if (pIndex !== -1 && typeof db.products[pIndex].stock === 'number') {
+      db.products[pIndex].stock = Math.max(0, db.products[pIndex].stock - fItem.quantity);
       db.products[pIndex].updated_at = new Date().toISOString();
     }
   }
@@ -751,24 +865,111 @@ app.post('/api/orders', (req, res) => {
 
   const fullOrderResponse = {
     ...newOrder,
-    items: finalItems.map(i => ({
-      id: `item-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`,
-      order_id: orderId,
-      product_id: i.product.id,
-      product_name: i.product.name,
-      sku: i.product.sku || "",
-      quantity: i.quantity,
-      unit_price: i.unitPrice,
-      buying_price: i.buyingPrice,
-      line_total: i.lineTotal,
-      image_url: i.product.image_url
-    }))
+    items: db.order_items.filter(i => i.order_id === orderId)
   };
 
   res.status(201).json({
     success: true,
     message: "Order placed successfully.",
     order: fullOrderResponse
+  });
+});
+
+// POST /api/orders/sync
+app.post('/api/orders/sync', (req, res) => {
+  const directOrder = req.body?.order || req.body;
+  if (!directOrder || (!directOrder.id && !directOrder.order_number)) {
+    return res.status(400).json({ success: false, error: "Invalid order data" });
+  }
+
+  const oId = directOrder.id || `ord-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`;
+  const oNum = directOrder.order_number || generateOrderNumber();
+  const custPhone = directOrder.phone || directOrder.customer_phone || "";
+  const custId = directOrder.customer_id || `cust-${custPhone.replace(/[^0-9]/g, '') || Date.now().toString(36)}`;
+
+  // Upsert customer
+  let cust = db.customers.find(c => c.phone === custPhone);
+  if (cust) {
+    cust.name = directOrder.customer_name || cust.name;
+    cust.updated_at = new Date().toISOString();
+  } else if (custPhone) {
+    cust = {
+      id: custId,
+      name: directOrder.customer_name || "Customer",
+      phone: custPhone,
+      alt_phone: directOrder.alt_phone || "",
+      email: directOrder.email || "",
+      district: directOrder.district || "",
+      area: directOrder.area || "",
+      address: directOrder.address || "",
+      total_orders: 1,
+      total_spent: Number(directOrder.total || directOrder.total_amount || 0),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    db.customers.unshift(cust);
+  }
+
+  // Upsert order
+  const existingIdx = db.orders.findIndex(o => o.id === oId || o.order_number === oNum);
+  const orderRecord = {
+    id: oId,
+    order_number: oNum,
+    customer_id: custId,
+    customer_name: directOrder.customer_name || "Customer",
+    phone: custPhone,
+    alt_phone: directOrder.alt_phone || "",
+    email: directOrder.email || "",
+    district: directOrder.district || "",
+    area: directOrder.area || "",
+    address: directOrder.address || "",
+    delivery_area: directOrder.delivery_area || "inside_dhaka",
+    delivery_charge: Number(directOrder.delivery_charge || 70),
+    subtotal: Number(directOrder.subtotal || 0),
+    total: Number(directOrder.total !== undefined ? directOrder.total : directOrder.total_amount || 0),
+    status: directOrder.status || directOrder.order_status || "Pending",
+    payment_method: directOrder.payment_method || "Cash on Delivery",
+    note: directOrder.note || "",
+    created_at: directOrder.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (existingIdx !== -1) {
+    db.orders[existingIdx] = orderRecord;
+  } else {
+    db.orders.unshift(orderRecord);
+  }
+
+  if (Array.isArray(directOrder.items)) {
+    db.order_items = db.order_items.filter(i => i.order_id !== oId);
+    for (const item of directOrder.items) {
+      const prod = db.products.find(p => p.id === item.product_id || (p.sku && p.sku === item.sku) || p.name === (item.name || item.product_name));
+      const img = item.image_url || prod?.image_url || (Array.isArray(prod?.images) ? prod.images[0] : "") || "";
+      db.order_items.push({
+        id: item.id || `item-${Date.now().toString(36)}-${Math.floor(Math.random()*1000)}`,
+        order_id: oId,
+        product_id: item.product_id || prod?.id || "",
+        product_name: item.product_name || item.name || prod?.name || "Product",
+        sku: item.sku || prod?.sku || "",
+        quantity: Math.max(1, Number(item.quantity || 1)),
+        unit_price: Number(item.unit_price || item.price || prod?.selling_price || 0),
+        buying_price: Number(item.buying_price || prod?.buying_price || 0),
+        line_total: Number(item.line_total || ((item.unit_price || item.price || 0) * (item.quantity || 1))),
+        image_url: img,
+        selected_color: item.selected_color || "",
+        selected_color_code: item.selected_color_code || "",
+        slug: item.slug || prod?.slug || ""
+      });
+    }
+  }
+
+  saveDB();
+  res.json({
+    success: true,
+    order: {
+      ...orderRecord,
+      items: db.order_items.filter(i => i.order_id === oId)
+    }
   });
 });
 
@@ -1303,10 +1504,19 @@ app.get('/api/admin/orders', requireAdmin, (req, res) => {
   }
   list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-  // Attach full order item details to each order
+  // Attach full order item details to each order with guaranteed image_url
   const enriched = list.map(o => ({
     ...o,
-    items: db.order_items.filter(i => i.order_id === o.id)
+    items: db.order_items.filter(i => i.order_id === o.id).map(item => {
+      const prod = db.products.find(p => p.id === item.product_id || (p.sku && p.sku === item.sku) || p.name === item.product_name);
+      const img = item.image_url || prod?.image_url || (Array.isArray(prod?.images) ? prod.images[0] : "") || "";
+      return {
+        ...item,
+        image_url: img,
+        sku: item.sku || prod?.sku || "",
+        slug: item.slug || prod?.slug || ""
+      };
+    })
   }));
 
   res.json({
@@ -1321,7 +1531,16 @@ app.get('/api/admin/orders/:id', requireAdmin, (req, res) => {
   if (!order) {
     return res.status(404).json({ success: false, error: "Order not found." });
   }
-  const items = db.order_items.filter(i => i.order_id === order.id);
+  const items = db.order_items.filter(i => i.order_id === order.id).map(item => {
+    const prod = db.products.find(p => p.id === item.product_id || (p.sku && p.sku === item.sku) || p.name === item.product_name);
+    const img = item.image_url || prod?.image_url || (Array.isArray(prod?.images) ? prod.images[0] : "") || "";
+    return {
+      ...item,
+      image_url: img,
+      sku: item.sku || prod?.sku || "",
+      slug: item.slug || prod?.slug || ""
+    };
+  });
   res.json({
     success: true,
     order: {

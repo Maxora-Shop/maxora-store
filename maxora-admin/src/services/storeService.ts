@@ -646,37 +646,66 @@ export const storeService = {
   },
 
   async getAllAdminProducts(adminPassword?: string): Promise<Product[]> {
-    let prods: Product[] = [];
+    const prodMap = new Map<string, Product>();
 
-    // 1. Try Firestore
+    // 1. Try REST API
     try {
-      const snap = await getDocs(collection(db, 'products'));
-      if (!snap.empty) {
-        snap.forEach((d) => prods.push(d.data() as Product));
-        if (prods.length > 0) {
-          setLocal(PRODUCTS_KEY, prods);
-        }
-      }
-    } catch (e) {
-      console.warn('Firestore getAllAdminProducts error:', e);
-    }
-
-    // 2. Try REST API
-    if (prods.length === 0) {
       const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
         headers: getAuthHeaders(adminPassword),
       });
       if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
-        prods = apiResult.data.products;
-        setLocal(PRODUCTS_KEY, prods);
+        apiResult.data.products.forEach((p) => {
+          const key = String(p.id || p.sku || p.slug || '');
+          if (key) prodMap.set(key, p);
+        });
       }
+    } catch (e) {
+      console.warn('API getAllAdminProducts warning:', e);
     }
 
-    if (prods.length === 0) {
-      prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    // 2. Try Firestore (if available, quota-safe)
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      if (!snap.empty) {
+        snap.forEach((d) => {
+          const p = d.data() as Product;
+          const key = String(p.id || p.sku || p.slug || d.id);
+          if (!prodMap.has(key)) {
+            prodMap.set(key, { ...p, id: String(p.id || d.id) });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Firestore getAllAdminProducts warning:', e);
     }
 
-    return [...prods].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    // 3. Fallback / merge local cache
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    if (Array.isArray(local)) {
+      local.forEach((p) => {
+        const key = String(p.id || p.sku || p.slug || '');
+        if (key && !prodMap.has(key)) {
+          prodMap.set(key, p);
+        }
+      });
+    }
+
+    // Also check INITIAL_PRODUCTS
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        const key = String(p.id || p.sku || p.slug || '');
+        if (key && !prodMap.has(key)) {
+          prodMap.set(key, p);
+        }
+      });
+    }
+
+    const prods = Array.from(prodMap.values());
+    if (prods.length > 0) {
+      setLocal(PRODUCTS_KEY, prods);
+    }
+
+    return prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
 
   async addProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product: Product }> {
@@ -1045,15 +1074,33 @@ export const storeService = {
   },
 
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
-    let orders: Order[] = [];
+    const orderMap = new Map<string, Order>();
 
-    // 1. Fetch from Firestore
+    // 1. Fetch from REST API (server source of truth)
+    try {
+      const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+      const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
+      const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
+        headers: { 'x-admin-password': pass },
+      });
+
+      if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
+        apiResult.data.orders.forEach((o) => {
+          const key = String(o.id || o.order_number || '');
+          if (key) orderMap.set(key, o);
+        });
+      }
+    } catch (e) {
+      console.warn('API getAllAdminOrders notice:', e);
+    }
+
+    // 2. Fetch from Firestore (quota-tolerant)
     try {
       const snap = await getDocs(collection(db, 'orders'));
       if (!snap.empty) {
         snap.forEach((d) => {
           const o = d.data() as any;
-          orders.push({
+          const mappedOrder: Order = {
             ...o,
             id: String(o.id || d.id),
             customer_name: o.customer_name || 'Customer',
@@ -1065,40 +1112,66 @@ export const storeService = {
             order_number: o.order_number || `MX-${String(o.id || d.id).slice(-6)}`,
             items: Array.isArray(o.items) ? o.items : [],
             created_at: o.created_at || new Date().toISOString(),
-          });
+          };
+          const key = String(mappedOrder.id || mappedOrder.order_number);
+          if (!orderMap.has(key)) {
+            orderMap.set(key, mappedOrder);
+          } else {
+            const existing = orderMap.get(key)!;
+            if ((!existing.items || existing.items.length === 0) && mappedOrder.items.length > 0) {
+              orderMap.set(key, { ...existing, items: mappedOrder.items });
+            }
+          }
         });
-        if (orders.length > 0) {
-          orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          setLocal(ORDERS_KEY, orders);
-        }
       }
     } catch (e) {
-      console.warn('Firestore getAllAdminOrders error:', e);
+      console.warn('Firestore getAllAdminOrders notice (quota or offline):', e);
     }
 
-    // 2. Fetch from API if Firestore is empty
-    if (orders.length === 0) {
-      const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
-      const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
-      const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
-        headers: { 'x-admin-password': pass },
+    // 3. Merge local cached orders
+    const localOrders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    if (Array.isArray(localOrders)) {
+      localOrders.forEach((o) => {
+        const key = String(o.id || o.order_number || '');
+        if (key && !orderMap.has(key)) {
+          orderMap.set(key, o);
+        } else if (key && orderMap.has(key)) {
+          const existing = orderMap.get(key)!;
+          if ((!existing.items || existing.items.length === 0) && o.items && o.items.length > 0) {
+            orderMap.set(key, { ...existing, items: o.items });
+          }
+        }
       });
-
-      if (apiResult.success && Array.isArray(apiResult.data?.orders) && apiResult.data.orders.length > 0) {
-        orders = apiResult.data.orders;
-        setLocal(ORDERS_KEY, orders);
-      }
     }
 
+    // 4. Ensure INITIAL_ORDERS are also merged if still missing
+    if (Array.isArray(INITIAL_ORDERS)) {
+      INITIAL_ORDERS.forEach((o) => {
+        const key = String(o.id || o.order_number || '');
+        if (key && !orderMap.has(key)) {
+          orderMap.set(key, o);
+        }
+      });
+    }
+
+    let orders = Array.from(orderMap.values());
     if (orders.length === 0) {
-      orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+      orders = INITIAL_ORDERS;
+    }
+
+    orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    // Update local cache
+    if (orders.length > 0) {
+      setLocal(ORDERS_KEY, orders);
     }
 
     if (statusFilter) {
       const filterLower = statusFilter.toLowerCase().trim();
       orders = orders.filter((o) => (o.status || '').toLowerCase().trim() === filterLower);
     }
-    return [...orders].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    return orders;
   },
 
   async updateOrderStatus(orderId: string | number, status: OrderStatus, adminPassword?: string): Promise<{ success: boolean }> {

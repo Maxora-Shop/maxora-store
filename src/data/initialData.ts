@@ -760,10 +760,72 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: 1,
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     updated_at: new Date().toISOString()
+  },
+  {
+    id: "prod-mtubpl3r-622",
+    name: "National Cutting Board Zepter Knife Set and Cooking Apron Combo Offer",
+    description: "National Cutting Board Zepter Knife Set and Cooking Apron Combo Offer. Premium quality 3-in-1 kitchen tools set with stainless steel knives, chopping board, and waterproof cooking apron.",
+    category: "Home & Kitchen Appliances",
+    sub_category: "Kitchen & Dining",
+    product_type: "Combo Offer",
+    child_category: "Kitchen Tools",
+    sku: "MX-CBK-3016",
+    image_url: "https://images.unsplash.com/photo-1593618998160-e34014e67546?w=800&auto=format&fit=crop&q=80",
+    images: [
+      "https://images.unsplash.com/photo-1593618998160-e34014e67546?w=800&auto=format&fit=crop&q=80"
+    ],
+    colors: [],
+    buying_price: 967,
+    selling_price: 1799,
+    discount: 450,
+    final_price: 1349,
+    stock: 50,
+    badge: "COMBO DEAL",
+    featured: 1,
+    active: 1,
+    slug: "national-cutting-board-zepter-knife-set-and-cooking-apron-combo-offer",
+    created_at: "2026-09-09T16:39:12.663Z",
+    updated_at: new Date().toISOString()
   }
 ];
 
 export const INITIAL_ORDERS: Order[] = [
+  {
+    id: "ord-20260911-4z9du",
+    order_number: "MX-20260911-4Z9DU",
+    customer_id: "cust-01635451746",
+    customer_name: "Lutas Biswas",
+    phone: "01635451746",
+    alt_phone: "",
+    email: "contact.maxorashopbd@gmail.com",
+    district: "Dhaka",
+    area: "Adabor",
+    address: "Purana palton,Dhaka",
+    delivery_area: "inside_dhaka",
+    delivery_charge: 70,
+    subtotal: 1349,
+    total: 1419,
+    status: "Pending",
+    payment_method: "Cash on Delivery",
+    note: "",
+    created_at: "2026-09-11T10:13:00.000Z",
+    updated_at: "2026-09-11T10:13:00.000Z",
+    items: [
+      {
+        id: "item-20260911-4z9du-01",
+        order_id: "ord-20260911-4z9du",
+        product_id: "prod-mtubpl3r-622",
+        product_name: "National Cutting Board Zepter Knife Set and Cooking Apron Combo Offer",
+        sku: "MX-CBK-3016",
+        quantity: 1,
+        unit_price: 1349,
+        buying_price: 967,
+        line_total: 1349,
+        image_url: "https://images.unsplash.com/photo-1593618998160-e34014e67546?w=800&auto=format&fit=crop&q=80",
+        slug: "national-cutting-board-zepter-knife-set-and-cooking-apron-combo-offer"
+      }
+    ]
+  },
   {
     id: "ord-001",
     order_number: "MX-20260828-9843B",
@@ -794,7 +856,8 @@ export const INITIAL_ORDERS: Order[] = [
         quantity: 1,
         unit_price: 2500,
         buying_price: 1800,
-        line_total: 2500
+        line_total: 2500,
+        image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80"
       }
     ]
   },
