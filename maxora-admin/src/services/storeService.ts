@@ -287,18 +287,17 @@ export function initRealtimeFirestoreListeners() {
 initRealtimeFirestoreListeners();
 
 // Check if online API is reachable
-const DEFAULT_BACKEND_URL = 'https://ais-pre-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app';
 const isInternalHost = typeof window !== 'undefined' && (
-  window.location.hostname.includes('run.app') || 
-  window.location.hostname === 'localhost' || 
-  window.location.hostname === '127.0.0.1'
+  (window.location?.hostname || '').includes('run.app') || 
+  window.location?.hostname === 'localhost' || 
+  window.location?.hostname === '127.0.0.1'
 );
 
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
   ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
   : isInternalHost
     ? '' 
-    : DEFAULT_BACKEND_URL;
+    : '';
 
 function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -320,14 +319,21 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
 async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
-    const res = await fetch(fullUrl, options);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const res = await fetch(fullUrl, {
+      ...options,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
+
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
       return { success: false, error: errJson?.error || res.statusText };
     }
     const contentType = res.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      return { success: true };
+      return { success: false, error: 'Non-JSON response' };
     }
     const json = await res.json();
     return { success: true, data: json };

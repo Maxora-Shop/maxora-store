@@ -17,7 +17,14 @@ import { InvoiceModal } from './components/InvoiceModal';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order } from './types';
 import { storeService } from './services/storeService';
 import { pixelService } from './services/pixelService';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS } from './data/initialData';
+import {
+  INITIAL_SETTINGS,
+  INITIAL_PRODUCTS,
+  INITIAL_CATEGORIES,
+  INITIAL_SUBCATEGORIES,
+  INITIAL_PRODUCT_TYPES,
+  INITIAL_CHILD_CATEGORIES,
+} from './data/initialData';
 import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
@@ -54,11 +61,26 @@ export default function App() {
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
   // Products & 4-Tier Taxonomy State
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
-  const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const cached = typeof window !== 'undefined' ? storeService.getCachedProducts() : null;
+    return cached && cached.length > 0 ? cached : INITIAL_PRODUCTS;
+  });
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const cached = typeof window !== 'undefined' ? storeService.getCachedCategories() : null;
+    return cached && cached.length > 0 ? cached : INITIAL_CATEGORIES;
+  });
+  const [subCategories, setSubCategories] = useState<SubCategory[]>(() => {
+    const cached = typeof window !== 'undefined' ? storeService.getCachedSubCategories() : null;
+    return cached && cached.length > 0 ? cached : INITIAL_SUBCATEGORIES;
+  });
+  const [productTypes, setProductTypes] = useState<ProductType[]>(() => {
+    const cached = typeof window !== 'undefined' ? storeService.getCachedProductTypes() : null;
+    return cached && cached.length > 0 ? cached : INITIAL_PRODUCT_TYPES;
+  });
+  const [childCategories, setChildCategories] = useState<ChildCategory[]>(() => {
+    const cached = typeof window !== 'undefined' ? storeService.getCachedChildCategories() : null;
+    return cached && cached.length > 0 ? cached : INITIAL_CHILD_CATEGORIES;
+  });
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
