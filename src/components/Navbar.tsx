@@ -83,9 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     } else if (onSelectCategory && filter.category) {
       onSelectCategory(filter.category);
     }
-    setTimeout(() => {
-      setCategoryMenuOpen(false);
-    }, 160);
+    // Do NOT close the menu here - user can freely browse hierarchy levels
   };
 
   return (
@@ -156,6 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               id="navbar-categories-menu-button"
+              data-hierarchy-trigger="true"
               onClick={() => setCategoryMenuOpen(!categoryMenuOpen)}
               className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all border cursor-pointer shadow-2xs active:scale-98 ${
                 categoryMenuOpen || currentTaxonomyFilter.category

@@ -21,11 +21,14 @@ import {
 import { Category, SubCategory, ProductType, ChildCategory, Product } from '../types';
 import { storeService } from '../services/storeService';
 import { generateSlug } from '../utils/seo';
+import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
+import { buildTaxonomyTree } from '../utils/taxonomy';
 
 interface AdminCategoriesProps {
   password?: string;
   products?: Product[];
   onUpdated?: () => void;
+  onSelectProduct?: (product: Product) => void;
 }
 
 type TabType = 'tree' | 'categories' | 'subcategories' | 'product_types' | 'child_categories';
@@ -42,6 +45,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   password = '',
   products = [],
   onUpdated,
+  onSelectProduct,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -50,6 +54,27 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
+  const [currentTaxonomyFilter, setCurrentTaxonomyFilter] = useState<{
+    category?: string;
+    subCategory?: string;
+    productType?: string;
+    childCategory?: string;
+    categoryId?: string;
+    subCategoryId?: string;
+    productTypeId?: string;
+    childCategoryId?: string;
+  }>({});
+
+  const taxonomy = React.useMemo(() => {
+    return buildTaxonomyTree(
+      products,
+      categories,
+      subCategories,
+      productTypes,
+      childCategories
+    );
+  }, [products, categories, subCategories, productTypes, childCategories]);
 
   // Hierarchy Tree expand/collapse state
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -722,6 +747,40 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
             <Plus className="w-3.5 h-3.5" />
             <span>+ Child</span>
           </button>
+
+          {/* 4-Tier Interactive Category Hierarchy Navigator Modal Trigger */}
+          <div className="relative">
+            <button
+              type="button"
+              id="admin-hierarchy-trigger"
+              data-hierarchy-trigger="true"
+              onClick={() => setIsHierarchyNavOpen(!isHierarchyNavOpen)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer border ${
+                isHierarchyNavOpen
+                  ? 'bg-zinc-950 text-white border-zinc-950 shadow-md'
+                  : 'bg-white hover:bg-zinc-50 text-zinc-900 border-zinc-300'
+              }`}
+              title="Open 4-tier interactive Category Hierarchy Mega Navigator"
+            >
+              <Layers className={`w-3.5 h-3.5 ${isHierarchyNavOpen ? 'text-emerald-400' : 'text-emerald-600'}`} />
+              <span>Mega Navigator</span>
+            </button>
+
+            {isHierarchyNavOpen && (
+              <CategoryHierarchyMenu
+                isOpen={isHierarchyNavOpen}
+                onClose={() => setIsHierarchyNavOpen(false)}
+                taxonomy={taxonomy}
+                currentFilter={currentTaxonomyFilter}
+                onSelectTaxonomy={(filter) => {
+                  setCurrentTaxonomyFilter(filter);
+                }}
+                products={products}
+                onSelectProduct={onSelectProduct}
+                mode="admin"
+              />
+            )}
+          </div>
         </div>
       </div>
 

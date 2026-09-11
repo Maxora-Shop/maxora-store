@@ -50,12 +50,14 @@ import {
   Palette,
   FolderTree
 } from 'lucide-react';
-import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory } from '../types';
+import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
+import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
+import { buildTaxonomyTree } from '../utils/taxonomy';
 import { generateSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
 
@@ -145,6 +147,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [products, setProducts] = useState<Product[]>([]);
   const [dbCategories, setDbCategories] = useState<Category[]>([]);
   const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
+  const [dbProductTypes, setDbProductTypes] = useState<ProductType[]>([]);
+  const [dbChildCategories, setDbChildCategories] = useState<ChildCategory[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
@@ -156,6 +160,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
+  const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
+  const [currentTaxonomyFilter, setCurrentTaxonomyFilter] = useState<{
+    category?: string;
+    subCategory?: string;
+    productType?: string;
+    childCategory?: string;
+    categoryId?: string;
+    subCategoryId?: string;
+    productTypeId?: string;
+    childCategoryId?: string;
+  }>({});
   
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('');
@@ -491,16 +506,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadCategories = async () => {
     try {
-      const [cats, subs] = await Promise.all([
+      const [cats, subs, types, childs] = await Promise.all([
         storeService.getCategories(),
         storeService.getSubCategories(),
+        storeService.getProductTypes(),
+        storeService.getChildCategories(),
       ]);
       setDbCategories(cats);
       setDbSubCategories(subs);
+      setDbProductTypes(types);
+      setDbChildCategories(childs);
     } catch (e) {
       console.error(e);
     }
   };
+
+  // Real-time 4-tier taxonomy computation for Category Hierarchy panel
+  const taxonomy = React.useMemo(() => {
+    return buildTaxonomyTree(
+      products,
+      dbCategories,
+      dbSubCategories,
+      dbProductTypes,
+      dbChildCategories
+    );
+  }, [products, dbCategories, dbSubCategories, dbProductTypes, dbChildCategories]);
 
   const loadTabData = (tab: string, currentPassword = password) => {
     if (tab === 'overview') loadOverview(currentPassword);
@@ -838,7 +868,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       productStatusFilter === 'all' ||
       (productStatusFilter === 'active' && p.active !== 0) ||
       (productStatusFilter === 'hidden' && p.active === 0);
-    return matchesSearch && matchesCategory && matchesProductType && matchesStatus;
+
+    const matchesTaxonomy = (() => {
+      if (currentTaxonomyFilter.category) {
+        const catMatch =
+          (p.category_id && currentTaxonomyFilter.categoryId && p.category_id === currentTaxonomyFilter.categoryId) ||
+          p.category?.toLowerCase() === currentTaxonomyFilter.category.toLowerCase();
+        if (!catMatch) return false;
+      }
+      if (currentTaxonomyFilter.subCategory) {
+        const subMatch =
+          (p.subcategory_id && currentTaxonomyFilter.subCategoryId && p.subcategory_id === currentTaxonomyFilter.subCategoryId) ||
+          p.sub_category?.toLowerCase() === currentTaxonomyFilter.subCategory.toLowerCase();
+        if (!subMatch) return false;
+      }
+      if (currentTaxonomyFilter.productType) {
+        const typeMatch =
+          (p.product_type_id && currentTaxonomyFilter.productTypeId && p.product_type_id === currentTaxonomyFilter.productTypeId) ||
+          p.product_type?.toLowerCase() === currentTaxonomyFilter.productType.toLowerCase();
+        if (!typeMatch) return false;
+      }
+      if (currentTaxonomyFilter.childCategory) {
+        const childMatch =
+          (p.childcategory_id && currentTaxonomyFilter.childCategoryId && p.childcategory_id === currentTaxonomyFilter.childCategoryId) ||
+          p.child_category?.toLowerCase() === currentTaxonomyFilter.childCategory.toLowerCase();
+        if (!childMatch) return false;
+      }
+      return true;
+    })();
+
+    return matchesSearch && matchesCategory && matchesProductType && matchesStatus && matchesTaxonomy;
   });
 
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
@@ -1627,6 +1686,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                {/* 4-Tier Interactive Category Hierarchy Trigger & Panel */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    id="admin-hierarchy-trigger"
+                    data-hierarchy-trigger="true"
+                    onClick={() => setIsHierarchyNavOpen(!isHierarchyNavOpen)}
+                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all cursor-pointer shadow-xs ${
+                      isHierarchyNavOpen || currentTaxonomyFilter.category
+                        ? 'bg-zinc-950 text-white border-zinc-950 shadow-md'
+                        : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border-zinc-300'
+                    }`}
+                    title="Open 4-tier Category Hierarchy to browse, filter, or edit products"
+                  >
+                    <Layers
+                      className={`w-4 h-4 ${
+                        isHierarchyNavOpen || currentTaxonomyFilter.category
+                          ? 'text-emerald-400'
+                          : 'text-emerald-600'
+                      }`}
+                    />
+                    <span className="truncate max-w-[130px]">
+                      {currentTaxonomyFilter.childCategory ||
+                        currentTaxonomyFilter.productType ||
+                        currentTaxonomyFilter.subCategory ||
+                        currentTaxonomyFilter.category ||
+                        'Category Hierarchy'}
+                    </span>
+                    {currentTaxonomyFilter.category && (
+                      <span
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setCurrentTaxonomyFilter({});
+                          setProductCategoryFilter('');
+                        }}
+                        className="p-0.5 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white"
+                        title="Clear hierarchy filter"
+                      >
+                        <X className="w-3 h-3" />
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 4-Level Category Hierarchy Menu */}
+                  {isHierarchyNavOpen && (
+                    <CategoryHierarchyMenu
+                      isOpen={isHierarchyNavOpen}
+                      onClose={() => setIsHierarchyNavOpen(false)}
+                      taxonomy={taxonomy}
+                      currentFilter={currentTaxonomyFilter}
+                      onSelectTaxonomy={(filter) => {
+                        setCurrentTaxonomyFilter(filter);
+                        if (filter.category) {
+                          setProductCategoryFilter(filter.category);
+                        } else {
+                          setProductCategoryFilter('');
+                        }
+                      }}
+                      products={products}
+                      onSelectProduct={(prod) => {
+                        setEditingProduct(prod);
+                        setProductModalTab('general');
+                        setIsProductModalOpen(true);
+                      }}
+                      mode="admin"
+                    />
+                  )}
+                </div>
+
                 <select
                   value={productCategoryFilter}
                   onChange={(e) => setProductCategoryFilter(e.target.value)}
@@ -1937,6 +2066,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 loadCategories();
                 loadProducts();
                 onSettingsUpdated();
+              }}
+              onSelectProduct={(prod) => {
+                setEditingProduct({
+                  ...prod,
+                  sub_category: prod.sub_category || '',
+                  child_category: prod.child_category || '',
+                  product_type: prod.product_type || availableProductTypes[0] || 'Standard Product',
+                  product_link: prod.product_link || '',
+                  images: prod.images || [],
+                  colors: prod.colors || [],
+                  meta_title: prod.meta_title || '',
+                  meta_description: prod.meta_description || '',
+                  meta_keywords: prod.meta_keywords || '',
+                  slug: prod.slug || (prod.name ? prod.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                  brand: prod.brand || 'Maxora',
+                  og_image: prod.og_image || prod.image_url || '',
+                });
+                setProductModalTab('general');
+                setIsProductModalOpen(true);
               }}
             />
           </div>
