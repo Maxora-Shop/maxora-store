@@ -468,14 +468,14 @@ export const INITIAL_CHILD_CATEGORIES: ChildCategory[] = [
 ];
 
 export const INITIAL_SETTINGS: StoreSettings = {
-  store_name: "Maxora",
+  store_name: "Maxora Shop BD",
   store_tagline: "Premium Products. Trusted Service.",
   delivery_inside_dhaka: 70,
   delivery_sub_dhaka: 100,
   delivery_outside_dhaka: 130,
   currency: "৳",
-  phone: "01700-123456",
-  whatsapp: "+8801700123456",
+  phone: "01635451746",
+  whatsapp: "+8801635451746",
   facebook: "https://facebook.com/maxora.store",
   logo_url: "",
   hero_title: "Discover Products You'll Love",
