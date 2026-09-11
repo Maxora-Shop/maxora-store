@@ -911,6 +911,10 @@ export default function App() {
         onOpenCart={() => setIsCartOpen(true)}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenTracker={() => setIsTrackerOpen(true)}
+        onOpenAdmin={() => {
+          setIsAdminView(true);
+          window.history.pushState({}, '', '/admin');
+        }}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         categories={reconciledCategories}
@@ -1465,6 +1469,16 @@ export default function App() {
             <button onClick={() => setIsTrackerOpen(true)} className="hover:text-zinc-300 transition-colors cursor-pointer">Track Your Order</button>
             <span>•</span>
             <button onClick={scrollToProducts} className="hover:text-zinc-300 transition-colors cursor-pointer">Shop Collections</button>
+            <span>•</span>
+            <button
+              onClick={() => {
+                setIsAdminView(true);
+                window.history.pushState({}, '', '/admin');
+              }}
+              className="hover:text-zinc-300 text-zinc-500 transition-colors cursor-pointer"
+            >
+              Admin Portal
+            </button>
             <span>•</span>
             <span className="text-zinc-400">Cash on Delivery</span>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ShoppingBag, Search, Truck, Phone, LayoutGrid, ChevronDown, PackageCheck, X, Heart, User, UserCheck } from 'lucide-react';
+import { ShoppingBag, Search, Truck, Phone, LayoutGrid, ChevronDown, PackageCheck, X, Heart, User, UserCheck, ShieldCheck } from 'lucide-react';
 import { StoreSettings, Category, Product, Customer } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState } from '../utils/taxonomy';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
@@ -13,6 +13,7 @@ interface NavbarProps {
   onOpenWishlist?: () => void;
   onOpenTracker: () => void;
   onOpenCustomerAccount: () => void;
+  onOpenAdmin?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   categories?: Category[];
@@ -39,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenWishlist,
   onOpenTracker,
   onOpenCustomerAccount,
+  onOpenAdmin,
   searchQuery,
   onSearchChange,
   categories = [],
@@ -119,6 +121,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <PackageCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>Track Order</span>
             </button>
+            {onOpenAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="hover:text-emerald-400 text-zinc-400 transition-colors flex items-center gap-1 font-semibold text-[10px] sm:text-xs cursor-pointer border-l border-zinc-800 pl-2 sm:pl-3"
+                title="Open Admin Dashboard"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Admin</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
