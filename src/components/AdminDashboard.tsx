@@ -449,12 +449,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }));
     });
 
-    // Auto-refresh orders every 8 seconds for background polling fallback
+    // Auto-refresh orders gracefully without exhausting Firestore quota
     const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadTabData(currentTab);
+      if (document.visibilityState === 'visible' && currentTab === 'orders') {
+        storeService.getAllAdminOrders('', password).then((list) => {
+          if (list && list.length > 0) setOrders(list);
+        }).catch(() => {});
       }
-    }, 8000);
+    }, 30000);
 
     return () => {
       window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
@@ -2249,51 +2251,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onClick={async () => {
                     setLoading(true);
                     try {
-                      const snap = await getDocs(collection(db, 'orders'));
-                      const loaded: Order[] = [];
-                      snap.forEach((d) => {
-                        const o = d.data() as any;
-                        if (o) {
-                          loaded.push({
-                            id: String(o.id || d.id),
-                            order_number: String(o.order_number || `MX-${d.id.slice(-6)}`),
-                            customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
-                            customer_name: o.customer_name || 'Customer',
-                            phone: o.phone || o.customer_phone || '',
-                            alt_phone: o.alt_phone || '',
-                            email: o.email || '',
-                            district: o.district || '',
-                            area: o.area || '',
-                            address: o.address || '',
-                            delivery_area: o.delivery_area || 'inside_dhaka',
-                            delivery_charge: Number(o.delivery_charge || 0),
-                            subtotal: Number(o.subtotal || 0),
-                            total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-                            total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-                            status: (o.status || o.order_status || 'Pending') as OrderStatus,
-                            payment_method: o.payment_method || 'Cash on Delivery',
-                            note: o.note || '',
-                            items: Array.isArray(o.items) ? o.items : [],
-                            created_at: o.created_at || new Date().toISOString(),
-                            updated_at: o.updated_at || new Date().toISOString(),
-                          });
-                        }
-                      });
-                      loaded.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-                      setOrders(loaded);
-                      showToast(`Cloud Firestore Synced: ${loaded.length} orders found!`, 'success');
+                      const list = await storeService.getAllAdminOrders(orderStatusFilter, password);
+                      setOrders(list);
+                      if (list.length > 0) {
+                        showToast(`Successfully synced ${list.length} orders!`, 'success');
+                      } else {
+                        showToast('Sync complete: No orders yet.', 'info');
+                      }
                     } catch (err: any) {
-                      console.error('Direct Firestore load error:', err);
-                      showToast('Cloud direct fetch error: ' + (err?.message || 'Check connection'), 'error');
+                      console.error('Fetch orders error:', err);
+                      showToast('Sync error: ' + (err?.message || 'Check connection'), 'error');
                     } finally {
                       setLoading(false);
                     }
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs cursor-pointer"
-                  title="Direct fetch all orders from Firebase Cloud database"
+                  title="Fetch all orders from server and cloud database"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Fetch Cloud Orders ({orders.length})</span>
+                  <span>Sync Orders ({orders.length})</span>
                 </button>
                 <button
                   onClick={handlePurgeDemoData}
