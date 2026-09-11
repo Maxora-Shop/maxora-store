@@ -1349,7 +1349,7 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
 // DELETE /api/admin/products/:id
 app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
   const productId = req.params.id;
-  db.products = db.products.filter(p => p.id !== productId);
+  db.products = db.products.filter(p => p.id !== productId && p.sku !== productId && p.slug !== productId);
   saveDB();
   res.json({
     success: true,

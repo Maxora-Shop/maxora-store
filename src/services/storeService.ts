@@ -134,6 +134,7 @@ function setLocal<T>(key: string, value: T): void {
 }
 
 const DELETED_ORDERS_KEY = 'maxora_deleted_orders_ids';
+const DELETED_PRODUCTS_KEY = 'maxora_deleted_products_ids';
 
 export function getDeletedOrderIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -150,13 +151,44 @@ export function markOrderDeleted(id: string | number, orderNo?: string) {
   setLocal(DELETED_ORDERS_KEY, Array.from(set));
 }
 
+export function getDeletedProductIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  return new Set((list || []).map(String));
+}
+
+export function markProductDeleted(id: string | number, sku?: string, slug?: string) {
+  if (typeof window === 'undefined') return;
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  const set = new Set(list.map(String));
+  if (id) set.add(String(id));
+  if (sku) set.add(String(sku));
+  if (slug) set.add(String(slug));
+  setLocal(DELETED_PRODUCTS_KEY, Array.from(set));
+}
+
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
+  const deletedProductIds = getDeletedProductIds();
+
   if (!localStorage.getItem(SETTINGS_KEY)) {
     setLocal(SETTINGS_KEY, INITIAL_SETTINGS);
   }
   if (!localStorage.getItem(PRODUCTS_KEY)) {
-    setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const initialProds = INITIAL_PRODUCTS.filter(
+      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+    );
+    setLocal(PRODUCTS_KEY, initialProds);
+  } else {
+    const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(existingProds) && existingProds.length > 0) {
+      const cleaned = existingProds.filter(
+        (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+      );
+      if (cleaned.length !== existingProds.length) {
+        setLocal(PRODUCTS_KEY, cleaned);
+      }
+    }
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     setLocal(ORDERS_KEY, []);
@@ -217,21 +249,24 @@ export function initRealtimeFirestoreListeners() {
   try {
     // 1. Listen for product changes
     onSnapshot(collection(db, 'products'), (snapshot) => {
+      const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
-        // If Firestore products is empty, don't clear local cache! Trigger background seeding.
-        seedInitialDataIfNeeded().catch(() => {});
         return;
       }
       const prods: Product[] = [];
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
-        prods.push({ ...d, id: String(d.id || docSnap.id) });
+        const pId = String(d.id || docSnap.id);
+        const pSku = String(d.sku || '');
+        const pSlug = String(d.slug || '');
+        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+          return;
+        }
+        prods.push({ ...d, id: pId });
       });
-      if (prods.length > 0) {
-        prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        setLocal(PRODUCTS_KEY, prods);
-        notifyProductsChanged();
-      }
+      prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
     }, (err) => console.warn('Products Firestore snapshot warning:', err));
 
     // 2. Listen for settings changes
@@ -533,7 +568,11 @@ seedInitialDataIfNeeded();
 export const storeService = {
   // Synchronous Cache Getters for zero-flicker instant hydration
   getCachedProducts(): Product[] {
-    return getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const deletedProductIds = getDeletedProductIds();
+    const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    return raw.filter(
+      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+    );
   },
   getCachedCategories(): Category[] {
     return getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
@@ -613,17 +652,22 @@ export const storeService = {
     productType = '',
     childCategory = ''
   ): Promise<Product[]> {
+    const deletedProductIds = getDeletedProductIds();
     let prods: Product[] = [];
-    let firestoreLoaded = false;
 
     // 1. Try Firestore directly
     try {
       const snap = await getDocs(collection(db, 'products'));
       if (!snap.empty) {
-        firestoreLoaded = true;
         snap.forEach((d) => {
           const item = d.data() as Product;
-          prods.push({ ...item, id: String(item.id || d.id) });
+          const pId = String(item.id || d.id);
+          const pSku = String(item.sku || '');
+          const pSlug = String(item.slug || '');
+          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+            return;
+          }
+          prods.push({ ...item, id: pId });
         });
         if (prods.length > 0) {
           setLocal(PRODUCTS_KEY, prods);
@@ -633,15 +677,13 @@ export const storeService = {
       console.warn('Firestore getProducts error, falling back to cache:', e);
     }
 
-    // 2. Fallback to cached local storage or INITIAL_PRODUCTS
+    // 2. Fallback to cached local storage
     if (prods.length === 0) {
-      prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      if (!prods || prods.length === 0) {
-        prods = INITIAL_PRODUCTS;
-      }
+      const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      prods = cached.filter(
+        (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+      );
       setLocal(PRODUCTS_KEY, prods);
-      // Trigger background seed so Firestore gets populated
-      seedInitialDataIfNeeded().catch(() => {});
     }
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
@@ -722,6 +764,39 @@ export const storeService = {
 
   async getAllAdminProducts(adminPassword?: string): Promise<Product[]> {
     const prodMap = new Map<string, Product>();
+    const deletedProductIds = getDeletedProductIds();
+
+    const registerProduct = (p: any, docId?: string) => {
+      if (!p) return;
+      const id = String(p.id || docId || '');
+      const sku = String(p.sku || '');
+      const slug = String(p.slug || '');
+      if (!id && !sku && !slug) return;
+
+      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+        return;
+      }
+
+      const mapped: Product = {
+        ...p,
+        id: id || sku || slug,
+        name: p.name || 'Untitled Product',
+        buying_price: Number(p.buying_price || 0),
+        selling_price: Number(p.selling_price || 0),
+        discount: Number(p.discount || 0),
+        final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
+        stock: Number(p.stock || 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false) ? 0 : 1,
+        featured: p.featured ? 1 : 0,
+        images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || new Date().toISOString(),
+      };
+
+      if (!prodMap.has(mapped.id)) {
+        prodMap.set(mapped.id, mapped);
+      }
+    };
 
     // 1. Try REST API
     try {
@@ -729,58 +804,33 @@ export const storeService = {
         headers: getAuthHeaders(adminPassword),
       });
       if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
-        apiResult.data.products.forEach((p) => {
-          const key = String(p.id || p.sku || p.slug || '');
-          if (key) prodMap.set(key, p);
-        });
+        apiResult.data.products.forEach((p) => registerProduct(p));
       }
     } catch (e) {
       console.warn('API getAllAdminProducts warning:', e);
     }
 
-    // 2. Try Firestore (if available, quota-safe)
+    // 2. Try Firestore (quota-safe)
     try {
       const snap = await getDocs(collection(db, 'products'));
       if (!snap.empty) {
-        snap.forEach((d) => {
-          const p = d.data() as Product;
-          const key = String(p.id || p.sku || p.slug || d.id);
-          if (!prodMap.has(key)) {
-            prodMap.set(key, { ...p, id: String(p.id || d.id) });
-          }
-        });
+        snap.forEach((d) => registerProduct(d.data(), d.id));
       }
     } catch (e) {
       console.warn('Firestore getAllAdminProducts warning:', e);
     }
 
-    // 3. Fallback / merge local cache
+    // 3. Merge local cache
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     if (Array.isArray(local)) {
-      local.forEach((p) => {
-        const key = String(p.id || p.sku || p.slug || '');
-        if (key && !prodMap.has(key)) {
-          prodMap.set(key, p);
-        }
-      });
-    }
-
-    // Also check INITIAL_PRODUCTS
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => {
-        const key = String(p.id || p.sku || p.slug || '');
-        if (key && !prodMap.has(key)) {
-          prodMap.set(key, p);
-        }
-      });
+      local.forEach((p) => registerProduct(p));
     }
 
     const prods = Array.from(prodMap.values());
-    if (prods.length > 0) {
-      setLocal(PRODUCTS_KEY, prods);
-    }
+    prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, prods);
 
-    return prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    return prods;
   },
 
   async addProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product: Product }> {
@@ -922,10 +972,18 @@ export const storeService = {
 
   async deleteProduct(id: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(id);
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
 
-    // 1. Delete from Firestore
+    // Record in deleted products registry
+    markProductDeleted(idStr, target?.sku, target?.slug);
+
+    // 1. Delete from Firestore (by id, and also by sku/slug doc if exists)
     try {
       await deleteDoc(doc(db, 'products', idStr));
+      if (target?.id && String(target.id) !== idStr) {
+        await deleteDoc(doc(db, 'products', String(target.id))).catch(() => {});
+      }
     } catch (e) {
       console.warn('Firestore delete product error:', e);
     }
@@ -936,8 +994,8 @@ export const storeService = {
       headers: getAuthHeaders(adminPassword),
     }).catch(() => {});
 
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    const filtered = local.filter((p) => String(p.id) !== idStr);
+    // 3. Local state filter
+    const filtered = local.filter((p) => String(p.id) !== idStr && p.sku !== idStr && p.slug !== idStr && String(p.id) !== String(target?.id));
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
 

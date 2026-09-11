@@ -707,8 +707,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setLoading(true);
       await storeService.deleteProduct(id, password);
-      showToast('Product deleted', 'success');
-      loadProducts();
+      setProducts((prev) => prev.filter((p) => String(p.id) !== String(id) && p.sku !== String(id) && p.slug !== String(id)));
+      showToast('Product deleted successfully', 'success');
+      await loadProducts();
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to delete product: ' + err.message, 'error');
