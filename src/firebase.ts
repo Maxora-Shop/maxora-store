@@ -31,7 +31,11 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 let firestoreDb: any;
 try {
   const dbId = firebaseConfig.firestoreDatabaseId || 'ai-studio-maxorapremiumonl-a712e7fa-09e4-41f4-9cfb-9515c7736ab5';
-  firestoreDb = getFirestore(app, dbId);
+  if (dbId && dbId !== '(default)') {
+    firestoreDb = getFirestore(app, dbId);
+  } else {
+    firestoreDb = getFirestore(app);
+  }
 } catch (err) {
   console.warn('Initializing named Firestore failed, falling back to default instance:', err);
   try {
