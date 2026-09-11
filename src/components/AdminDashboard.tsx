@@ -53,6 +53,8 @@ import {
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
+import { db } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
@@ -2244,19 +2246,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const snap = await getDocs(collection(db, 'orders'));
+                      const loaded: Order[] = [];
+                      snap.forEach((d) => {
+                        const o = d.data() as any;
+                        if (o) {
+                          loaded.push({
+                            id: String(o.id || d.id),
+                            order_number: String(o.order_number || `MX-${d.id.slice(-6)}`),
+                            customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
+                            customer_name: o.customer_name || 'Customer',
+                            phone: o.phone || o.customer_phone || '',
+                            alt_phone: o.alt_phone || '',
+                            email: o.email || '',
+                            district: o.district || '',
+                            area: o.area || '',
+                            address: o.address || '',
+                            delivery_area: o.delivery_area || 'inside_dhaka',
+                            delivery_charge: Number(o.delivery_charge || 0),
+                            subtotal: Number(o.subtotal || 0),
+                            total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+                            total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+                            status: (o.status || o.order_status || 'Pending') as OrderStatus,
+                            payment_method: o.payment_method || 'Cash on Delivery',
+                            note: o.note || '',
+                            items: Array.isArray(o.items) ? o.items : [],
+                            created_at: o.created_at || new Date().toISOString(),
+                            updated_at: o.updated_at || new Date().toISOString(),
+                          });
+                        }
+                      });
+                      loaded.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+                      setOrders(loaded);
+                      showToast(`Cloud Firestore Synced: ${loaded.length} orders found!`, 'success');
+                    } catch (err: any) {
+                      console.error('Direct Firestore load error:', err);
+                      showToast('Cloud direct fetch error: ' + (err?.message || 'Check connection'), 'error');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs cursor-pointer"
+                  title="Direct fetch all orders from Firebase Cloud database"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Fetch Cloud Orders ({orders.length})</span>
+                </button>
+                <button
                   onClick={handlePurgeDemoData}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
                   title="Purge legacy fake orders and refresh cache"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Purge Fake Orders</span>
-                </button>
-                <button
-                  onClick={() => loadOrders()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh Orders</span>
+                  <span>Purge Cache</span>
                 </button>
               </div>
             </div>
