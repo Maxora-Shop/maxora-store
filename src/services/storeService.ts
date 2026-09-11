@@ -863,9 +863,10 @@ export const storeService = {
         unit_price: finalPrice,
         buying_price: Number(prod?.buying_price || 0),
         line_total: lineTotal,
-        image_url: String(matchedColor?.image_url || prod?.image_url || ''),
+        image_url: String(matchedColor?.image_url || prod?.image_url || (prod?.images && prod?.images[0]) || ''),
         selected_color: String(item.selected_color || ''),
         selected_color_code: String(item.selected_color_code || matchedColor?.code || ''),
+        slug: String(prod?.slug || ''),
       });
 
       if (prod) {

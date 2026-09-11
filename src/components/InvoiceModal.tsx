@@ -1,23 +1,241 @@
-import React from 'react';
-import { Order, StoreSettings } from '../types';
-import { Printer, X, Phone, MapPin, CheckCircle, Package } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Order, OrderItem, StoreSettings, Product } from '../types';
+import { Printer, X, Package } from 'lucide-react';
+import { storeService } from '../services/storeService';
+import { getProductSlug, generateSlug, findProductBySlugOrId, SITE_URL } from '../utils/seo';
 
 interface InvoiceModalProps {
   order: Order | null;
   settings: StoreSettings;
+  products?: Product[];
   onClose: () => void;
 }
 
-export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onClose }) => {
+export const InvoiceModal: React.FC<InvoiceModalProps> = ({
+  order,
+  settings,
+  products = [],
+  onClose,
+}) => {
   if (!order) return null;
 
-  const handlePrint = () => {
+  const [loadedProducts, setLoadedProducts] = useState<Product[]>(products);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [isPreloadingPrint, setIsPreloadingPrint] = useState(false);
+
+  // Sync or fetch products dynamically to ensure universal product support
+  useEffect(() => {
+    if (products && products.length > 0) {
+      setLoadedProducts(products);
+    } else {
+      storeService
+        .getProducts()
+        .then((list) => {
+          if (Array.isArray(list) && list.length > 0) {
+            setLoadedProducts(list);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [products]);
+
+  const handleImageError = (key: string) => {
+    setImageErrors((prev) => ({ ...prev, [key]: true }));
+  };
+
+  /**
+   * Universally resolves the real product record belonging to this order item.
+   * Matches by product_id, sku, name, or slug/ID helper across all store products.
+   */
+  const getItemProduct = (item: OrderItem, index: number): Product | null => {
+    if (!loadedProducts || loadedProducts.length === 0) return null;
+
+    if (item.product_id) {
+      const byId = loadedProducts.find((p) => String(p.id) === String(item.product_id));
+      if (byId) return byId;
+    }
+
+    if (item.sku && item.sku.trim()) {
+      const bySku = loadedProducts.find(
+        (p) => p.sku && p.sku.toLowerCase().trim() === item.sku?.toLowerCase().trim()
+      );
+      if (bySku) return bySku;
+    }
+
+    if (item.product_name && item.product_name.trim()) {
+      const byName = loadedProducts.find(
+        (p) => p.name && p.name.toLowerCase().trim() === item.product_name?.toLowerCase().trim()
+      );
+      if (byName) return byName;
+    }
+
+    if (item.product_id) {
+      const byHelper = findProductBySlugOrId(loadedProducts, item.product_id);
+      if (byHelper) return byHelper;
+    }
+
+    return null;
+  };
+
+  /**
+   * Retrieves the real image URL belonging to the ordered product.
+   */
+  const getItemImage = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
+    // 1. Direct image on the order item if saved during checkout
+    if (item.image_url && typeof item.image_url === 'string' && item.image_url.trim()) {
+      return item.image_url.trim();
+    }
+
+    // 2. Image from the real matched product
+    const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
+    if (prod) {
+      if (item.selected_color && Array.isArray(prod.colors)) {
+        const matchedCol = prod.colors.find((c) => c.name === item.selected_color);
+        if (matchedCol?.image_url && matchedCol.image_url.trim()) {
+          return matchedCol.image_url.trim();
+        }
+      }
+      if (prod.image_url && typeof prod.image_url === 'string' && prod.image_url.trim()) {
+        return prod.image_url.trim();
+      }
+      if (Array.isArray(prod.images) && prod.images.length > 0 && prod.images[0]?.trim()) {
+        return prod.images[0].trim();
+      }
+    }
+
+    return '';
+  };
+
+  /**
+   * Dynamically constructs the real product details URL according to the application routing system.
+   */
+  const getItemUrl = (item: OrderItem, index: number, matchedProd?: Product | null): string => {
+    const prod = matchedProd !== undefined ? matchedProd : getItemProduct(item, index);
+    let slug = '';
+
+    if (prod) {
+      slug = getProductSlug(prod);
+    } else if ((item as any).slug && typeof (item as any).slug === 'string' && (item as any).slug.trim()) {
+      slug = (item as any).slug.trim();
+    } else if (item.product_id && item.product_id.trim() && item.product_id !== 'custom') {
+      slug = generateSlug(item.product_id) || item.product_id;
+    } else if (item.product_name && item.product_name.trim() && item.product_name !== 'Custom Order Package') {
+      slug = generateSlug(item.product_name);
+    }
+
+    if (!slug) return '';
+
+    if (typeof window !== 'undefined') {
+      const isExternalAdmin =
+        window.location.hostname.includes('admin') && !window.location.pathname.startsWith('/admin');
+      if (isExternalAdmin) {
+        const storeBase =
+          (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STORE_URL) || SITE_URL;
+        return `${storeBase.replace(/\/$/, '')}/product/${slug}`;
+      }
+    }
+
+    return `/product/${slug}`;
+  };
+
+  /**
+   * Ensures all product images are fully loaded and decoded in memory before invoking the browser print dialog.
+   */
+  const handlePrint = async () => {
+    setIsPreloadingPrint(true);
+    try {
+      const urls: string[] = [];
+      if (Array.isArray(order?.items)) {
+        order.items.forEach((item, idx) => {
+          const key = item.id || `item-${idx}`;
+          if (!imageErrors[key]) {
+            const url = getItemImage(item, idx);
+            if (url) urls.push(url);
+          }
+        });
+      }
+
+      if (urls.length > 0) {
+        await Promise.all(
+          urls.map((url) => {
+            return new Promise<void>((resolve) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.referrerPolicy = 'no-referrer';
+              img.onload = () => {
+                if ('decode' in img && typeof img.decode === 'function') {
+                  img.decode().then(resolve).catch(() => resolve());
+                } else {
+                  resolve();
+                }
+              };
+              img.onerror = () => resolve();
+              img.src = url;
+              if (img.complete) {
+                if ('decode' in img && typeof img.decode === 'function') {
+                  img.decode().then(resolve).catch(() => resolve());
+                } else {
+                  resolve();
+                }
+              }
+            });
+          })
+        );
+      }
+
+      // Small tick for DOM paint
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    } catch (e) {
+      console.warn('Image preload before print warning:', e);
+    } finally {
+      setIsPreloadingPrint(false);
+    }
+
     window.print();
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/75 backdrop-blur-sm animate-fade-in">
-      <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col my-auto">
+    <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/75 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:static print:overflow-visible">
+      {/* Printable styles to guarantee colors, borders, and images appear in print preview and Save as PDF */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                margin: 10mm;
+                size: auto;
+              }
+              body * {
+                visibility: hidden;
+              }
+              #printable-invoice, #printable-invoice * {
+                visibility: visible;
+              }
+              #printable-invoice {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                background: white !important;
+                color: black !important;
+              }
+              a {
+                text-decoration: none !important;
+                color: inherit !important;
+              }
+              img {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                max-width: none !important;
+              }
+            }
+          `,
+        }}
+      />
+
+      <div className="relative bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[95vh] flex flex-col my-auto print:max-h-none print:shadow-none print:border-none print:rounded-none print:max-w-none print:w-full">
         {/* Modal Top Actions */}
         <div className="p-3.5 sm:p-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 print:hidden">
           <div className="flex items-center gap-2">
@@ -29,7 +247,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
+              disabled={isPreloadingPrint}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-85"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print Invoice</span>
@@ -44,7 +263,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
         </div>
 
         {/* Printable Invoice Area */}
-        <div id="printable-invoice" className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-6 text-zinc-900 bg-white">
+        <div
+          id="printable-invoice"
+          className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-6 text-zinc-900 bg-white print:p-0 print:overflow-visible"
+        >
           {/* Header */}
           <div className="flex items-start justify-between border-b border-zinc-200 pb-6">
             <div>
@@ -52,9 +274,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
                 <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white font-black text-lg flex items-center justify-center">
                   M
                 </div>
-                <h1 className="text-xl font-black tracking-tight">{settings.store_name || 'MAXORA'}</h1>
+                <h1 className="text-xl font-black tracking-tight">
+                  {settings.store_name || 'MAXORA'}
+                </h1>
               </div>
-              <p className="text-xs text-zinc-500">{settings.store_tagline || 'Premium Online Store Bangladesh'}</p>
+              <p className="text-xs text-zinc-500">
+                {settings.store_tagline || 'Premium Online Store Bangladesh'}
+              </p>
               {settings.phone && (
                 <p className="text-xs text-zinc-600 font-medium mt-1">Helpline: {settings.phone}</p>
               )}
@@ -68,7 +294,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
                 Order #{order.order_number}
               </div>
               <div className="text-xs text-zinc-500">
-                Date: {new Date(order.created_at).toLocaleDateString('en-BD', { year: 'numeric', month: 'short', day: 'numeric' })}
+                Date:{' '}
+                {new Date(order.created_at).toLocaleDateString('en-BD', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
               </div>
             </div>
           </div>
@@ -76,7 +307,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
           {/* Customer & Delivery Address */}
           <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-zinc-50 border border-zinc-200 text-xs">
             <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">Deliver To</span>
+              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">
+                Deliver To
+              </span>
               <div className="font-bold text-sm text-zinc-900">{order.customer_name}</div>
               <div className="font-semibold text-zinc-800">{order.phone}</div>
               {order.alt_phone && (
@@ -86,9 +319,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
             </div>
 
             <div className="space-y-1">
-              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">Shipping Details</span>
+              <span className="font-bold uppercase tracking-wider text-[10px] text-zinc-400">
+                Shipping Details
+              </span>
               <div className="text-zinc-700 leading-relaxed font-medium">{order.address}</div>
-              <div className="font-bold text-zinc-900">{order.area}, {order.district}</div>
+              <div className="font-bold text-zinc-900">
+                {order.area}, {order.district}
+              </div>
               <div className="text-emerald-700 font-semibold text-[11px] pt-1">
                 Area: {order.delivery_area || (order.district === 'Dhaka' ? 'Dhaka City' : 'Outside Dhaka')}
               </div>
@@ -110,26 +347,135 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
               </thead>
               <tbody className="divide-y divide-zinc-100 font-medium">
                 {Array.isArray(order.items) && order.items.length > 0 ? (
-                  order.items.map((item, index) => (
-                    <tr key={index}>
-                      <td className="p-3 text-zinc-400">{index + 1}</td>
-                      <td className="p-3 font-bold text-zinc-900">{item.product_name}</td>
-                      <td className="p-3 text-center font-mono text-zinc-500">{item.sku || '-'}</td>
-                      <td className="p-3 text-center font-bold text-zinc-900">{item.quantity}</td>
-                      <td className="p-3 text-right">৳{Number(item.unit_price || 0).toLocaleString('en-BD')}</td>
-                      <td className="p-3 text-right font-bold text-zinc-950">
-                        ৳{Number(item.line_total || Number(item.unit_price) * Number(item.quantity)).toLocaleString('en-BD')}
-                      </td>
-                    </tr>
-                  ))
+                  order.items.map((item, index) => {
+                    const matchedProduct = getItemProduct(item, index);
+                    const imageUrl = getItemImage(item, index, matchedProduct);
+                    const productUrl = getItemUrl(item, index, matchedProduct);
+                    const itemKey = item.id || `item-${index}`;
+                    const isImgFailed = Boolean(imageErrors[itemKey]);
+                    const hasValidImage = Boolean(imageUrl && !isImgFailed);
+                    const hasUrl = Boolean(productUrl);
+
+                    return (
+                      <tr key={itemKey}>
+                        <td className="p-3 text-zinc-400 align-middle">{index + 1}</td>
+                        <td className="p-3 align-middle text-zinc-900">
+                          <div className="flex items-center gap-3">
+                            {/* Product Image Thumbnail */}
+                            {hasUrl ? (
+                              <a
+                                href={productUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 block rounded-lg overflow-hidden border border-zinc-200 hover:border-emerald-600 transition-all focus:outline-none print:border-zinc-200"
+                                title={`View product: ${item.product_name}`}
+                              >
+                                {hasValidImage ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt={item.product_name}
+                                    width={54}
+                                    height={54}
+                                    loading="eager"
+                                    decoding="sync"
+                                    referrerPolicy="no-referrer"
+                                    onError={() => handleImageError(itemKey)}
+                                    className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] object-cover bg-zinc-50 block print:w-[50px] print:h-[50px]"
+                                  />
+                                ) : (
+                                  <div className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50 print:w-[50px] print:h-[50px]">
+                                    <Package className="w-5 h-5 text-zinc-400" />
+                                  </div>
+                                )}
+                              </a>
+                            ) : (
+                              <div className="shrink-0 rounded-lg overflow-hidden border border-zinc-200 print:border-zinc-200">
+                                {hasValidImage ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt={item.product_name}
+                                    width={54}
+                                    height={54}
+                                    loading="eager"
+                                    decoding="sync"
+                                    referrerPolicy="no-referrer"
+                                    onError={() => handleImageError(itemKey)}
+                                    className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] object-cover bg-zinc-50 block print:w-[50px] print:h-[50px]"
+                                  />
+                                ) : (
+                                  <div className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50 print:w-[50px] print:h-[50px]">
+                                    <Package className="w-5 h-5 text-zinc-400" />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Product Name & Details */}
+                            <div className="min-w-0 flex-1">
+                              {hasUrl ? (
+                                <a
+                                  href={productUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-bold text-zinc-900 hover:text-emerald-700 hover:underline transition-colors block text-xs leading-snug print:text-zinc-900 print:no-underline"
+                                  title={`View product: ${item.product_name}`}
+                                >
+                                  {item.product_name}
+                                </a>
+                              ) : (
+                                <span className="font-bold text-zinc-900 block text-xs leading-snug">
+                                  {item.product_name}
+                                </span>
+                              )}
+                              {item.selected_color && (
+                                <div className="text-[10px] text-zinc-500 mt-0.5 flex items-center gap-1 font-normal print:text-zinc-600">
+                                  <span>Color:</span>
+                                  <span className="font-medium text-zinc-700">
+                                    {item.selected_color}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 text-center font-mono text-zinc-500 align-middle">
+                          {item.sku || '-'}
+                        </td>
+                        <td className="p-3 text-center font-bold text-zinc-900 align-middle">
+                          {item.quantity}
+                        </td>
+                        <td className="p-3 text-right align-middle">
+                          ৳{Number(item.unit_price || 0).toLocaleString('en-BD')}
+                        </td>
+                        <td className="p-3 text-right font-bold text-zinc-950 align-middle">
+                          ৳{Number(item.line_total || Number(item.unit_price) * Number(item.quantity)).toLocaleString('en-BD')}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td className="p-3 text-zinc-400">1</td>
-                    <td className="p-3 font-bold text-zinc-900">Custom Order Package</td>
-                    <td className="p-3 text-center font-mono text-zinc-500">-</td>
-                    <td className="p-3 text-center font-bold text-zinc-900">1</td>
-                    <td className="p-3 text-right">৳{Number(order.subtotal || 0).toLocaleString('en-BD')}</td>
-                    <td className="p-3 text-right font-bold text-zinc-950">৳{Number(order.subtotal || 0).toLocaleString('en-BD')}</td>
+                    <td className="p-3 text-zinc-400 align-middle">1</td>
+                    <td className="p-3 align-middle text-zinc-900">
+                      <div className="flex items-center gap-3">
+                        <div className="shrink-0 rounded-lg overflow-hidden border border-zinc-200 print:border-zinc-200">
+                          <div className="w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] bg-zinc-100 flex items-center justify-center text-zinc-400 print:bg-zinc-50 print:w-[50px] print:h-[50px]">
+                            <Package className="w-5 h-5 text-zinc-400" />
+                          </div>
+                        </div>
+                        <span className="font-bold text-zinc-900 block text-xs leading-snug">
+                          Custom Order Package
+                        </span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-center font-mono text-zinc-500 align-middle">-</td>
+                    <td className="p-3 text-center font-bold text-zinc-900 align-middle">1</td>
+                    <td className="p-3 text-right align-middle">
+                      ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+                    </td>
+                    <td className="p-3 text-right font-bold text-zinc-950 align-middle">
+                      ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -141,15 +487,21 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
             <div className="w-64 space-y-2 text-xs">
               <div className="flex justify-between text-zinc-600">
                 <span>Subtotal:</span>
-                <span className="font-semibold">৳{Number(order.subtotal || 0).toLocaleString('en-BD')}</span>
+                <span className="font-semibold">
+                  ৳{Number(order.subtotal || 0).toLocaleString('en-BD')}
+                </span>
               </div>
               <div className="flex justify-between text-zinc-600">
                 <span>Delivery Charge:</span>
-                <span className="font-semibold">৳{Number(order.delivery_charge || 0).toLocaleString('en-BD')}</span>
+                <span className="font-semibold">
+                  ৳{Number(order.delivery_charge || 0).toLocaleString('en-BD')}
+                </span>
               </div>
               <div className="border-t border-zinc-200 pt-2 flex justify-between text-sm font-black text-zinc-950">
                 <span>Amount Payable:</span>
-                <span className="text-emerald-700">৳{Number(order.total || 0).toLocaleString('en-BD')}</span>
+                <span className="text-emerald-700">
+                  ৳{Number(order.total || 0).toLocaleString('en-BD')}
+                </span>
               </div>
             </div>
           </div>
@@ -162,7 +514,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, settings, onC
           )}
 
           <div className="border-t border-zinc-200 pt-4 text-center text-[11px] text-zinc-400 space-y-1">
-            <p className="font-semibold text-zinc-600">Thank you for shopping with {settings.store_name || 'Maxora'}!</p>
+            <p className="font-semibold text-zinc-600">
+              Thank you for shopping with {settings.store_name || 'Maxora'}!
+            </p>
             <p>Please inspect your package in front of the courier delivery officer before payment.</p>
           </div>
         </div>

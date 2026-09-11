@@ -152,6 +152,7 @@ export interface OrderItem {
   image_url?: string;
   selected_color?: string;
   selected_color_code?: string;
+  slug?: string;
 }
 
 export interface Order {

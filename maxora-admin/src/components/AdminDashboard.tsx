@@ -4904,6 +4904,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <InvoiceModal
         order={selectedOrderForInvoice}
         settings={settingsForm}
+        products={products}
         onClose={() => setSelectedOrderForInvoice(null)}
       />
     </div>

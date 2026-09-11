@@ -119,6 +119,8 @@ export interface Customer {
   phone: string;
   alt_phone?: string;
   email?: string;
+  password?: string;
+  avatar?: string;
   district?: string;
   area?: string;
   address?: string;
@@ -150,6 +152,7 @@ export interface OrderItem {
   image_url?: string;
   selected_color?: string;
   selected_color_code?: string;
+  slug?: string;
 }
 
 export interface Order {

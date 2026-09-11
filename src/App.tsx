@@ -1485,6 +1485,7 @@ export default function App() {
         <InvoiceModal
           order={customerInvoiceOrder}
           settings={settings}
+          products={products}
           onClose={() => setCustomerInvoiceOrder(null)}
         />
       )}
