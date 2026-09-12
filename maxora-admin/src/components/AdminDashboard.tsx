@@ -48,17 +48,25 @@ import {
   Tag,
   Hash,
   Palette,
-  FolderTree
+  FolderTree,
+  Facebook,
+  Instagram,
+  Youtube,
+  Music2,
 } from 'lucide-react';
-import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory } from '../types';
+import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
+import { db } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
+import { AdminBrands } from './AdminBrands';
+import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
-import { generateSlug, getProductSlug, SITE_URL } from '../utils/seo';
+import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
@@ -137,7 +145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -149,6 +157,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
   const [dbProductTypes, setDbProductTypes] = useState<ProductType[]>([]);
   const [dbChildCategories, setDbChildCategories] = useState<ChildCategory[]>([]);
+  const [dbBrands, setDbBrands] = useState<Brand[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
@@ -159,6 +168,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Filters & Search
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('');
+  const [productBrandFilter, setProductBrandFilter] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
   const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
   const [currentTaxonomyFilter, setCurrentTaxonomyFilter] = useState<{
@@ -222,12 +232,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProductTypeInput, setNewProductTypeInput] = useState('');
   const [isManageTypesModalOpen, setIsManageTypesModalOpen] = useState(false);
 
-  // Sync settings custom_product_types
+  // Sync settings custom_product_types & global settings
   useEffect(() => {
-    if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
-      setAvailableProductTypes(globalSettings.custom_product_types);
+    if (globalSettings) {
+      setSettingsForm(globalSettings);
+      if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
+        setAvailableProductTypes(globalSettings.custom_product_types);
+      }
     }
-  }, [globalSettings.custom_product_types]);
+  }, [globalSettings]);
 
   // Image & Product Link States
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -426,17 +439,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
     window.addEventListener('storage', handleOrdersUpdated);
 
-    // Auto-refresh orders every 10 seconds for real-time order tracking
+    // Live real-time Firestore synchronization for orders
+    const unsubscribeOrders = storeService.subscribeToOrders((realtimeOrders) => {
+      setOrders(realtimeOrders);
+      setRecentOrders(realtimeOrders.slice(0, 8));
+      // update totals dynamically
+      const pending = realtimeOrders.filter((o) => o.status === 'Pending').length;
+      const completed = realtimeOrders.filter((o) => o.status === 'Delivered').length;
+      const revenue = realtimeOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+      setTotals((prev) => ({
+        ...prev,
+        total_orders: realtimeOrders.length,
+        pending_orders: pending,
+        delivered_orders: completed,
+        total_revenue: revenue,
+      }));
+    });
+
+    // Auto-refresh orders gracefully without exhausting Firestore quota
     const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadTabData(currentTab);
+      if (document.visibilityState === 'visible' && currentTab === 'orders') {
+        storeService.getAllAdminOrders('', password).then((list) => {
+          if (list && list.length > 0) setOrders(list);
+        }).catch(() => {});
       }
-    }, 10000);
+    }, 30000);
 
     return () => {
       window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
       window.removeEventListener('storage', handleOrdersUpdated);
+      unsubscribeOrders();
       clearInterval(pollInterval);
     };
   }, [isAuthenticated, currentTab]);
@@ -506,16 +539,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadCategories = async () => {
     try {
-      const [cats, subs, types, childs] = await Promise.all([
+      const [cats, subs, types, childs, brands] = await Promise.all([
         storeService.getCategories(),
         storeService.getSubCategories(),
         storeService.getProductTypes(),
         storeService.getChildCategories(),
+        storeService.getBrands(false),
       ]);
       setDbCategories(cats);
       setDbSubCategories(subs);
       setDbProductTypes(types);
       setDbChildCategories(childs);
+      setDbBrands(brands);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadBrands = async () => {
+    try {
+      const brands = await storeService.getBrands(false);
+      setDbBrands(brands);
     } catch (e) {
       console.error(e);
     }
@@ -537,9 +581,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'products') {
       loadProducts(currentPassword);
       loadCategories();
+      loadBrands();
     }
     if (tab === 'categories') {
       loadCategories();
+      loadProducts(currentPassword);
+    }
+    if (tab === 'brands') {
+      loadBrands();
       loadProducts(currentPassword);
     }
     if (tab === 'orders') {
@@ -550,11 +599,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'settings') {
       loadSettings(currentPassword);
       loadCategories();
+      loadBrands();
       loadProducts(currentPassword);
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
@@ -658,7 +708,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       setLoading(true);
-      await storeService.saveProduct(editingProduct, password);
+      const cleanedSlug = generateSlug(editingProduct.slug || editingProduct.name);
+      const productToSave: Product = {
+        ...editingProduct,
+        slug: cleanedSlug,
+        meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
+        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
+      };
+
+      await storeService.saveProduct(productToSave, password);
       showToast('Product saved successfully!', 'success');
       setIsProductModalOpen(false);
       setEditingProduct(null);
@@ -678,8 +736,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setLoading(true);
       await storeService.deleteProduct(id, password);
-      showToast('Product deleted', 'success');
-      loadProducts();
+      setProducts((prev) => prev.filter((p) => String(p.id) !== String(id) && p.sku !== String(id) && p.slug !== String(id)));
+      showToast('Product deleted successfully', 'success');
+      await loadProducts();
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to delete product: ' + err.message, 'error');
@@ -701,6 +760,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to update featured status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleHotDeal = async (product: Product) => {
+    try {
+      const nextVal = !product.is_hot_deal;
+      await storeService.updateProduct(product.id, { is_hot_deal: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" added to Hot Deals (হট ডিল চালু)` : `"${product.name}" removed from Hot Deals`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Hot Deal status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleFlashSale = async (product: Product) => {
+    try {
+      const nextVal = !product.is_flash_sale;
+      await storeService.updateProduct(product.id, { is_flash_sale: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" added to Flash Sale (ফ্ল্যাশ সেল চালু)` : `"${product.name}" removed from Flash Sale`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Flash Sale status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleNewArrival = async (product: Product) => {
+    try {
+      const nextVal = !product.is_new_arrival;
+      await storeService.updateProduct(product.id, { is_new_arrival: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" marked as New Arrival (নতুন কালেকশন)` : `"${product.name}" unmarked from New Arrivals`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update New Arrival status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleBestSeller = async (product: Product) => {
+    try {
+      const nextVal = !product.is_best_seller;
+      await storeService.updateProduct(product.id, { is_best_seller: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" marked as Best Seller (টপ সেলিং চালু)` : `"${product.name}" unmarked from Best Sellers`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Best Seller status: ' + err.message, 'error');
     }
   };
 
@@ -740,15 +859,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setLoading(true);
       await storeService.deleteOrder(orderId, password);
-      showToast(`Order #${orderNumber} deleted`, 'success');
+      setOrders((prev) => prev.filter((o) => String(o.id) !== String(orderId) && o.order_number !== String(orderNumber) && String(o.id) !== String(orderNumber)));
+      showToast(`Order #${orderNumber} deleted successfully`, 'success');
       if (editingOrder?.id === orderId) {
         setIsOrderModalOpen(false);
         setEditingOrder(null);
       }
-      loadOrders();
+      await loadOrders();
       if (currentTab === 'overview') loadOverview();
     } catch (err: any) {
       showToast('Failed to delete order: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePurgeDemoData = async () => {
+    if (!confirm('Are you sure you want to purge all demo orders and refresh cache?')) return;
+    try {
+      setLoading(true);
+      localStorage.setItem('maxora_orders_v1', JSON.stringify([]));
+      setOrders([]);
+      showToast('Demo cache purged successfully!', 'success');
+      await loadOverview();
+      await loadOrders();
+      await loadProducts();
+    } catch (e: any) {
+      showToast('Error purging demo data: ' + e.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -863,6 +1000,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       productSearch === '' ||
       p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
+      (p.brand && p.brand.toLowerCase().includes(productSearch.toLowerCase())) ||
       p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
       (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
@@ -871,6 +1009,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (Array.isArray(p.colors) && p.colors.some((c) => c.name.toLowerCase().includes(productSearch.toLowerCase())));
     const matchesCategory =
       productCategoryFilter === '' || p.category === productCategoryFilter;
+    const matchesBrand =
+      productBrandFilter === '' ||
+      (p.brand || 'Other').toLowerCase().trim() === productBrandFilter.toLowerCase().trim() ||
+      (p.brand_slug && p.brand_slug.toLowerCase().trim() === productBrandFilter.toLowerCase().trim());
     const matchesProductType =
       productTypeFilter === '' || p.product_type === productTypeFilter;
     const matchesStatus =
@@ -906,10 +1048,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return true;
     })();
 
-    return matchesSearch && matchesCategory && matchesProductType && matchesStatus && matchesTaxonomy;
+    return matchesSearch && matchesCategory && matchesBrand && matchesProductType && matchesStatus && matchesTaxonomy;
   });
 
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
+  const brandsListFromProducts = Array.from(
+    new Set([
+      ...dbBrands.map((b) => b.name),
+      ...products.map((p) => p.brand || 'Other'),
+    ].filter(Boolean))
+  );
 
   // Filtered Orders
   const filteredOrders = orders.filter((o) => {
@@ -1092,18 +1240,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="space-y-6">
           {/* Logo & Store Info */}
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
-            <div>
+            <div className="min-w-0 flex-1 mr-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center">
-                  M
-                </div>
-                <h1 className="text-white font-black text-lg tracking-tight">MAXORA</h1>
+                {settingsForm.logo_url ? (
+                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-white p-0.5 flex items-center justify-center shrink-0">
+                    <img
+                      src={settingsForm.logo_url}
+                      alt="Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center shrink-0">
+                    {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <h1 className="text-white font-black text-base tracking-tight truncate">
+                  {settingsForm.store_name || "MAXORA"}
+                </h1>
               </div>
               <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mt-0.5">
                 Admin Control
               </span>
             </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="System Online" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="System Online" />
           </div>
 
           {/* Navigation Links */}
@@ -1150,6 +1310,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {dbCategories.length > 0 && (
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                   {dbCategories.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('brands')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'brands'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Tag className="w-4 h-4 shrink-0" />
+              <span>🏷️ Brands</span>
+              {dbBrands.length > 0 && (
+                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'brands' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {dbBrands.length}
                 </span>
               )}
             </button>
@@ -1244,6 +1421,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePurgeDemoData}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
+                  title="Purge legacy fake orders and refresh cache"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge Fake Data</span>
+                </button>
                 <button
                   onClick={() => loadOverview()}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
@@ -1779,6 +1964,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </select>
 
                 <select
+                  value={productBrandFilter}
+                  onChange={(e) => setProductBrandFilter(e.target.value)}
+                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
+                >
+                  <option value="">All Brands ({brandsListFromProducts.length})</option>
+                  {brandsListFromProducts.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+
+                <select
                   value={productTypeFilter}
                   onChange={(e) => setProductTypeFilter(e.target.value)}
                   className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
@@ -1818,6 +2016,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                     <tr>
                       <th className="p-4">Item</th>
+                      <th className="p-4">Brand</th>
                       <th className="p-4">Category</th>
                       <th className="p-4">SKU</th>
                       <th className="p-4">Buying Price</th>
@@ -1848,6 +2047,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 )}
                               </div>
                             </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-800 border border-amber-500/20 text-xs font-bold whitespace-nowrap">
+                              <Tag className="w-3 h-3 text-amber-600" />
+                              <span>{p.brand || 'Other'}</span>
+                            </span>
                           </td>
                           <td className="p-4">
                             <div className="flex flex-col gap-0.5 min-w-[130px]">
@@ -1925,18 +2130,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {p.active !== 0 ? 'Active' : 'Hidden'}
                               </span>
 
-                              <button
-                                type="button"
-                                onClick={() => handleToggleFeatured(p)}
-                                title="Toggle Featured status for Homepage Hero"
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                  p.featured && p.featured !== 0
-                                    ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
-                                    : 'bg-zinc-100 text-zinc-500 border border-zinc-200 hover:bg-zinc-200'
-                                }`}
-                              >
-                                <span>{p.featured && p.featured !== 0 ? '★ Featured' : '☆ Not Featured'}</span>
-                              </button>
+                              <div className="flex flex-wrap gap-1 max-w-[170px]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFeatured(p)}
+                                  title="Toggle Featured status for Homepage Hero"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.featured && p.featured !== 0
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.featured && p.featured !== 0 ? '★ Hero' : '☆ Hero'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleHotDeal(p)}
+                                  title="Toggle Hot Deal on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_hot_deal
+                                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_hot_deal ? '🔥 Hot' : '🔥 Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFlashSale(p)}
+                                  title="Toggle Flash Sale on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_flash_sale
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_flash_sale ? '⚡ Flash' : '⚡ Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleNewArrival(p)}
+                                  title="Toggle New Arrival on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_new_arrival
+                                      ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_new_arrival ? '🆕 New' : '🆕 Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBestSeller(p)}
+                                  title="Toggle Best Seller on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_best_seller
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_best_seller ? '⭐ Best' : '⭐ Off'}</span>
+                                </button>
+                              </div>
                             </div>
                           </td>
                           <td className="p-4 text-right">
@@ -2106,21 +2365,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
-                  Orders Management
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  Process orders, verify phone numbers, update delivery status & print packaging slips
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
+                    Orders Management
+                  </h2>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Cloud Sync ({orders.length} orders)
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Live real-time synced with Firebase database. Process orders, print slips & update status.
                 </p>
               </div>
 
-              <button
-                onClick={() => loadOrders()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-200 text-xs font-bold text-zinc-700 hover:bg-zinc-50 shadow-xs cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Refresh Orders</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const list = await storeService.getAllAdminOrders(orderStatusFilter, password);
+                      setOrders(list);
+                      if (list.length > 0) {
+                        showToast(`Successfully synced ${list.length} orders!`, 'success');
+                      } else {
+                        showToast('Sync complete: No orders yet.', 'info');
+                      }
+                    } catch (err: any) {
+                      console.error('Fetch orders error:', err);
+                      showToast('Sync error: ' + (err?.message || 'Check connection'), 'error');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs cursor-pointer"
+                  title="Fetch all orders from server and cloud database"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Sync Orders ({orders.length})</span>
+                </button>
+                <button
+                  onClick={handlePurgeDemoData}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
+                  title="Purge legacy fake orders and refresh cache"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Purge Cache</span>
+                </button>
+              </div>
             </div>
 
             {/* Orders Filter Toolbar */}
@@ -2405,6 +2697,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ====================================================
+            4b. TAB: BRAND MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'brands' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminBrands
+              password={password}
+              products={products}
+              onUpdated={() => {
+                loadProducts(password);
+                loadBrands();
+              }}
+              onFilterByBrand={(brandName) => {
+                setProductBrandFilter(brandName);
+                handleTabChange('products');
+              }}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
             5. TAB: STORE SETTINGS
         ==================================================== */}
         {currentTab === 'settings' && (
@@ -2636,17 +2948,170 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Store Branding & Helpline
                     </h3>
 
+                    {/* Store Logo & Header Branding Box */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-zinc-50 to-zinc-100/70 rounded-2xl border border-zinc-200/90 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200">
+                        <div>
+                          <h4 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-emerald-600" />
+                            <span>Store Logo & Header Branding (লোগো ও নাম)</span>
+                          </h4>
+                          <p className="text-xs text-zinc-500">
+                            ওয়েবসাইটের হেডার, ইনভয়েস ও ফুটারে প্রদর্শিত লোগো ছবি এবং স্টোর নাম
+                          </p>
+                        </div>
+
+                        {/* Live Header Simulation Preview */}
+                        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-zinc-200 shadow-2xs">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Live Preview:</span>
+                          <div className="flex items-center gap-2">
+                            {settingsForm.logo_url ? (
+                              <img
+                                src={settingsForm.logo_url}
+                                alt="Logo Preview"
+                                className="w-7 h-7 rounded-lg object-contain bg-zinc-50 border border-zinc-200"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-lg bg-zinc-950 text-white font-black text-xs flex items-center justify-center">
+                                {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-xs font-black text-zinc-900 truncate max-w-[130px]">
+                              {settingsForm.store_name || "Maxora Shop BD"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Logo Controls */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                        {/* Current Logo Preview Box */}
+                        <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 text-center">
+                          <span className="text-[11px] font-bold text-zinc-500 mb-2">Current Logo</span>
+                          {settingsForm.logo_url ? (
+                            <div className="relative group/logo">
+                              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-50 border-2 border-emerald-500/50 p-1 flex items-center justify-center shadow-xs">
+                                <img
+                                  src={settingsForm.logo_url}
+                                  alt="Current Logo"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettingsForm({ ...settingsForm, logo_url: '' });
+                                  showToast('লোগো সরানো হয়েছে। ডিফল্ট লেটার ব্যাজ দেখানো হবে।', 'info');
+                                }}
+                                title="Remove Logo (revert to letter badge)"
+                                className="absolute -top-2 -right-2 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 rounded-2xl bg-zinc-950 text-white flex flex-col items-center justify-center shadow-md">
+                              <span className="text-3xl font-black">
+                                {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-[9px] text-zinc-400 font-medium mt-0.5">Letter Badge</span>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-zinc-400 mt-2">
+                            {settingsForm.logo_url ? 'Custom image logo active' : 'Default letter badge active'}
+                          </p>
+                        </div>
+
+                        {/* Upload & URL Inputs */}
+                        <div className="md:col-span-8 space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Upload Logo File (লোগো ছবি আপলোড করুন)
+                            </label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                id="logo-file-input"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    setLoading(true);
+                                    const dataUrl = await compressAndReadImage(file);
+                                    setSettingsForm(prev => ({ ...prev, logo_url: dataUrl }));
+                                    showToast('লোগো ছবি আপলোড হয়েছে! নিচের "Save Settings" বাটনে চাপুন।', 'success');
+                                  } catch (err: any) {
+                                    showToast(err.message || 'লোগো ফাইল রিড করতে সমস্যা হয়েছে', 'error');
+                                  } finally {
+                                    setLoading(false);
+                                    if (e.target) e.target.value = '';
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor="logo-file-input"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
+                              >
+                                <Upload className="w-4 h-4 text-emerald-400" />
+                                <span>Choose Image From Device</span>
+                              </label>
+
+                              {settingsForm.logo_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSettingsForm({ ...settingsForm, logo_url: '' });
+                                    showToast('লোগো সরানো হয়েছে। ডিফল্ট লেটার ব্যাজ দেখানো হবে।', 'info');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Remove Logo</span>
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-zinc-400 block mt-1">
+                              PNG, JPG, WEBP বা SVG ফাইল (প্রস্তাবিত: স্কয়ার বা ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড)
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Or Paste Logo URL (অথবা অনলাইন ইমেজের লিংক দিন)
+                            </label>
+                            <div className="relative">
+                              <Link2 className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="url"
+                                placeholder="https://example.com/logo.png"
+                                value={settingsForm.logo_url || ''}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                                className="w-full bg-white text-zinc-900 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Store Name & Helpline Row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Store Name
+                          Store Name (দোকান / ওয়েবসাইটের নাম)
                         </label>
                         <input
                           type="text"
                           value={settingsForm.store_name || ''}
                           onChange={(e) => setSettingsForm({ ...settingsForm, store_name: e.target.value })}
-                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          placeholder="Maxora Shop BD"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
                         />
+                        <span className="text-[10px] text-zinc-400 block mt-1">
+                          লোগোর পাশে এই নামটি ওয়েবসাইটের হেডার ও ফুটারে দেখাবে
+                        </span>
                       </div>
 
                       <div>
@@ -2663,7 +3128,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* Support Phone & WhatsApp */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Helpline / Support Phone
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.phone || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                          placeholder="e.g. 01700-123456"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+
                       <div>
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           WhatsApp Number
@@ -2676,18 +3155,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                         />
                       </div>
+                    </div>
 
+                    {/* Social Media Channels (Facebook, Instagram, YouTube, TikTok) */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-zinc-50 to-zinc-100/70 rounded-2xl border border-zinc-200/90 space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Facebook Page URL
-                        </label>
-                        <input
-                          type="text"
-                          value={settingsForm.facebook || ''}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
-                          placeholder="https://facebook.com/maxora"
-                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                        />
+                        <h4 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                          <Share2 className="w-4 h-4 text-emerald-600" />
+                          <span>Social Media Profiles (সোশ্যাল মিডিয়া পেজ ও লিংক)</span>
+                        </h4>
+                        <p className="text-xs text-zinc-500">
+                          ওয়েবসাইটের ফুটারে ফেসবুক, ইনস্টাগ্রাম, ইউটিউব ও টিকটক আইকনগুলোর লিংক এখান থেকে সেট করুন
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Facebook */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Facebook className="w-3.5 h-3.5 text-[#1877F2]" />
+                            <span>Facebook Page URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.facebook || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
+                            placeholder="https://facebook.com/yourpage"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* Instagram */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Instagram className="w-3.5 h-3.5 text-[#E4405F]" />
+                            <span>Instagram Profile URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.instagram || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, instagram: e.target.value })}
+                            placeholder="https://instagram.com/yourprofile"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* YouTube */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Youtube className="w-3.5 h-3.5 text-[#FF0000]" />
+                            <span>YouTube Channel URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.youtube || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, youtube: e.target.value })}
+                            placeholder="https://youtube.com/@yourchannel"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* TikTok */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Music2 className="w-3.5 h-3.5 text-zinc-800" />
+                            <span>TikTok Profile URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.tiktok || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, tiktok: e.target.value })}
+                            placeholder="https://tiktok.com/@yourprofile"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -3094,8 +3635,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       required
                       placeholder="e.g. Ultra Smart Watch Series 9"
                       value={editingProduct?.name || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                      onChange={(e) => {
+                        const newName = e.target.value;
+                        const prevNameSlug = generateSlug(editingProduct?.name || '');
+                        const shouldUpdateSlug = !editingProduct?.slug || editingProduct.slug === prevNameSlug;
+                        setEditingProduct({
+                          ...editingProduct,
+                          name: newName,
+                          slug: shouldUpdateSlug ? generateSlug(newName) : editingProduct.slug,
+                        });
+                      }}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                    />
+                  </div>
+
+                  {/* Brand Select Dropdown */}
+                  <div className="bg-amber-500/5 p-3.5 rounded-2xl border border-amber-500/20">
+                    <BrandSelectDropdown
+                      value={editingProduct?.brand || 'Other'}
+                      required
+                      brandsList={dbBrands}
+                      onChange={(brandName, brandId, brandSlug) => {
+                        setEditingProduct((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                brand: brandName,
+                                brand_id: brandId,
+                                brand_slug: brandSlug,
+                              }
+                            : prev
+                        );
+                      }}
                     />
                   </div>
 
@@ -3732,8 +4303,159 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setEditingProduct({ ...editingProduct, featured: e.target.checked ? 1 : 0 })}
                         className="w-4 h-4 rounded text-emerald-600"
                       />
-                      <span>Feature on Storefront</span>
+                      <span>Feature on Storefront Hero</span>
                     </label>
+                  </div>
+
+                  {/* Homepage Sections & Promotional Flags (Requirement 17) */}
+                  <div className="mt-3 p-4 bg-zinc-50 border border-zinc-200/90 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>Homepage Sections & Promotions (হোমপেজ সেকশন নিয়ন্ত্রণ)</span>
+                      </h4>
+                      <span className="text-[10px] text-zinc-500 font-medium">Automatic Storefront Sync</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                      {/* Hot Deal */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_hot_deal
+                          ? 'bg-rose-50 border-rose-300 text-rose-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>🔥 Hot Deal</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_hot_deal)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_hot_deal: e.target.checked })}
+                            className="w-4 h-4 rounded text-rose-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Hot Deals section</span>
+                      </label>
+
+                      {/* Flash Sale */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_flash_sale
+                          ? 'bg-amber-50 border-amber-300 text-amber-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>⚡ Flash Sale</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_flash_sale)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_flash_sale: e.target.checked })}
+                            className="w-4 h-4 rounded text-amber-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Flash Sale bar</span>
+                      </label>
+
+                      {/* New Arrival */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_new_arrival
+                          ? 'bg-blue-50 border-blue-300 text-blue-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>🆕 New Arrival</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_new_arrival)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_new_arrival: e.target.checked })}
+                            className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in New Arrivals</span>
+                      </label>
+
+                      {/* Best Seller */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_best_seller
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>⭐ Best Seller</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_best_seller)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_best_seller: e.target.checked })}
+                            className="w-4 h-4 rounded text-emerald-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Best Sellers</span>
+                      </label>
+                    </div>
+
+                    {/* Flash Sale specific details when Flash Sale is ON */}
+                    {editingProduct?.is_flash_sale && (
+                      <div className="mt-3 p-3.5 bg-amber-500/10 border border-amber-300/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Flash Sale Settings (ফ্ল্যাশ সেল স্পেশাল প্রাইস ও সময়সীমা)</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Flash Sale Price (৳):
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="e.g. 1150"
+                              value={editingProduct?.flash_sale_price || ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_price: e.target.value ? Number(e.target.value) : undefined
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Start Date/Time:
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={editingProduct?.flash_sale_start ? String(editingProduct.flash_sale_start).substring(0, 16) : ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_start: e.target.value
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              End Date/Time:
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={editingProduct?.flash_sale_end ? String(editingProduct.flash_sale_end).substring(0, 16) : ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_end: e.target.value
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -4216,7 +4938,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="button"
                         onClick={() => {
                           if (!editingProduct?.name) return;
-                          const slug = editingProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                          const slug = generateSlug(editingProduct.name);
                           setEditingProduct({ ...editingProduct, slug });
                         }}
                         className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
@@ -4919,8 +5641,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setSelectedOrderForInvoice(null);
           const slug = getProductSlug(p);
           if (slug && typeof window !== 'undefined') {
-            const url = `${SITE_URL.replace(/\/$/, '')}/product/${slug}`;
-            window.open(url, '_blank', 'noopener,noreferrer');
+            window.open(`/product/${slug}`, '_blank', 'noopener,noreferrer');
           }
         }}
       />

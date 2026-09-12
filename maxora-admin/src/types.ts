@@ -9,6 +9,7 @@ export interface Brand {
   active: boolean | number;
   meta_title?: string;
   meta_description?: string;
+  meta_keywords?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -125,7 +126,20 @@ export interface Product {
   meta_keywords?: string;
   slug?: string;
   brand?: string;
+  brand_id?: string;
+  brand_slug?: string;
   og_image?: string;
+  // Homepage Special Sections (backward-compatible)
+  is_hot_deal?: boolean | number;
+  is_flash_sale?: boolean | number;
+  is_new_arrival?: boolean | number;
+  is_best_seller?: boolean | number;
+  flash_sale_price?: number;
+  flash_sale_start?: string;
+  flash_sale_end?: string;
+  sold_count?: number;
+  rating?: number;
+  rating_count?: number;
 }
 
 export interface Customer {
@@ -206,6 +220,9 @@ export interface StoreSettings {
   phone: string;
   whatsapp?: string;
   facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
   logo_url?: string;
   hero_title: string;
   hero_subtitle: string;

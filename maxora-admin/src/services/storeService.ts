@@ -1,7 +1,7 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats } from '../types';
-import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS } from '../data/initialData';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand } from '../types';
+import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
-import { generateSlug } from '../utils/seo';
+import { generateSlug, getProductSlug } from '../utils/seo';
 import { matchesTaxonomyField } from '../utils/taxonomy';
 import { db } from '../firebase';
 import {
@@ -29,6 +29,7 @@ const SUBCATEGORIES_KEY = 'maxora_subcategories_v1';
 const PRODUCT_TYPES_KEY = 'maxora_product_types_v1';
 const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
+const BRANDS_KEY = 'maxora_brands_v1';
 
 function notifyCustomerAuthChanged(): void {
   if (typeof window !== 'undefined') {
@@ -84,6 +85,12 @@ function notifyReviewsChanged(): void {
   }
 }
 
+function notifyBrandsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
+  }
+}
+
 // Sanitize data before writing to Firestore so undefined never causes a rejection
 export function cleanForFirestore<T>(data: T): T {
   if (data === null || data === undefined) {
@@ -126,19 +133,99 @@ function setLocal<T>(key: string, value: T): void {
   }
 }
 
+const DELETED_ORDERS_KEY = 'maxora_deleted_orders_ids';
+const DELETED_PRODUCTS_KEY = 'maxora_deleted_products_ids';
+
+export function getDeletedOrderIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  const list = getLocal<string[]>(DELETED_ORDERS_KEY, []);
+  return new Set((list || []).map(String));
+}
+
+export function markOrderDeleted(id: string | number, orderNo?: string) {
+  if (typeof window === 'undefined') return;
+  const list = getLocal<string[]>(DELETED_ORDERS_KEY, []);
+  const set = new Set(list.map(String));
+  if (id) set.add(String(id));
+  if (orderNo) set.add(String(orderNo));
+  setLocal(DELETED_ORDERS_KEY, Array.from(set));
+}
+
+export function getDeletedProductIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  return new Set((list || []).map(String));
+}
+
+export function markProductDeleted(id: string | number, sku?: string, slug?: string) {
+  if (typeof window === 'undefined') return;
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  const set = new Set(list.map(String));
+  if (id) set.add(String(id));
+  if (sku) set.add(String(sku));
+  if (slug) set.add(String(slug));
+  setLocal(DELETED_PRODUCTS_KEY, Array.from(set));
+}
+
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
+  const deletedProductIds = getDeletedProductIds();
+
   if (!localStorage.getItem(SETTINGS_KEY)) {
     setLocal(SETTINGS_KEY, INITIAL_SETTINGS);
   }
   if (!localStorage.getItem(PRODUCTS_KEY)) {
-    setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const initialProds = INITIAL_PRODUCTS.filter(
+      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+    );
+    setLocal(PRODUCTS_KEY, initialProds);
+  } else {
+    const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(existingProds) && existingProds.length > 0) {
+      // Remove any legacy hardcoded dummy demo products (prod-001 through prod-009) if present
+      const cleaned = existingProds.filter(
+        (p) =>
+          !deletedProductIds.has(String(p.id)) &&
+          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
+      );
+      if (cleaned.length === 0) {
+        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      } else if (cleaned.length !== existingProds.length) {
+        setLocal(PRODUCTS_KEY, cleaned);
+      }
+    }
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
-    setLocal(ORDERS_KEY, INITIAL_ORDERS);
+    setLocal(ORDERS_KEY, []);
+  } else {
+    // Purge legacy hardcoded demo orders if present
+    const existingOrders = getLocal<Order[]>(ORDERS_KEY, []);
+    if (Array.isArray(existingOrders) && existingOrders.length > 0) {
+      const cleaned = existingOrders.filter(
+        (o) => !['ord-001', 'ord-002', 'ord-003'].includes(String(o.id)) &&
+               !['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)
+      );
+      if (cleaned.length !== existingOrders.length) {
+        setLocal(ORDERS_KEY, cleaned);
+      }
+    }
   }
   if (!localStorage.getItem(CUSTOMERS_KEY)) {
-    setLocal(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
+    setLocal(CUSTOMERS_KEY, []);
+  } else {
+    // Purge legacy demo customers if present
+    const existingCusts = getLocal<Customer[]>(CUSTOMERS_KEY, []);
+    if (Array.isArray(existingCusts) && existingCusts.length > 0) {
+      const cleanedCusts = existingCusts.filter(
+        (c) => !['cust-001', 'cust-002'].includes(String(c.id)) &&
+               !['Tanvir Ahmed', 'Farhana Yasmin'].includes(c.name)
+      );
+      if (cleanedCusts.length !== existingCusts.length) {
+        setLocal(CUSTOMERS_KEY, cleanedCusts);
+      }
+    }
   }
   if (!localStorage.getItem(CATEGORIES_KEY)) {
     setLocal(CATEGORIES_KEY, INITIAL_CATEGORIES);
@@ -169,21 +256,28 @@ export function initRealtimeFirestoreListeners() {
   try {
     // 1. Listen for product changes
     onSnapshot(collection(db, 'products'), (snapshot) => {
+      const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
-        // If Firestore products is empty, don't clear local cache! Trigger background seeding.
-        seedInitialDataIfNeeded().catch(() => {});
         return;
       }
       const prods: Product[] = [];
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
-        prods.push({ ...d, id: String(d.id || docSnap.id) });
+        const pId = String(d.id || docSnap.id);
+        const pSku = String(d.sku || '');
+        const pSlug = String(d.slug || '');
+        const pName = String(d.name || '').trim();
+        if (!pName) {
+          return;
+        }
+        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+          return;
+        }
+        prods.push({ ...d, id: pId });
       });
-      if (prods.length > 0) {
-        prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        setLocal(PRODUCTS_KEY, prods);
-        notifyProductsChanged();
-      }
+      prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
     }, (err) => console.warn('Products Firestore snapshot warning:', err));
 
     // 2. Listen for settings changes
@@ -195,26 +289,36 @@ export function initRealtimeFirestoreListeners() {
       }
     }, (err) => console.warn('Settings Firestore snapshot warning:', err));
 
-    // 3. Listen for orders changes
+    // 3. Listen for orders changes (realtime cloud sync)
     onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const deletedIds = getDeletedOrderIds();
       const orders: Order[] = [];
       snapshot.forEach((docSnap) => {
         const o = docSnap.data() as Order;
+        const oId = String(o.id || docSnap.id);
+        const oNum = String(o.order_number || '');
+        if (deletedIds.has(oId) || (oNum && deletedIds.has(oNum))) {
+          return;
+        }
+        if (['ord-001', 'ord-002', 'ord-003'].includes(oId) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
+          return;
+        }
         orders.push({
           ...o,
-          id: String(o.id || docSnap.id),
+          id: oId,
+          order_number: oNum || `MX-${oId.slice(-6)}`,
           phone: o.phone || (o as any).customer_phone || '',
           customer_phone: o.phone || (o as any).customer_phone || '',
-          total: o.total !== undefined ? o.total : (o as any).total_amount || 0,
-          total_amount: o.total !== undefined ? o.total : (o as any).total_amount || 0,
+          total: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
+          total_amount: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
           status: (o.status || (o as any).order_status || 'Pending') as OrderStatus,
+          items: Array.isArray(o.items) ? o.items : [],
+          created_at: o.created_at || new Date().toISOString(),
         });
       });
-      if (orders.length > 0) {
-        orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        setLocal(ORDERS_KEY, orders);
-        notifyOrdersChanged();
-      }
+      orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      setLocal(ORDERS_KEY, orders);
+      notifyOrdersChanged();
     }, (err) => console.warn('Orders Firestore snapshot warning:', err));
 
     // 4. Listen for categories changes
@@ -443,7 +547,21 @@ export async function seedInitialDataIfNeeded() {
       notifyReviewsChanged();
     }
 
-    // 7. Store Settings
+    // 7. Seed Brands if empty
+    const brandSnap = await getDocs(collection(db, 'brands'));
+    if (brandSnap.empty) {
+      const batch = writeBatch(db);
+      for (const b of INITIAL_BRANDS) {
+        const ref = doc(db, 'brands', b.id);
+        batch.set(ref, b);
+      }
+      await batch.commit();
+      console.log('Seeded initial brands to Firestore');
+      setLocal(BRANDS_KEY, INITIAL_BRANDS);
+      notifyBrandsChanged();
+    }
+
+    // 8. Store Settings
     const settingsDoc = await getDoc(doc(db, 'settings', 'store_settings'));
     if (!settingsDoc.exists()) {
       await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
@@ -461,7 +579,15 @@ seedInitialDataIfNeeded();
 export const storeService = {
   // Synchronous Cache Getters for zero-flicker instant hydration
   getCachedProducts(): Product[] {
-    return getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const deletedProductIds = getDeletedProductIds();
+    const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    return raw.filter(
+      (p) =>
+        !deletedProductIds.has(String(p.id)) &&
+        (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+        (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+        !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
+    );
   },
   getCachedCategories(): Category[] {
     return getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
@@ -474,6 +600,9 @@ export const storeService = {
   },
   getCachedChildCategories(): ChildCategory[] {
     return getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+  },
+  getCachedBrands(): Brand[] {
+    return getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
   },
 
   // 1. SETTINGS
@@ -538,17 +667,26 @@ export const storeService = {
     productType = '',
     childCategory = ''
   ): Promise<Product[]> {
+    const deletedProductIds = getDeletedProductIds();
     let prods: Product[] = [];
-    let firestoreLoaded = false;
 
     // 1. Try Firestore directly
     try {
       const snap = await getDocs(collection(db, 'products'));
       if (!snap.empty) {
-        firestoreLoaded = true;
         snap.forEach((d) => {
           const item = d.data() as Product;
-          prods.push({ ...item, id: String(item.id || d.id) });
+          const pId = String(item.id || d.id);
+          const pSku = String(item.sku || '');
+          const pSlug = String(item.slug || '');
+          const pName = String(item.name || '').trim();
+          if (!pName) {
+            return;
+          }
+          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+            return;
+          }
+          prods.push({ ...item, id: pId });
         });
         if (prods.length > 0) {
           setLocal(PRODUCTS_KEY, prods);
@@ -558,15 +696,17 @@ export const storeService = {
       console.warn('Firestore getProducts error, falling back to cache:', e);
     }
 
-    // 2. Fallback to cached local storage or INITIAL_PRODUCTS
+    // 2. Fallback to cached local storage
     if (prods.length === 0) {
-      prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      if (!prods || prods.length === 0) {
-        prods = INITIAL_PRODUCTS;
-      }
+      const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      prods = cached.filter(
+        (p) =>
+          !deletedProductIds.has(String(p.id)) &&
+          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
+      );
       setLocal(PRODUCTS_KEY, prods);
-      // Trigger background seed so Firestore gets populated
-      seedInitialDataIfNeeded().catch(() => {});
     }
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
@@ -647,6 +787,46 @@ export const storeService = {
 
   async getAllAdminProducts(adminPassword?: string): Promise<Product[]> {
     const prodMap = new Map<string, Product>();
+    const deletedProductIds = getDeletedProductIds();
+
+    const registerProduct = (p: any, docId?: string) => {
+      if (!p) return;
+      const id = String(p.id || docId || '');
+      const sku = String(p.sku || '');
+      const slug = String(p.slug || '');
+      if (!id && !sku && !slug) return;
+      if (['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(id)) {
+        return;
+      }
+      const rawName = String(p.name || '').trim();
+      if (!rawName || rawName === 'Untitled Product') {
+        return;
+      }
+
+      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+        return;
+      }
+
+      const mapped: Product = {
+        ...p,
+        id: id || sku || slug,
+        name: p.name || 'Untitled Product',
+        buying_price: Number(p.buying_price || 0),
+        selling_price: Number(p.selling_price || 0),
+        discount: Number(p.discount || 0),
+        final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
+        stock: Number(p.stock || 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false) ? 0 : 1,
+        featured: p.featured ? 1 : 0,
+        images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || new Date().toISOString(),
+      };
+
+      if (!prodMap.has(mapped.id)) {
+        prodMap.set(mapped.id, mapped);
+      }
+    };
 
     // 1. Try REST API
     try {
@@ -654,58 +834,33 @@ export const storeService = {
         headers: getAuthHeaders(adminPassword),
       });
       if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
-        apiResult.data.products.forEach((p) => {
-          const key = String(p.id || p.sku || p.slug || '');
-          if (key) prodMap.set(key, p);
-        });
+        apiResult.data.products.forEach((p) => registerProduct(p));
       }
     } catch (e) {
       console.warn('API getAllAdminProducts warning:', e);
     }
 
-    // 2. Try Firestore (if available, quota-safe)
+    // 2. Try Firestore (quota-safe)
     try {
       const snap = await getDocs(collection(db, 'products'));
       if (!snap.empty) {
-        snap.forEach((d) => {
-          const p = d.data() as Product;
-          const key = String(p.id || p.sku || p.slug || d.id);
-          if (!prodMap.has(key)) {
-            prodMap.set(key, { ...p, id: String(p.id || d.id) });
-          }
-        });
+        snap.forEach((d) => registerProduct(d.data(), d.id));
       }
     } catch (e) {
       console.warn('Firestore getAllAdminProducts warning:', e);
     }
 
-    // 3. Fallback / merge local cache
+    // 3. Merge local cache
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     if (Array.isArray(local)) {
-      local.forEach((p) => {
-        const key = String(p.id || p.sku || p.slug || '');
-        if (key && !prodMap.has(key)) {
-          prodMap.set(key, p);
-        }
-      });
-    }
-
-    // Also check INITIAL_PRODUCTS
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => {
-        const key = String(p.id || p.sku || p.slug || '');
-        if (key && !prodMap.has(key)) {
-          prodMap.set(key, p);
-        }
-      });
+      local.forEach((p) => registerProduct(p));
     }
 
     const prods = Array.from(prodMap.values());
-    if (prods.length > 0) {
-      setLocal(PRODUCTS_KEY, prods);
-    }
+    prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, prods);
 
-    return prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    return prods;
   },
 
   async addProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product: Product }> {
@@ -714,6 +869,15 @@ export const storeService = {
     const images = Array.isArray(productData.images) && productData.images.length > 0
       ? productData.images
       : [productData.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'];
+
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let baseSlug = productData.slug ? generateSlug(productData.slug) : generateSlug(productData.name || newId);
+    if (!baseSlug) baseSlug = `item-${newId.slice(-6)}`;
+    let finalSlug = baseSlug;
+    let counter = 1;
+    while (local.some(p => String(p.id) !== String(newId) && p.slug === finalSlug)) {
+      finalSlug = `${baseSlug}-${counter++}`;
+    }
 
     const newProd: Product = {
       id: newId,
@@ -736,10 +900,10 @@ export const storeService = {
       badge: productData.badge || '',
       featured: productData.featured ? 1 : 0,
       active: productData.active !== undefined ? (productData.active ? 1 : 0) : 1,
-      meta_title: productData.meta_title || '',
-      meta_description: productData.meta_description || '',
+      meta_title: productData.meta_title?.trim() || `${productData.name || 'Product'} Price in Bangladesh | Maxora Shop`,
+      meta_description: productData.meta_description?.trim() || (productData.description ? productData.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${productData.name || 'product'} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       meta_keywords: productData.meta_keywords || '',
-      slug: productData.slug || (productData.name ? productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+      slug: finalSlug,
       brand: productData.brand || 'Maxora',
       og_image: productData.og_image || productData.image_url || images[0],
       created_at: productData.created_at || new Date().toISOString(),
@@ -761,7 +925,6 @@ export const storeService = {
     }).catch(() => {});
 
     // 3. Update local cache
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const existingIdx = local.findIndex(p => String(p.id) === String(newProd.id));
     if (existingIdx >= 0) {
       local[existingIdx] = newProd;
@@ -782,11 +945,21 @@ export const storeService = {
     const current = index !== -1 ? local[index] : ({} as Product);
     const sellingPrice = productData.selling_price !== undefined ? Number(productData.selling_price) : Number(current.selling_price || 0);
     const discount = productData.discount !== undefined ? Number(productData.discount) : Number(current.discount || 0);
+    const name = productData.name !== undefined ? productData.name : current.name;
+    const rawSlug = productData.slug !== undefined ? productData.slug : (current.slug || name);
+    let baseSlug = rawSlug ? generateSlug(rawSlug) : generateSlug(name || idStr);
+    if (!baseSlug) baseSlug = `item-${idStr.slice(-6)}`;
+    let finalSlug = baseSlug;
+    let counter = 1;
+    while (local.some(p => String(p.id) !== idStr && p.slug === finalSlug)) {
+      finalSlug = `${baseSlug}-${counter++}`;
+    }
 
     const updated: Product = {
       ...current,
       ...productData,
       id: idStr,
+      slug: finalSlug,
       selling_price: sellingPrice,
       discount: discount,
       final_price: Math.max(0, sellingPrice - discount),
@@ -829,10 +1002,18 @@ export const storeService = {
 
   async deleteProduct(id: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(id);
+    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
 
-    // 1. Delete from Firestore
+    // Record in deleted products registry
+    markProductDeleted(idStr, target?.sku, target?.slug);
+
+    // 1. Delete from Firestore (by id, and also by sku/slug doc if exists)
     try {
       await deleteDoc(doc(db, 'products', idStr));
+      if (target?.id && String(target.id) !== idStr) {
+        await deleteDoc(doc(db, 'products', String(target.id))).catch(() => {});
+      }
     } catch (e) {
       console.warn('Firestore delete product error:', e);
     }
@@ -843,8 +1024,8 @@ export const storeService = {
       headers: getAuthHeaders(adminPassword),
     }).catch(() => {});
 
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    const filtered = local.filter((p) => String(p.id) !== idStr);
+    // 3. Local state filter
+    const filtered = local.filter((p) => String(p.id) !== idStr && p.sku !== idStr && p.slug !== idStr && String(p.id) !== String(target?.id));
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
 
@@ -991,19 +1172,62 @@ export const storeService = {
     const firestoreCustomer = cleanForFirestore(customerData);
 
     try {
-      await setDoc(doc(db, 'orders', orderId), firestoreOrder);
-      await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
-      console.log('Order successfully synced to Firestore:', orderId);
-    } catch (e) {
-      console.error('Firestore createOrder write failed:', e);
+      if (db) {
+        await setDoc(doc(db, 'orders', orderId), firestoreOrder);
+        await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
+        console.log('Order successfully synced to Firestore:', orderId);
+      } else {
+        console.warn('Firestore db instance not available on order creation.');
+      }
+    } catch (e: any) {
+      console.error('Firestore createOrder write error:', e?.message || e);
+      // Fallback attempt directly with clean object if any field failed
+      try {
+        if (db) {
+          const minimalDoc = {
+            id: orderId,
+            order_number: orderNo,
+            customer_name: orderPayload.customer_name || 'Customer',
+            phone: orderPayload.phone || '',
+            district: orderPayload.district || '',
+            area: orderPayload.area || '',
+            address: orderPayload.address || '',
+            delivery_charge: deliveryCharge,
+            subtotal,
+            total,
+            total_amount: total,
+            status: 'Pending',
+            payment_method: 'Cash on Delivery',
+            created_at: new Date().toISOString(),
+            items: orderItems,
+          };
+          await setDoc(doc(db, 'orders', orderId), minimalDoc);
+        }
+      } catch (fallbackErr) {
+        console.error('Firestore fallback write error:', fallbackErr);
+      }
     }
 
-    // 2. Also forward to API
-    tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderPayload),
-    }).catch(() => {});
+    // 2. Also forward to API with complete order details for backend persistence
+    const fullOrderSyncPayload = {
+      ...orderPayload,
+      order: newOrder,
+      id: orderId,
+      order_number: orderNo,
+      items: orderItems,
+      total,
+      subtotal,
+      delivery_charge: deliveryCharge,
+    };
+    try {
+      await tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fullOrderSyncPayload),
+      });
+    } catch (e) {
+      console.warn('API /api/orders sync notice:', e);
+    }
 
     // 3. Local update
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
@@ -1075,8 +1299,61 @@ export const storeService = {
 
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
     const orderMap = new Map<string, Order>();
+    const deletedIds = getDeletedOrderIds();
 
-    // 1. Fetch from REST API (server source of truth)
+    // Helper to validate and add an order
+    const registerOrder = (o: any, sourceDocId?: string) => {
+      if (!o) return;
+      const id = String(o.id || sourceDocId || '');
+      const orderNumber = String(o.order_number || (id ? `MX-${id.slice(-6)}` : ''));
+      if (!id && !orderNumber) return;
+
+      // Filter out explicitly deleted orders
+      if (deletedIds.has(id) || (orderNumber && deletedIds.has(orderNumber))) {
+        return;
+      }
+
+      // Filter out legacy dummy demo orders
+      if (['ord-001', 'ord-002', 'ord-003'].includes(id) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
+        return;
+      }
+
+      const mappedOrder: Order = {
+        id: id || orderNumber,
+        order_number: orderNumber || `MX-${id.slice(-6)}`,
+        customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
+        customer_name: o.customer_name || 'Customer',
+        phone: o.phone || o.customer_phone || '',
+        alt_phone: o.alt_phone || '',
+        email: o.email || '',
+        district: o.district || '',
+        area: o.area || '',
+        address: o.address || '',
+        delivery_area: o.delivery_area || 'inside_dhaka',
+        delivery_charge: Number(o.delivery_charge || 0),
+        subtotal: Number(o.subtotal || 0),
+        total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+        total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+        status: (o.status || o.order_status || 'Pending') as OrderStatus,
+        payment_method: o.payment_method || 'Cash on Delivery',
+        note: o.note || '',
+        items: Array.isArray(o.items) ? o.items : [],
+        created_at: o.created_at || new Date().toISOString(),
+        updated_at: o.updated_at || new Date().toISOString(),
+      };
+
+      const key = mappedOrder.id;
+      if (!orderMap.has(key)) {
+        orderMap.set(key, mappedOrder);
+      } else {
+        const existing = orderMap.get(key)!;
+        if ((!existing.items || existing.items.length === 0) && mappedOrder.items.length > 0) {
+          orderMap.set(key, { ...existing, items: mappedOrder.items });
+        }
+      }
+    };
+
+    // 1. Fetch from REST API (server database source of truth)
     try {
       const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
       const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
@@ -1085,43 +1362,18 @@ export const storeService = {
       });
 
       if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
-        apiResult.data.orders.forEach((o) => {
-          const key = String(o.id || o.order_number || '');
-          if (key) orderMap.set(key, o);
-        });
+        apiResult.data.orders.forEach((o) => registerOrder(o));
       }
     } catch (e) {
       console.warn('API getAllAdminOrders notice:', e);
     }
 
-    // 2. Fetch from Firestore (quota-tolerant)
+    // 2. Fetch from Firestore (quota-tolerant cloud DB)
     try {
       const snap = await getDocs(collection(db, 'orders'));
       if (!snap.empty) {
         snap.forEach((d) => {
-          const o = d.data() as any;
-          const mappedOrder: Order = {
-            ...o,
-            id: String(o.id || d.id),
-            customer_name: o.customer_name || 'Customer',
-            phone: o.phone || o.customer_phone || '',
-            customer_phone: o.phone || o.customer_phone || '',
-            total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-            total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
-            status: (o.status || o.order_status || 'Pending') as OrderStatus,
-            order_number: o.order_number || `MX-${String(o.id || d.id).slice(-6)}`,
-            items: Array.isArray(o.items) ? o.items : [],
-            created_at: o.created_at || new Date().toISOString(),
-          };
-          const key = String(mappedOrder.id || mappedOrder.order_number);
-          if (!orderMap.has(key)) {
-            orderMap.set(key, mappedOrder);
-          } else {
-            const existing = orderMap.get(key)!;
-            if ((!existing.items || existing.items.length === 0) && mappedOrder.items.length > 0) {
-              orderMap.set(key, { ...existing, items: mappedOrder.items });
-            }
-          }
+          registerOrder(d.data(), d.id);
         });
       }
     } catch (e) {
@@ -1129,42 +1381,16 @@ export const storeService = {
     }
 
     // 3. Merge local cached orders
-    const localOrders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    const localOrders = getLocal<Order[]>(ORDERS_KEY, []);
     if (Array.isArray(localOrders)) {
-      localOrders.forEach((o) => {
-        const key = String(o.id || o.order_number || '');
-        if (key && !orderMap.has(key)) {
-          orderMap.set(key, o);
-        } else if (key && orderMap.has(key)) {
-          const existing = orderMap.get(key)!;
-          if ((!existing.items || existing.items.length === 0) && o.items && o.items.length > 0) {
-            orderMap.set(key, { ...existing, items: o.items });
-          }
-        }
-      });
-    }
-
-    // 4. Ensure INITIAL_ORDERS are also merged if still missing
-    if (Array.isArray(INITIAL_ORDERS)) {
-      INITIAL_ORDERS.forEach((o) => {
-        const key = String(o.id || o.order_number || '');
-        if (key && !orderMap.has(key)) {
-          orderMap.set(key, o);
-        }
-      });
+      localOrders.forEach((o) => registerOrder(o));
     }
 
     let orders = Array.from(orderMap.values());
-    if (orders.length === 0) {
-      orders = INITIAL_ORDERS;
-    }
-
     orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-    // Update local cache
-    if (orders.length > 0) {
-      setLocal(ORDERS_KEY, orders);
-    }
+    // Update local cache with sanitized orders
+    setLocal(ORDERS_KEY, orders);
 
     if (statusFilter) {
       const filterLower = statusFilter.toLowerCase().trim();
@@ -1185,8 +1411,8 @@ export const storeService = {
     }
 
     // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const index = orders.findIndex((o) => String(o.id) === idStr);
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
     if (index !== -1) {
       orders[index].status = status;
       orders[index].updated_at = new Date().toISOString();
@@ -1194,15 +1420,18 @@ export const storeService = {
     }
 
     // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
+          'x-admin-password': pass,
         },
         body: JSON.stringify({ status }),
-      }).catch(() => {});
+      });
+    } catch (e) {
+      console.warn('API update order status error:', e);
     }
 
     notifyOrdersChanged();
@@ -1220,8 +1449,8 @@ export const storeService = {
     }
 
     // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const index = orders.findIndex((o) => String(o.id) === idStr);
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
     if (index !== -1) {
       orders[index] = {
         ...orders[index],
@@ -1232,15 +1461,18 @@ export const storeService = {
     }
 
     // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-password': adminPassword,
+          'x-admin-password': pass,
         },
         body: JSON.stringify(orderData),
-      }).catch(() => {});
+      });
+    } catch (e) {
+      console.warn('API update order error:', e);
     }
 
     notifyOrdersChanged();
@@ -1254,28 +1486,111 @@ export const storeService = {
   async deleteOrder(orderId: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderId);
 
-    // 1. Firestore
+    // Find matching order in local storage to also record its order_number
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const target = orders.find((o) => String(o.id) === idStr || String(o.order_number) === idStr);
+    const orderNo = target?.order_number;
+
+    // Mark as deleted in cache tracking
+    markOrderDeleted(idStr, orderNo);
+
+    // 1. Firestore: Delete by ID and by order number doc ref if different
     try {
       await deleteDoc(doc(db, 'orders', idStr));
+      if (orderNo && orderNo !== idStr) {
+        await deleteDoc(doc(db, 'orders', orderNo)).catch(() => {});
+      }
     } catch (e) {
       console.warn('Firestore delete order error:', e);
     }
 
-    // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    const filtered = orders.filter((o) => String(o.id) !== idStr && o.order_number !== idStr);
+    // 2. Local storage: Filter out matching order
+    const filtered = orders.filter(
+      (o) => String(o.id) !== idStr && o.order_number !== idStr && String(o.id) !== target?.id
+    );
     setLocal(ORDERS_KEY, filtered);
 
-    // 3. API
-    if (adminPassword) {
-      tryApi(`/api/admin/orders/${idStr}`, {
+    // 3. API backend delete
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword },
-      }).catch(() => {});
+        headers: { 'x-admin-password': pass },
+      });
+    } catch (e) {
+      console.warn('API delete order error:', e);
     }
 
     notifyOrdersChanged();
     return { success: true };
+  },
+
+  subscribeToOrders(callback: (orders: Order[]) => void): () => void {
+    if (!db) return () => {};
+    try {
+      const q = collection(db, 'orders');
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const orderMap = new Map<string, Order>();
+          const deletedIds = getDeletedOrderIds();
+
+          snapshot.forEach((d) => {
+            const o = d.data() as any;
+            if (!o) return;
+            const id = String(o.id || d.id || '');
+            const orderNumber = String(o.order_number || (id ? `MX-${id.slice(-6)}` : ''));
+            if (!id && !orderNumber) return;
+            if (deletedIds.has(id) || (orderNumber && deletedIds.has(orderNumber))) return;
+            if (
+              ['ord-001', 'ord-002', 'ord-003'].includes(id) ||
+              ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)
+            ) {
+              return;
+            }
+
+            const mappedOrder: Order = {
+              id: id || orderNumber,
+              order_number: orderNumber || `MX-${id.slice(-6)}`,
+              customer_id: o.customer_id || `cust-${(o.phone || '').replace(/[^0-9]/g, '')}`,
+              customer_name: o.customer_name || 'Customer',
+              phone: o.phone || o.customer_phone || '',
+              alt_phone: o.alt_phone || '',
+              email: o.email || '',
+              district: o.district || '',
+              area: o.area || '',
+              address: o.address || '',
+              delivery_area: o.delivery_area || 'inside_dhaka',
+              delivery_charge: Number(o.delivery_charge || 0),
+              subtotal: Number(o.subtotal || 0),
+              total: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+              total_amount: o.total !== undefined ? Number(o.total) : Number(o.total_amount || 0),
+              status: (o.status || o.order_status || 'Pending') as OrderStatus,
+              payment_method: o.payment_method || 'Cash on Delivery',
+              note: o.note || '',
+              items: Array.isArray(o.items) ? o.items : [],
+              created_at: o.created_at || new Date().toISOString(),
+              updated_at: o.updated_at || new Date().toISOString(),
+            };
+            orderMap.set(mappedOrder.id, mappedOrder);
+          });
+
+          const orders = Array.from(orderMap.values());
+          orders.sort(
+            (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          );
+          setLocal(ORDERS_KEY, orders);
+          callback(orders);
+        },
+        (err) => {
+          console.warn('Real-time order subscription notice:', err);
+        }
+      );
+      return unsubscribe;
+    } catch (e) {
+      console.warn('Failed to setup real-time orders subscription:', e);
+      return () => {};
+    }
   },
 
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
@@ -2456,5 +2771,238 @@ export const storeService = {
       };
     }
     return result;
+  },
+
+  // 7. BRAND MANAGEMENT
+  async getBrands(activeOnly: boolean = false): Promise<Brand[]> {
+    let brands: Brand[] = [];
+    let firestoreSuccess = false;
+
+    // 1. Firestore
+    try {
+      const snap = await getDocs(collection(db, 'brands'));
+      if (!snap.empty) {
+        firestoreSuccess = true;
+        snap.forEach((d) => {
+          const item = d.data() as Brand;
+          brands.push({ ...item, id: String(item.id || d.id) });
+        });
+        if (brands.length > 0) {
+          setLocal(BRANDS_KEY, brands);
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore getBrands error:', e);
+    }
+
+    // 2. REST API fallback
+    if (!firestoreSuccess || brands.length === 0) {
+      try {
+        const apiResult = await tryApi<{ success: boolean; brands: Brand[] }>('/api/brands?all=true');
+        if (apiResult.success && Array.isArray(apiResult.data?.brands) && apiResult.data.brands.length > 0) {
+          brands = apiResult.data.brands;
+          setLocal(BRANDS_KEY, brands);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. Local Cache fallback
+    if (brands.length === 0) {
+      brands = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    }
+
+    // Ensure all brands from products are represented
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const existingBrandNames = new Set(brands.map((b) => b.name.toLowerCase().trim()));
+    let newBrandsFound = false;
+
+    prods.forEach((p) => {
+      const brandName = (p.brand || '').trim();
+      if (brandName && brandName.toLowerCase() !== 'unbranded' && !existingBrandNames.has(brandName.toLowerCase())) {
+        existingBrandNames.add(brandName.toLowerCase());
+        const slug = generateSlug(brandName);
+        brands.push({
+          id: `brand-${slug || Date.now()}`,
+          name: brandName,
+          slug: slug || 'brand',
+          active: 1,
+          display_order: 99,
+          description: `${brandName} genuine products with authentic warranty.`,
+        });
+        newBrandsFound = true;
+      }
+    });
+
+    if (newBrandsFound) {
+      setLocal(BRANDS_KEY, brands);
+    }
+
+    const sorted = [...brands].sort((a, b) => {
+      const orderA = a.display_order ?? 999;
+      const orderB = b.display_order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name);
+    });
+
+    if (activeOnly) {
+      return sorted.filter((b) => b.active !== 0 && b.active !== false && String(b.active) !== '0');
+    }
+    return sorted;
+  },
+
+  async saveBrand(brandData: Partial<Brand>, adminPassword?: string): Promise<{ success: boolean; brand: Brand }> {
+    const rawName = (brandData.name || '').trim();
+    const slug = (brandData.slug && brandData.slug.trim()) ? generateSlug(brandData.slug) : generateSlug(rawName);
+    const id = brandData.id || `brand-${slug || Date.now()}`;
+
+    const newBrand: Brand = {
+      id,
+      name: rawName || 'Other',
+      slug: slug || 'other',
+      logo_url: brandData.logo_url || '',
+      description: brandData.description || '',
+      display_order: Number(brandData.display_order ?? 99),
+      active: brandData.active !== undefined ? (brandData.active ? 1 : 0) : 1,
+      meta_title: brandData.meta_title || `${rawName} Products in Bangladesh | Maxora`,
+      meta_description: brandData.meta_description || `Buy authentic ${rawName} products in Bangladesh at best prices on Maxora.`,
+      meta_keywords: brandData.meta_keywords || `${rawName}, Maxora, Bangladesh, online shop`,
+      created_at: brandData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. Persist to Firestore
+    try {
+      await setDoc(doc(db, 'brands', id), newBrand, { merge: true });
+    } catch (e) {
+      console.warn('Firestore saveBrand error:', e);
+    }
+
+    // 2. Cascade update products if Brand name or slug changed
+    const current = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    const existing = current.find((b) => b.id === id);
+    const oldName = existing?.name;
+    const oldSlug = existing?.slug;
+
+    if (existing && (oldName !== newBrand.name || oldSlug !== newBrand.slug)) {
+      const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      let prodsChanged = false;
+      prods.forEach((p) => {
+        if (
+          p.brand_id === id ||
+          (oldSlug && p.brand_slug === oldSlug) ||
+          (oldName && p.brand && p.brand.toLowerCase().trim() === oldName.toLowerCase().trim())
+        ) {
+          p.brand = newBrand.name;
+          p.brand_id = newBrand.id;
+          p.brand_slug = newBrand.slug;
+          prodsChanged = true;
+          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+        }
+      });
+      if (prodsChanged) {
+        setLocal(PRODUCTS_KEY, prods);
+        notifyProductsChanged();
+      }
+    }
+
+    // 3. Update local cache
+    const idx = current.findIndex((b) => b.id === id || b.slug === slug);
+    let updated: Brand[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = newBrand;
+    } else {
+      updated = [...current, newBrand];
+    }
+    setLocal(BRANDS_KEY, updated);
+    notifyBrandsChanged();
+
+    // 4. REST API sync
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi('/api/admin/brands', {
+        method: 'POST',
+        headers: getAuthHeaders(pass),
+        body: JSON.stringify(newBrand),
+      });
+    } catch {
+      // non-blocking
+    }
+
+    return { success: true, brand: newBrand };
+  },
+
+  async deleteBrand(brandId: string, adminPassword?: string): Promise<{ success: boolean; affectedProductsCount: number }> {
+    // 1. Delete from Firestore
+    try {
+      await deleteDoc(doc(db, 'brands', brandId));
+    } catch (e) {
+      console.warn('Firestore deleteBrand error:', e);
+    }
+
+    const current = getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
+    const brandToDelete = current.find((b) => b.id === brandId);
+    const brandName = brandToDelete?.name?.toLowerCase().trim();
+    const brandSlug = brandToDelete?.slug?.toLowerCase().trim();
+
+    const updated = current.filter((b) => b.id !== brandId);
+    setLocal(BRANDS_KEY, updated);
+    notifyBrandsChanged();
+
+    // 2. Re-assign products belonging to this brand to "Other" so product data is never lost or orphaned
+    const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    let affectedCount = 0;
+    let prodsChanged = false;
+
+    prods.forEach((p) => {
+      if (
+        p.brand_id === brandId ||
+        (brandSlug && (p.brand_slug || '').toLowerCase().trim() === brandSlug) ||
+        (brandName && (p.brand || '').toLowerCase().trim() === brandName)
+      ) {
+        p.brand = 'Other';
+        p.brand_id = 'brand-other';
+        p.brand_slug = 'other';
+        affectedCount++;
+        prodsChanged = true;
+        setDoc(doc(db, 'products', String(p.id)), {
+          brand: 'Other',
+          brand_id: 'brand-other',
+          brand_slug: 'other',
+        }, { merge: true }).catch(() => {});
+      }
+    });
+
+    if (prodsChanged) {
+      setLocal(PRODUCTS_KEY, prods);
+      notifyProductsChanged();
+    }
+
+    // 3. REST API delete
+    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+    try {
+      await tryApi(`/api/admin/brands/${brandId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(pass),
+      });
+    } catch {
+      // non-blocking
+    }
+
+    return { success: true, affectedProductsCount: affectedCount };
+  },
+
+  async getProductsByBrand(brandSlugOrName: string): Promise<Product[]> {
+    const prods = await this.getProducts();
+    const target = brandSlugOrName.toLowerCase().trim();
+    return prods.filter((p) => {
+      if (!p.active && p.active !== undefined && p.active !== 1) return false;
+      const bName = (p.brand || '').toLowerCase().trim();
+      const bSlug = (p.brand_slug || generateSlug(p.brand || '')).toLowerCase().trim();
+      const bId = (p.brand_id || '').toLowerCase().trim();
+      return bName === target || bSlug === target || bId === target;
+    });
   },
 };
