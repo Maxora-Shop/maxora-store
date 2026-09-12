@@ -92,14 +92,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </a>
 
         {/* Floating Badges */}
-        <div className="absolute top-2 left-2 xs:top-2.5 xs:left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[70%]">
+        <div className="absolute top-2 left-2 xs:top-2.5 xs:left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[75%]">
+          {Boolean(product.is_flash_sale && product.is_flash_sale !== 0) && (
+            <span className="bg-amber-500 text-zinc-950 font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 w-fit">
+              ⚡ Flash Sale
+            </span>
+          )}
+          {Boolean(product.is_hot_deal && product.is_hot_deal !== 0) && (
+            <span className="bg-rose-600 text-white font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 w-fit">
+              🔥 Hot Deal
+            </span>
+          )}
+          {Boolean(product.is_best_seller && product.is_best_seller !== 0) && (
+            <span className="bg-emerald-600 text-white font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 w-fit">
+              ⭐ Best Seller
+            </span>
+          )}
+          {Boolean(product.is_new_arrival && product.is_new_arrival !== 0) && (
+            <span className="bg-blue-600 text-white font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 w-fit">
+              🆕 New
+            </span>
+          )}
           {product.badge && (
-            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] uppercase tracking-wider px-1.5 py-0.5 xs:px-2 rounded-md shadow-xs backdrop-blur-xs truncate">
+            <span className="bg-zinc-950/90 text-emerald-400 font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] uppercase tracking-wider px-1.5 py-0.5 xs:px-2 rounded-md shadow-xs backdrop-blur-xs truncate w-fit">
               {product.badge}
             </span>
           )}
           {hasDiscount && (
-            <span className="bg-rose-600 text-white font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs shrink-0">
+            <span className="bg-rose-600 text-white font-extrabold text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs shrink-0 w-fit">
               {discountPercent > 0 ? `-${discountPercent}%` : `SAVE ৳${discount.toLocaleString('en-BD')}`}
             </span>
           )}

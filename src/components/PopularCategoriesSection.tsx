@@ -1,13 +1,14 @@
 import React from 'react';
 import {
-  Cpu,
-  Watch,
-  Headphones,
-  ShoppingBag,
-  Sparkles,
-  Smartphone,
   Laptop,
-  Flame,
+  ChefHat,
+  Home,
+  Sparkles,
+  Shirt,
+  Dumbbell,
+  Baby,
+  Wrench,
+  LayoutGrid,
   ArrowRight,
 } from 'lucide-react';
 import { Category } from '../types';
@@ -19,131 +20,164 @@ interface PopularCategoriesSectionProps {
   productCountMap?: Record<string, number>;
 }
 
-// Fallback icon helper based on category name or slug
-const getCategoryIcon = (category: Category) => {
-  const name = (category.name || '').toLowerCase();
-  const slug = (category.slug || '').toLowerCase();
+interface PastelCategoryDef {
+  name: string;
+  slug: string;
+  icon: React.ComponentType<{ className?: string }>;
+  bgClass: string;
+  borderClass: string;
+  iconBgClass: string;
+  iconTextClass: string;
+}
 
-  if (name.includes('electr') || slug.includes('electr')) return <Cpu className="w-5 h-5 text-emerald-600" />;
-  if (name.includes('watch') || name.includes('gadget') || slug.includes('gadget')) return <Watch className="w-5 h-5 text-blue-600" />;
-  if (name.includes('audio') || name.includes('headphone') || name.includes('sound') || slug.includes('audio')) return <Headphones className="w-5 h-5 text-indigo-600" />;
-  if (name.includes('game') || name.includes('computer') || slug.includes('computer')) return <Sparkles className="w-5 h-5 text-purple-600" />;
-  if (name.includes('phone') || name.includes('mobile')) return <Smartphone className="w-5 h-5 text-rose-600" />;
-  if (name.includes('laptop')) return <Laptop className="w-5 h-5 text-cyan-600" />;
-  if (name.includes('deal') || name.includes('hot')) return <Flame className="w-5 h-5 text-amber-600" />;
-
-  return <ShoppingBag className="w-5 h-5 text-emerald-600" />;
-};
+const PRESET_CATEGORIES: PastelCategoryDef[] = [
+  {
+    name: 'Electronics',
+    slug: 'electronics',
+    icon: Laptop,
+    bgClass: 'bg-blue-50/70 hover:bg-blue-100/70',
+    borderClass: 'border-blue-100',
+    iconBgClass: 'bg-blue-100/80',
+    iconTextClass: 'text-blue-600',
+  },
+  {
+    name: 'Kitchen Appliances',
+    slug: 'kitchen-appliances',
+    icon: ChefHat,
+    bgClass: 'bg-amber-50/70 hover:bg-amber-100/70',
+    borderClass: 'border-amber-100',
+    iconBgClass: 'bg-amber-100/80',
+    iconTextClass: 'text-amber-600',
+  },
+  {
+    name: 'Home & Living',
+    slug: 'home-living',
+    icon: Home,
+    bgClass: 'bg-emerald-50/70 hover:bg-emerald-100/70',
+    borderClass: 'border-emerald-100',
+    iconBgClass: 'bg-emerald-100/80',
+    iconTextClass: 'text-emerald-600',
+  },
+  {
+    name: 'Beauty & Health',
+    slug: 'beauty-health',
+    icon: Sparkles,
+    bgClass: 'bg-pink-50/70 hover:bg-pink-100/70',
+    borderClass: 'border-pink-100',
+    iconBgClass: 'bg-pink-100/80',
+    iconTextClass: 'text-pink-600',
+  },
+  {
+    name: 'Fashion',
+    slug: 'fashion',
+    icon: Shirt,
+    bgClass: 'bg-indigo-50/70 hover:bg-indigo-100/70',
+    borderClass: 'border-indigo-100',
+    iconBgClass: 'bg-indigo-100/80',
+    iconTextClass: 'text-indigo-600',
+  },
+  {
+    name: 'Sports',
+    slug: 'sports',
+    icon: Dumbbell,
+    bgClass: 'bg-orange-50/70 hover:bg-orange-100/70',
+    borderClass: 'border-orange-100',
+    iconBgClass: 'bg-orange-100/80',
+    iconTextClass: 'text-orange-600',
+  },
+  {
+    name: 'Toys & Baby',
+    slug: 'toys-baby',
+    icon: Baby,
+    bgClass: 'bg-rose-50/70 hover:bg-rose-100/70',
+    borderClass: 'border-rose-100',
+    iconBgClass: 'bg-rose-100/80',
+    iconTextClass: 'text-rose-600',
+  },
+  {
+    name: 'Tools & Hardware',
+    slug: 'tools-hardware',
+    icon: Wrench,
+    bgClass: 'bg-yellow-50/70 hover:bg-yellow-100/70',
+    borderClass: 'border-yellow-100',
+    iconBgClass: 'bg-yellow-100/80',
+    iconTextClass: 'text-yellow-600',
+  },
+  {
+    name: 'View All',
+    slug: '',
+    icon: LayoutGrid,
+    bgClass: 'bg-slate-50/80 hover:bg-slate-100',
+    borderClass: 'border-slate-200',
+    iconBgClass: 'bg-slate-200/70',
+    iconTextClass: 'text-slate-700',
+  },
+];
 
 export const PopularCategoriesSection: React.FC<PopularCategoriesSectionProps> = ({
-  categories,
+  categories = [],
   selectedCategory = '',
   onSelectCategory,
   productCountMap = {},
 }) => {
-  // Filter only active categories and sort by display_order
-  const displayCategories = categories
-    .filter((c) => c.active !== 0 && c.active !== false)
-    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-
-  if (displayCategories.length === 0) return null;
-
   return (
-    <section className="my-6 sm:my-10 w-full">
+    <section className="my-6 sm:my-8 w-full">
+      {/* Header matching screenshot */}
       <div className="flex items-end justify-between mb-4 sm:mb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
-              Browse Collections
-            </span>
-          </div>
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-zinc-950 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-zinc-950 tracking-tight">
             Popular Categories
           </h2>
+          <p className="text-xs sm:text-sm text-zinc-500 mt-0.5 font-medium">
+            Explore our most popular product categories
+          </p>
         </div>
 
         <button
           type="button"
           onClick={() => onSelectCategory('')}
-          className="text-xs sm:text-sm font-bold text-zinc-600 hover:text-emerald-700 flex items-center gap-1 transition-colors cursor-pointer group"
+          className="text-xs sm:text-sm font-bold text-zinc-700 hover:text-zinc-950 flex items-center gap-1 transition-colors cursor-pointer group"
         >
           <span>View All</span>
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>
 
-      {/* Grid of Clean Category Cards */}
-      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5 sm:gap-4">
-        {displayCategories.map((category) => {
+      {/* Grid of 9 Pastel Category Cards matching screenshot */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-9 gap-2.5 sm:gap-3">
+        {PRESET_CATEGORIES.map((cat) => {
+          const Icon = cat.icon;
           const isSelected =
-            selectedCategory.toLowerCase() === (category.slug || '').toLowerCase() ||
-            selectedCategory.toLowerCase() === (category.name || '').toLowerCase();
+            cat.slug === ''
+              ? !selectedCategory
+              : selectedCategory.toLowerCase() === cat.slug.toLowerCase();
 
-          const count = productCountMap[category.slug || ''] || productCountMap[category.name || ''] || 0;
+          const count = cat.slug ? productCountMap[cat.slug] || 0 : null;
 
           return (
             <button
-              key={category.id || category.slug}
+              key={cat.name}
               type="button"
-              onClick={() => onSelectCategory(category.slug || category.name)}
-              className={`group text-left p-3 sm:p-4 rounded-2xl border transition-all duration-300 flex flex-col justify-between cursor-pointer hover:-translate-y-1 hover:shadow-md ${
-                isSelected
-                  ? 'bg-zinc-950 text-white border-zinc-950 shadow-md ring-2 ring-emerald-500/50'
-                  : 'bg-white text-zinc-900 border-zinc-200/90 hover:border-emerald-500/40 hover:bg-zinc-50/70'
+              onClick={() => onSelectCategory(cat.slug)}
+              className={`group text-center p-3 sm:p-4 rounded-2xl border transition-all duration-200 flex flex-col items-center justify-center cursor-pointer hover:-translate-y-1 hover:shadow-sm aspect-square ${cat.bgClass} ${cat.borderClass} ${
+                isSelected ? 'ring-2 ring-zinc-950 shadow-xs' : ''
               }`}
             >
-              <div className="flex items-center justify-between mb-3 w-full">
-                <div
-                  className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center transition-all ${
-                    isSelected
-                      ? 'bg-zinc-800 text-white shadow-inner'
-                      : 'bg-zinc-100/90 group-hover:bg-emerald-50 text-zinc-800'
-                  }`}
-                >
-                  {category.image_url ? (
-                    <img
-                      src={category.image_url}
-                      alt={category.name}
-                      className="w-6 h-6 object-contain rounded-md"
-                      onError={(e) => {
-                        // Fallback to icon if image fails
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    getCategoryIcon(category)
-                  )}
-                </div>
-
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-opacity ${
-                    isSelected ? 'bg-emerald-500 text-zinc-950' : 'text-zinc-400 group-hover:text-emerald-600'
-                  }`}
-                >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </div>
+              <div
+                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center mb-2 transition-transform group-hover:scale-110 ${cat.iconBgClass} ${cat.iconTextClass}`}
+              >
+                <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
 
-              <div>
-                <h3
-                  className={`font-black text-xs sm:text-sm leading-snug line-clamp-1 transition-colors ${
-                    isSelected ? 'text-white' : 'text-zinc-900 group-hover:text-emerald-700'
-                  }`}
-                  title={category.name}
-                >
-                  {category.name}
-                </h3>
-                {count > 0 && (
-                  <p
-                    className={`text-[10px] sm:text-[11px] mt-0.5 font-medium ${
-                      isSelected ? 'text-zinc-400' : 'text-zinc-500'
-                    }`}
-                  >
-                    {count} {count === 1 ? 'Product' : 'Products'}
-                  </p>
-                )}
-              </div>
+              <h3 className="font-bold text-[11px] sm:text-xs text-zinc-900 leading-snug line-clamp-2">
+                {cat.name}
+              </h3>
+
+              {count !== null && count > 0 && (
+                <span className="text-[10px] text-zinc-500 mt-0.5 font-medium hidden sm:inline">
+                  {count} items
+                </span>
+              )}
             </button>
           );
         })}

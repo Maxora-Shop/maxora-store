@@ -220,6 +220,9 @@ export interface StoreSettings {
   phone: string;
   whatsapp?: string;
   facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
   logo_url?: string;
   hero_title: string;
   hero_subtitle: string;

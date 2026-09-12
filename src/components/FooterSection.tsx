@@ -3,6 +3,7 @@ import {
   Phone,
   Mail,
   MapPin,
+  Clock,
   ExternalLink,
   PackageCheck,
   ShieldCheck,
@@ -11,6 +12,10 @@ import {
   Flame,
   HelpCircle,
   FileText,
+  Facebook,
+  Instagram,
+  Youtube,
+  Music2,
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 
@@ -20,6 +25,7 @@ interface FooterSectionProps {
   onScrollToProducts: () => void;
   onSelectCategory?: (cat: string) => void;
   onScrollToHotDeals?: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export const FooterSection: React.FC<FooterSectionProps> = ({
@@ -28,6 +34,7 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
   onScrollToProducts,
   onSelectCategory,
   onScrollToHotDeals,
+  onOpenAdmin,
 }) => {
   const [modalContent, setModalContent] = useState<{ title: string; content: string } | null>(null);
 
@@ -85,23 +92,33 @@ Maxora Shop BD respects your personal privacy:
 
   return (
     <>
-      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-28 sm:pb-12 border-t border-zinc-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          {/* Main 4 Columns Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-10 pb-12 border-b border-zinc-800/80">
-            {/* Column 1: About Maxora Shop BD */}
-            <div className="space-y-4">
+      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-28 sm:pb-12 border-t border-zinc-800 w-full">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6">
+          {/* Main Balanced 12-Column Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-8 pb-12 border-b border-zinc-800/80">
+            {/* Column 1: About Maxora Shop BD (Spans 4 columns) */}
+            <div className="lg:col-span-4 space-y-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-white text-zinc-950 font-black text-xl flex items-center justify-center shadow-xs">
-                  M
-                </div>
+                {settings.logo_url ? (
+                  <div className="w-9 h-9 rounded-xl overflow-hidden bg-white p-0.5 flex items-center justify-center shadow-xs shrink-0">
+                    <img
+                      src={settings.logo_url}
+                      alt={settings.store_name || 'Logo'}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-white text-zinc-950 font-black text-xl flex items-center justify-center shadow-xs shrink-0">
+                    {(settings.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <span className="text-2xl font-black tracking-tight text-white">
                   {settings.store_name || 'Maxora Shop BD'}
                   <span className="text-emerald-500">.</span>
                 </span>
               </div>
 
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed pr-2">
                 {settings.footer_text ||
                   'Maxora Shop BD is your trusted online shopping partner in Bangladesh for premium lifestyle gadgets, audio, and electronics. Cash on delivery available across all 64 districts.'}
               </p>
@@ -116,8 +133,8 @@ Maxora Shop BD respects your personal privacy:
               </div>
             </div>
 
-            {/* Column 2: Quick Links */}
-            <div className="space-y-4">
+            {/* Column 2: Quick Links (Spans 2 columns) */}
+            <div className="lg:col-span-2 space-y-4 lg:pl-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-emerald-400">
                 Quick Links
               </h4>
@@ -139,7 +156,7 @@ Maxora Shop BD respects your personal privacy:
                     className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <ChevronRight className="w-3.5 h-3.5 text-zinc-600" />
-                    <span>Browse All Categories</span>
+                    <span>Browse All</span>
                   </button>
                 </li>
                 <li>
@@ -159,14 +176,14 @@ Maxora Shop BD respects your personal privacy:
                     className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <PackageCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Track Your Order</span>
+                    <span>Track Order</span>
                   </button>
                 </li>
               </ul>
             </div>
 
-            {/* Column 3: Customer Service */}
-            <div className="space-y-4">
+            {/* Column 3: Customer Service (Spans 3 columns) */}
+            <div className="lg:col-span-3 space-y-4 lg:pl-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-emerald-400">
                 Customer Service
               </h4>
@@ -175,9 +192,9 @@ Maxora Shop BD respects your personal privacy:
                   <button
                     type="button"
                     onClick={() => openPolicyModal('faq')}
-                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-left"
                   >
-                    <HelpCircle className="w-3.5 h-3.5 text-zinc-600" />
+                    <HelpCircle className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                     <span>Frequently Asked Questions</span>
                   </button>
                 </li>
@@ -185,9 +202,9 @@ Maxora Shop BD respects your personal privacy:
                   <button
                     type="button"
                     onClick={() => openPolicyModal('return')}
-                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-left"
                   >
-                    <ShieldCheck className="w-3.5 h-3.5 text-zinc-600" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                     <span>Return & Exchange Policy</span>
                   </button>
                 </li>
@@ -195,9 +212,9 @@ Maxora Shop BD respects your personal privacy:
                   <button
                     type="button"
                     onClick={() => openPolicyModal('privacy')}
-                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-left"
                   >
-                    <FileText className="w-3.5 h-3.5 text-zinc-600" />
+                    <FileText className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                     <span>Privacy Policy</span>
                   </button>
                 </li>
@@ -205,17 +222,17 @@ Maxora Shop BD respects your personal privacy:
                   <button
                     type="button"
                     onClick={() => openPolicyModal('terms')}
-                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-left"
                   >
-                    <FileText className="w-3.5 h-3.5 text-zinc-600" />
+                    <FileText className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
                     <span>Terms of Service</span>
                   </button>
                 </li>
               </ul>
             </div>
 
-            {/* Column 4: Contact Info & Support */}
-            <div className="space-y-4">
+            {/* Column 4: Contact Info & Support (Spans 3 columns - right boundary aligned) */}
+            <div className="lg:col-span-3 space-y-4 lg:pl-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-emerald-400">
                 Contact & Support
               </h4>
@@ -254,21 +271,72 @@ Maxora Shop BD respects your personal privacy:
                   <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="block text-[11px] text-zinc-500 uppercase font-bold">Address</span>
-                    <span>{settings.address || 'Dhaka, Bangladesh'}</span>
+                    <span className="text-white text-xs">{settings.address || 'Dhaka, Bangladesh'}</span>
                   </div>
                 </div>
 
-                {/* Facebook Page Link */}
-                <div className="pt-2">
-                  <a
-                    href="https://facebook.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <span>Follow us on Facebook</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                <div className="flex items-start gap-2.5">
+                  <Clock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="block text-[11px] text-zinc-500 uppercase font-bold">Support Hours</span>
+                    <span className="text-zinc-300 text-xs">10:00 AM – 10:00 PM (Daily)</span>
+                  </div>
+                </div>
+
+                {/* Social Media Links (Facebook, Instagram, YouTube, TikTok) */}
+                <div className="pt-2 space-y-2">
+                  <span className="block text-[11px] text-zinc-400 uppercase font-bold tracking-wider">
+                    Follow Us
+                  </span>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Facebook */}
+                    <a
+                      href={settings.facebook || 'https://facebook.com'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Follow us on Facebook"
+                      aria-label="Facebook"
+                      className="w-9 h-9 rounded-xl bg-[#1877F2]/15 hover:bg-[#1877F2] text-[#1877F2] hover:text-white border border-[#1877F2]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
+                    >
+                      <Facebook className="w-4 h-4" />
+                    </a>
+
+                    {/* Instagram */}
+                    <a
+                      href={settings.instagram || 'https://instagram.com'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Follow us on Instagram"
+                      aria-label="Instagram"
+                      className="w-9 h-9 rounded-xl bg-[#E4405F]/15 hover:bg-[#E4405F] text-[#E4405F] hover:text-white border border-[#E4405F]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
+                    >
+                      <Instagram className="w-4 h-4" />
+                    </a>
+
+                    {/* YouTube */}
+                    <a
+                      href={settings.youtube || 'https://youtube.com'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Subscribe on YouTube"
+                      aria-label="YouTube"
+                      className="w-9 h-9 rounded-xl bg-[#FF0000]/15 hover:bg-[#FF0000] text-[#FF0000] hover:text-white border border-[#FF0000]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
+                    >
+                      <Youtube className="w-4 h-4" />
+                    </a>
+
+                    {/* TikTok */}
+                    <a
+                      href={settings.tiktok || 'https://tiktok.com'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Follow us on TikTok"
+                      aria-label="TikTok"
+                      className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-black text-zinc-300 hover:text-pink-400 border border-zinc-700/80 hover:border-pink-500/40 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
+                    >
+                      <Music2 className="w-4 h-4" />
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -277,9 +345,9 @@ Maxora Shop BD respects your personal privacy:
           {/* Bottom Copyright & Security */}
           <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
             <p className="font-medium text-center sm:text-left">
-              © 2026 Maxora Shop BD. All Rights Reserved.
+              {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center flex-wrap justify-center sm:justify-end gap-3">
               <span className="flex items-center gap-1 text-zinc-400 font-semibold">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>SSL Encrypted Checkout</span>

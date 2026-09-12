@@ -48,7 +48,11 @@ import {
   Tag,
   Hash,
   Palette,
-  FolderTree
+  FolderTree,
+  Facebook,
+  Instagram,
+  Youtube,
+  Music2,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -228,12 +232,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProductTypeInput, setNewProductTypeInput] = useState('');
   const [isManageTypesModalOpen, setIsManageTypesModalOpen] = useState(false);
 
-  // Sync settings custom_product_types
+  // Sync settings custom_product_types & global settings
   useEffect(() => {
-    if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
-      setAvailableProductTypes(globalSettings.custom_product_types);
+    if (globalSettings) {
+      setSettingsForm(globalSettings);
+      if (globalSettings.custom_product_types && globalSettings.custom_product_types.length > 0) {
+        setAvailableProductTypes(globalSettings.custom_product_types);
+      }
     }
-  }, [globalSettings.custom_product_types]);
+  }, [globalSettings]);
 
   // Image & Product Link States
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -1233,18 +1240,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="space-y-6">
           {/* Logo & Store Info */}
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
-            <div>
+            <div className="min-w-0 flex-1 mr-2">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center">
-                  M
-                </div>
-                <h1 className="text-white font-black text-lg tracking-tight">MAXORA</h1>
+                {settingsForm.logo_url ? (
+                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-white p-0.5 flex items-center justify-center shrink-0">
+                    <img
+                      src={settingsForm.logo_url}
+                      alt="Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center shrink-0">
+                    {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <h1 className="text-white font-black text-base tracking-tight truncate">
+                  {settingsForm.store_name || "MAXORA"}
+                </h1>
               </div>
               <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mt-0.5">
                 Admin Control
               </span>
             </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="System Online" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="System Online" />
           </div>
 
           {/* Navigation Links */}
@@ -2929,17 +2948,170 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Store Branding & Helpline
                     </h3>
 
+                    {/* Store Logo & Header Branding Box */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-zinc-50 to-zinc-100/70 rounded-2xl border border-zinc-200/90 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200">
+                        <div>
+                          <h4 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-emerald-600" />
+                            <span>Store Logo & Header Branding (লোগো ও নাম)</span>
+                          </h4>
+                          <p className="text-xs text-zinc-500">
+                            ওয়েবসাইটের হেডার, ইনভয়েস ও ফুটারে প্রদর্শিত লোগো ছবি এবং স্টোর নাম
+                          </p>
+                        </div>
+
+                        {/* Live Header Simulation Preview */}
+                        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-zinc-200 shadow-2xs">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Live Preview:</span>
+                          <div className="flex items-center gap-2">
+                            {settingsForm.logo_url ? (
+                              <img
+                                src={settingsForm.logo_url}
+                                alt="Logo Preview"
+                                className="w-7 h-7 rounded-lg object-contain bg-zinc-50 border border-zinc-200"
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-lg bg-zinc-950 text-white font-black text-xs flex items-center justify-center">
+                                {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="text-xs font-black text-zinc-900 truncate max-w-[130px]">
+                              {settingsForm.store_name || "Maxora Shop BD"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Logo Controls */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                        {/* Current Logo Preview Box */}
+                        <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 text-center">
+                          <span className="text-[11px] font-bold text-zinc-500 mb-2">Current Logo</span>
+                          {settingsForm.logo_url ? (
+                            <div className="relative group/logo">
+                              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-50 border-2 border-emerald-500/50 p-1 flex items-center justify-center shadow-xs">
+                                <img
+                                  src={settingsForm.logo_url}
+                                  alt="Current Logo"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettingsForm({ ...settingsForm, logo_url: '' });
+                                  showToast('লোগো সরানো হয়েছে। ডিফল্ট লেটার ব্যাজ দেখানো হবে।', 'info');
+                                }}
+                                title="Remove Logo (revert to letter badge)"
+                                className="absolute -top-2 -right-2 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-20 h-20 rounded-2xl bg-zinc-950 text-white flex flex-col items-center justify-center shadow-md">
+                              <span className="text-3xl font-black">
+                                {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                              </span>
+                              <span className="text-[9px] text-zinc-400 font-medium mt-0.5">Letter Badge</span>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-zinc-400 mt-2">
+                            {settingsForm.logo_url ? 'Custom image logo active' : 'Default letter badge active'}
+                          </p>
+                        </div>
+
+                        {/* Upload & URL Inputs */}
+                        <div className="md:col-span-8 space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Upload Logo File (লোগো ছবি আপলোড করুন)
+                            </label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                id="logo-file-input"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    setLoading(true);
+                                    const dataUrl = await compressAndReadImage(file);
+                                    setSettingsForm(prev => ({ ...prev, logo_url: dataUrl }));
+                                    showToast('লোগো ছবি আপলোড হয়েছে! নিচের "Save Settings" বাটনে চাপুন।', 'success');
+                                  } catch (err: any) {
+                                    showToast(err.message || 'লোগো ফাইল রিড করতে সমস্যা হয়েছে', 'error');
+                                  } finally {
+                                    setLoading(false);
+                                    if (e.target) e.target.value = '';
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor="logo-file-input"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
+                              >
+                                <Upload className="w-4 h-4 text-emerald-400" />
+                                <span>Choose Image From Device</span>
+                              </label>
+
+                              {settingsForm.logo_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSettingsForm({ ...settingsForm, logo_url: '' });
+                                    showToast('লোগো সরানো হয়েছে। ডিফল্ট লেটার ব্যাজ দেখানো হবে।', 'info');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Remove Logo</span>
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-zinc-400 block mt-1">
+                              PNG, JPG, WEBP বা SVG ফাইল (প্রস্তাবিত: স্কয়ার বা ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড)
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Or Paste Logo URL (অথবা অনলাইন ইমেজের লিংক দিন)
+                            </label>
+                            <div className="relative">
+                              <Link2 className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="url"
+                                placeholder="https://example.com/logo.png"
+                                value={settingsForm.logo_url || ''}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                                className="w-full bg-white text-zinc-900 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Store Name & Helpline Row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Store Name
+                          Store Name (দোকান / ওয়েবসাইটের নাম)
                         </label>
                         <input
                           type="text"
                           value={settingsForm.store_name || ''}
                           onChange={(e) => setSettingsForm({ ...settingsForm, store_name: e.target.value })}
-                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          placeholder="Maxora Shop BD"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-bold"
                         />
+                        <span className="text-[10px] text-zinc-400 block mt-1">
+                          লোগোর পাশে এই নামটি ওয়েবসাইটের হেডার ও ফুটারে দেখাবে
+                        </span>
                       </div>
 
                       <div>
@@ -2956,7 +3128,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* Support Phone & WhatsApp */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          Helpline / Support Phone
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.phone || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                          placeholder="e.g. 01700-123456"
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        />
+                      </div>
+
                       <div>
                         <label className="block text-xs font-bold text-zinc-700 mb-1">
                           WhatsApp Number
@@ -2969,18 +3155,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                         />
                       </div>
+                    </div>
 
+                    {/* Social Media Channels (Facebook, Instagram, YouTube, TikTok) */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-zinc-50 to-zinc-100/70 rounded-2xl border border-zinc-200/90 space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Facebook Page URL
-                        </label>
-                        <input
-                          type="text"
-                          value={settingsForm.facebook || ''}
-                          onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
-                          placeholder="https://facebook.com/maxora"
-                          className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                        />
+                        <h4 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                          <Share2 className="w-4 h-4 text-emerald-600" />
+                          <span>Social Media Profiles (সোশ্যাল মিডিয়া পেজ ও লিংক)</span>
+                        </h4>
+                        <p className="text-xs text-zinc-500">
+                          ওয়েবসাইটের ফুটারে ফেসবুক, ইনস্টাগ্রাম, ইউটিউব ও টিকটক আইকনগুলোর লিংক এখান থেকে সেট করুন
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Facebook */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Facebook className="w-3.5 h-3.5 text-[#1877F2]" />
+                            <span>Facebook Page URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.facebook || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, facebook: e.target.value })}
+                            placeholder="https://facebook.com/yourpage"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* Instagram */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Instagram className="w-3.5 h-3.5 text-[#E4405F]" />
+                            <span>Instagram Profile URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.instagram || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, instagram: e.target.value })}
+                            placeholder="https://instagram.com/yourprofile"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* YouTube */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Youtube className="w-3.5 h-3.5 text-[#FF0000]" />
+                            <span>YouTube Channel URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.youtube || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, youtube: e.target.value })}
+                            placeholder="https://youtube.com/@yourchannel"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
+
+                        {/* TikTok */}
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+                            <Music2 className="w-3.5 h-3.5 text-zinc-800" />
+                            <span>TikTok Profile URL</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={settingsForm.tiktok || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, tiktok: e.target.value })}
+                            placeholder="https://tiktok.com/@yourprofile"
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          />
+                        </div>
                       </div>
                     </div>
 

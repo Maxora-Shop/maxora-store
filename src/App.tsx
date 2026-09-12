@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { PriceFilter, PriceRange } from './components/PriceFilter';
+import { PriceRange } from './components/PriceFilter';
 import { FloatingSupportButton } from './components/FloatingSupportButton';
 import { ProductCard } from './components/ProductCard';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
@@ -15,6 +15,11 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
+import { PopularCategoriesSection } from './components/PopularCategoriesSection';
+import { PromoTripleSection } from './components/PromoTripleSection';
+import { BestSellersSection } from './components/BestSellersSection';
+import { TrustBenefitsSection } from './components/TrustBenefitsSection';
+import { FooterSection } from './components/FooterSection';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand } from './types';
 import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
@@ -123,6 +128,42 @@ export default function App() {
     };
     window.addEventListener('maxora_customer_auth_changed', handleCustomerSync);
     return () => window.removeEventListener('maxora_customer_auth_changed', handleCustomerSync);
+  }, []);
+
+  // Listen for /admin, #admin, or Ctrl+Shift+A for discreet store owner admin access
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
+        setIsAdminView(true);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        setIsAdminView((prev) => {
+          const next = !prev;
+          if (next) {
+            window.history.pushState({}, '', '/admin');
+          } else {
+            window.history.pushState({}, '', '/');
+          }
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [quickViewInitialTab, setQuickViewInitialTab] = useState<'details' | 'reviews'>('details');
@@ -615,6 +656,17 @@ export default function App() {
     return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories);
   }, [products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories]);
 
+  // Product counts per category for Popular Categories Section
+  const categoryProductCountMap = useMemo(() => {
+    const countMap: Record<string, number> = {};
+    reconciledCategories.forEach((cat) => {
+      countMap[cat.slug] = products.filter(
+        (p) => p.active !== 0 && p.active !== false && isProductInCategory(p, cat)
+      ).length;
+    });
+    return countMap;
+  }, [products, reconciledCategories]);
+
   // Saved / Wishlisted products list
   const savedProducts = useMemo(() => {
     return products.filter((p) => wishlistIds.includes(p.id));
@@ -979,15 +1031,43 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Hero Section - Only displayed when on the general home view without active taxonomy filters or search */}
-            {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && (
-              <Hero
-                settings={settings}
-                products={products}
-                onExploreClick={scrollToProducts}
-                onOpenProduct={handleOpenProductDetail}
-                onAddToCart={(p) => handleAddToCart(p, 1)}
-              />
+            {/* Homepage Sections - Only displayed on main home view without active taxonomy filters or search */}
+            {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !showSavedOnly && (
+              <>
+                <Hero
+                  settings={settings}
+                  products={products}
+                  onExploreClick={scrollToProducts}
+                  onOpenProduct={handleOpenProductDetail}
+                  onAddToCart={(p) => handleAddToCart(p, 1)}
+                />
+
+                {/* 3-Column Promo Section: Hot Deals | Flash Sale with countdown | New Arrivals */}
+                <PromoTripleSection
+                  products={products}
+                  onAddToCart={(p) => handleAddToCart(p, 1)}
+                  onBuyNow={(p) => handleBuyNow(p, 1)}
+                  onQuickView={(p, tab) => handleOpenProductDetail(p, true, tab || 'details')}
+                  onViewAllHotDeals={scrollToProducts}
+                  onViewAllFlashSale={scrollToProducts}
+                  onViewAllNewArrivals={scrollToProducts}
+                  ratingStatsMap={ratingStatsMap}
+                  recentlyAddedId={recentlyAddedId}
+                />
+
+                {/* Best Sellers Section (6 horizontal mini cards matching screenshot) */}
+                <BestSellersSection
+                  products={products}
+                  onAddToCart={(p) => handleAddToCart(p, 1)}
+                  onBuyNow={(p) => handleBuyNow(p, 1)}
+                  onQuickView={(p, tab) => handleOpenProductDetail(p, true, tab || 'details')}
+                  ratingStatsMap={ratingStatsMap}
+                  wishlistIds={wishlistIds}
+                  onToggleWishlist={handleToggleWishlist}
+                  recentlyAddedId={recentlyAddedId}
+                  onViewAll={scrollToProducts}
+                />
+              </>
             )}
 
             {/* Product Grid Section */}
@@ -1059,16 +1139,6 @@ export default function App() {
               )}
             </nav>
           )}
-
-          {/* Budget & Price Range Filter */}
-          <PriceFilter
-            priceRange={priceRange}
-            maxProductPrice={maxStorePrice}
-            onPriceRangeChange={handlePriceRangeChange}
-            selectedPreset={selectedPricePreset}
-            onSelectPreset={handleSelectPricePreset}
-            onResetPrice={handleResetPrice}
-          />
 
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 mb-6">
             <div>
@@ -1275,6 +1345,7 @@ export default function App() {
                       isWishlisted={wishlistIds.includes(product.id)}
                       onToggleWishlist={handleToggleWishlist}
                       onAddToCart={(p) => handleAddToCart(p, 1)}
+                      onBuyNow={(p) => handleBuyNow(p, 1)}
                       onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
                       isAdded={recentlyAddedId === product.id}
                     />
@@ -1333,163 +1404,20 @@ export default function App() {
             </div>
           </div>
         </section>
+
+            {/* Trust & Guarantee Section (Free Shipping, Secure Payment, 7-Day Returns, 24/7 Support) */}
+            <TrustBenefitsSection />
           </>
         )}
       </main>
 
-      {/* Trust & Guarantee Banner */}
-      <section className="bg-white border-t border-zinc-200 py-8 sm:py-10 px-4 sm:px-6 mt-6 sm:mt-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-center sm:text-left">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0">
-              <Truck className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-extrabold text-base text-zinc-900">Cash on Delivery</h4>
-              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                Inspect and pay after receiving your parcel at your doorstep anywhere in Bangladesh.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-extrabold text-base text-zinc-900">Quality Checked</h4>
-              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                Every single gadget is tested before packing to ensure zero defects.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0">
-              <Phone className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-extrabold text-base text-zinc-900">Dedicated BD Support</h4>
-              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                Our support team is active 7 days a week to help with your orders and inquiries.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-24 sm:pb-8 border-t border-zinc-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-zinc-800">
-          {/* Col 1 */}
-          <div className="space-y-3 md:col-span-2">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-white text-zinc-950 font-black text-lg flex items-center justify-center">
-                M
-              </div>
-              <span className="text-2xl font-black tracking-tight text-white">
-                {settings.store_name || "Maxora"}
-                <span className="text-emerald-500">.</span>
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-zinc-400 max-w-md leading-relaxed">
-              {settings.footer_text ||
-                "Maxora is Bangladesh's trusted destination for premium lifestyle gadgets and accessories. Cash on delivery available across all 64 districts."}
-            </p>
-            <div className="pt-2 flex items-center gap-3">
-              <span className="inline-block px-3 py-1 bg-zinc-900 rounded-full border border-zinc-800 text-[11px] font-semibold text-emerald-400">
-                🇧🇩 64 Districts Delivery
-              </span>
-              <span className="inline-block px-3 py-1 bg-zinc-900 rounded-full border border-zinc-800 text-[11px] font-semibold text-zinc-300">
-                💵 100% Cash on Delivery
-              </span>
-            </div>
-          </div>
-
-          {/* Col 2 */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400">
-              Quick Links
-            </h4>
-            <ul className="space-y-2 text-xs text-zinc-400 font-medium">
-              <li>
-                <button
-                  onClick={scrollToProducts}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  All Products
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => setIsTrackerOpen(true)}
-                  className="hover:text-white transition-colors cursor-pointer"
-                >
-                  Track Your Order
-                </button>
-              </li>
-              {settings.phone && (
-                <li>
-                  <a
-                    href={`tel:${settings.phone}`}
-                    className="hover:text-white transition-colors cursor-pointer"
-                  >
-                    Customer Support
-                  </a>
-                </li>
-              )}
-            </ul>
-          </div>
-
-          {/* Col 3 */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400">
-              Customer Hotline
-            </h4>
-            <div className="space-y-2 text-xs text-zinc-400 font-medium">
-              {settings.phone && (
-                <a
-                  href={`tel:${settings.phone}`}
-                  className="flex items-center gap-2 text-white font-bold hover:text-emerald-400 transition-colors"
-                >
-                  <Phone className="w-4 h-4 text-emerald-400" />
-                  <span>{settings.phone}</span>
-                </a>
-              )}
-              <div className="flex items-center gap-2 text-zinc-400">
-                <MapPin className="w-4 h-4 text-zinc-500" />
-                <span>Dhaka, Bangladesh</span>
-              </div>
-              <div className="text-[11px] text-zinc-500 pt-1">
-                Support Hours: 10:00 AM - 10:00 PM (Daily)
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">
-          <div>
-            <span>{settings.footer_text || "© Maxora Bangladesh. All rights reserved."}</span>
-          </div>
-          <div className="flex items-center flex-wrap gap-3 sm:gap-4">
-            <button onClick={() => setIsTrackerOpen(true)} className="hover:text-zinc-300 transition-colors cursor-pointer">Track Your Order</button>
-            <span>•</span>
-            <button onClick={scrollToProducts} className="hover:text-zinc-300 transition-colors cursor-pointer">Shop Collections</button>
-            <span>•</span>
-            <button
-              onClick={() => {
-                setIsAdminView(true);
-                window.history.pushState({}, '', '/admin');
-              }}
-              className="hover:text-zinc-300 text-zinc-500 transition-colors cursor-pointer"
-            >
-              Admin Portal
-            </button>
-            <span>•</span>
-            <span className="text-zinc-400">Cash on Delivery</span>
-          </div>
-        </div>
-      </footer>
+      {/* Modern Comprehensive Footer with FAQs, Policies */}
+      <FooterSection
+        settings={settings}
+        onOpenTracker={() => setIsTrackerOpen(true)}
+        onScrollToProducts={scrollToProducts}
+        onSelectCategory={(slug) => handleTaxonomySelect({ category: slug })}
+      />
 
       {/* Mobile Bottom Navigation & Floating Checkout */}
       <MobileBottomNav

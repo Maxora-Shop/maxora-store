@@ -445,9 +445,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         <div className="flex items-start justify-between border-b-2 border-zinc-900 pb-5">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white font-black text-lg flex items-center justify-center print:bg-black print:text-white">
-                M
-              </div>
+              {settings.logo_url ? (
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-white border border-zinc-200 p-0.5 flex items-center justify-center shrink-0">
+                  <img
+                    src={settings.logo_url}
+                    alt="Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-zinc-950 text-white font-black text-lg flex items-center justify-center print:bg-black print:text-white shrink-0">
+                  {(settings.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+                </div>
+              )}
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-zinc-950">
                 {settings.store_name || 'MAXORA'}
               </h1>
