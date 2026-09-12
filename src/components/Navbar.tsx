@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               Cash on Delivery
             </span>
             <span className="text-zinc-300 font-medium text-[11px] sm:text-xs truncate hidden sm:inline">
-              {settings.promo_text || "Nationwide Delivery Across All 64 Districts in Bangladesh"}
+              Cash on Delivery Available Across Bangladesh • Fast Delivery (Dhaka: 24-48 Hours, Outside: 48-72 Hours)
             </span>
           </div>
 
@@ -194,7 +194,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative flex items-center w-full">
               <input
                 type="text"
-                placeholder="Search products by name, category, or SKU..."
+                placeholder="Search for products, categories..."
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="w-full bg-zinc-50 hover:bg-white focus:bg-white text-zinc-900 text-sm pl-11 pr-24 py-2.5 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:ring-1 focus:ring-zinc-950 focus:outline-none transition-all placeholder:text-zinc-500 shadow-2xs"
@@ -308,8 +308,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950 shadow-2xs'
                 : 'bg-white hover:bg-zinc-100 border-zinc-200 text-zinc-800'
             }`}
-            aria-label={customer ? `Account: ${customer.name}` : 'Customer Login'}
-            title={customer ? `Hi, ${customer.name} (My Account)` : 'Customer Login / Account'}
+            aria-label={customer ? `Account: ${customer.name}` : 'Customer Login / Register'}
+            title={customer ? `Hi, ${customer.name} (My Account)` : 'Customer Login / Register'}
           >
             <div className="relative shrink-0 flex items-center justify-center">
               {customer ? (
@@ -322,8 +322,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
             {/* Display text where space allows, graceful truncation, icon-only on 320px */}
-            <span className="hidden min-[380px]:inline-block max-w-[62px] xs:max-w-[85px] sm:max-w-[110px] truncate text-[11px] sm:text-xs">
-              {customer ? (customer.name ? customer.name.split(' ')[0] : 'Account') : 'Login'}
+            <span className="hidden min-[380px]:inline-block max-w-[90px] xs:max-w-[110px] sm:max-w-[130px] truncate text-[11px] sm:text-xs">
+              {customer ? (customer.name ? customer.name.split(' ')[0] : 'Account') : 'Login / Register'}
             </span>
           </button>
 

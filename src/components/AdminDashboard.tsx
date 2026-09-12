@@ -756,6 +756,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleToggleHotDeal = async (product: Product) => {
+    try {
+      const nextVal = !product.is_hot_deal;
+      await storeService.updateProduct(product.id, { is_hot_deal: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" added to Hot Deals (হট ডিল চালু)` : `"${product.name}" removed from Hot Deals`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Hot Deal status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleFlashSale = async (product: Product) => {
+    try {
+      const nextVal = !product.is_flash_sale;
+      await storeService.updateProduct(product.id, { is_flash_sale: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" added to Flash Sale (ফ্ল্যাশ সেল চালু)` : `"${product.name}" removed from Flash Sale`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Flash Sale status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleNewArrival = async (product: Product) => {
+    try {
+      const nextVal = !product.is_new_arrival;
+      await storeService.updateProduct(product.id, { is_new_arrival: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" marked as New Arrival (নতুন কালেকশন)` : `"${product.name}" unmarked from New Arrivals`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update New Arrival status: ' + err.message, 'error');
+    }
+  };
+
+  const handleToggleBestSeller = async (product: Product) => {
+    try {
+      const nextVal = !product.is_best_seller;
+      await storeService.updateProduct(product.id, { is_best_seller: nextVal }, password);
+      showToast(
+        nextVal ? `"${product.name}" marked as Best Seller (টপ সেলিং চালু)` : `"${product.name}" unmarked from Best Sellers`,
+        'success'
+      );
+      loadProducts();
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to update Best Seller status: ' + err.message, 'error');
+    }
+  };
+
   const handleQuickStatusUpdate = async (orderId: number | string, newStatus: OrderStatus) => {
     try {
       await storeService.updateOrderStatus(orderId, newStatus, password);
@@ -2051,18 +2111,72 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 {p.active !== 0 ? 'Active' : 'Hidden'}
                               </span>
 
-                              <button
-                                type="button"
-                                onClick={() => handleToggleFeatured(p)}
-                                title="Toggle Featured status for Homepage Hero"
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                                  p.featured && p.featured !== 0
-                                    ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
-                                    : 'bg-zinc-100 text-zinc-500 border border-zinc-200 hover:bg-zinc-200'
-                                }`}
-                              >
-                                <span>{p.featured && p.featured !== 0 ? '★ Featured' : '☆ Not Featured'}</span>
-                              </button>
+                              <div className="flex flex-wrap gap-1 max-w-[170px]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFeatured(p)}
+                                  title="Toggle Featured status for Homepage Hero"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.featured && p.featured !== 0
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.featured && p.featured !== 0 ? '★ Hero' : '☆ Hero'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleHotDeal(p)}
+                                  title="Toggle Hot Deal on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_hot_deal
+                                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_hot_deal ? '🔥 Hot' : '🔥 Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFlashSale(p)}
+                                  title="Toggle Flash Sale on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_flash_sale
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_flash_sale ? '⚡ Flash' : '⚡ Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleNewArrival(p)}
+                                  title="Toggle New Arrival on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_new_arrival
+                                      ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_new_arrival ? '🆕 New' : '🆕 Off'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBestSeller(p)}
+                                  title="Toggle Best Seller on Homepage"
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all cursor-pointer ${
+                                    p.is_best_seller
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                      : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+                                  }`}
+                                >
+                                  <span>{p.is_best_seller ? '⭐ Best' : '⭐ Off'}</span>
+                                </button>
+                              </div>
                             </div>
                           </td>
                           <td className="p-4 text-right">
@@ -3941,8 +4055,159 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={(e) => setEditingProduct({ ...editingProduct, featured: e.target.checked ? 1 : 0 })}
                         className="w-4 h-4 rounded text-emerald-600"
                       />
-                      <span>Feature on Storefront</span>
+                      <span>Feature on Storefront Hero</span>
                     </label>
+                  </div>
+
+                  {/* Homepage Sections & Promotional Flags (Requirement 17) */}
+                  <div className="mt-3 p-4 bg-zinc-50 border border-zinc-200/90 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>Homepage Sections & Promotions (হোমপেজ সেকশন নিয়ন্ত্রণ)</span>
+                      </h4>
+                      <span className="text-[10px] text-zinc-500 font-medium">Automatic Storefront Sync</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                      {/* Hot Deal */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_hot_deal
+                          ? 'bg-rose-50 border-rose-300 text-rose-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>🔥 Hot Deal</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_hot_deal)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_hot_deal: e.target.checked })}
+                            className="w-4 h-4 rounded text-rose-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Hot Deals section</span>
+                      </label>
+
+                      {/* Flash Sale */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_flash_sale
+                          ? 'bg-amber-50 border-amber-300 text-amber-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>⚡ Flash Sale</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_flash_sale)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_flash_sale: e.target.checked })}
+                            className="w-4 h-4 rounded text-amber-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Flash Sale bar</span>
+                      </label>
+
+                      {/* New Arrival */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_new_arrival
+                          ? 'bg-blue-50 border-blue-300 text-blue-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>🆕 New Arrival</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_new_arrival)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_new_arrival: e.target.checked })}
+                            className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in New Arrivals</span>
+                      </label>
+
+                      {/* Best Seller */}
+                      <label className={`p-3 rounded-xl border flex flex-col gap-1 cursor-pointer transition-all ${
+                        editingProduct?.is_best_seller
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-2xs'
+                          : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold flex items-center gap-1">
+                            <span>⭐ Best Seller</span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProduct?.is_best_seller)}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, is_best_seller: e.target.checked })}
+                            className="w-4 h-4 rounded text-emerald-600 cursor-pointer"
+                          />
+                        </div>
+                        <span className="text-[10px] text-zinc-500">Show in Best Sellers</span>
+                      </label>
+                    </div>
+
+                    {/* Flash Sale specific details when Flash Sale is ON */}
+                    {editingProduct?.is_flash_sale && (
+                      <div className="mt-3 p-3.5 bg-amber-500/10 border border-amber-300/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Flash Sale Settings (ফ্ল্যাশ সেল স্পেশাল প্রাইস ও সময়সীমা)</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Flash Sale Price (৳):
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder="e.g. 1150"
+                              value={editingProduct?.flash_sale_price || ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_price: e.target.value ? Number(e.target.value) : undefined
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              Start Date/Time:
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={editingProduct?.flash_sale_start ? String(editingProduct.flash_sale_start).substring(0, 16) : ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_start: e.target.value
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                              End Date/Time:
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={editingProduct?.flash_sale_end ? String(editingProduct.flash_sale_end).substring(0, 16) : ''}
+                              onChange={(e) => setEditingProduct({
+                                ...editingProduct,
+                                flash_sale_end: e.target.value
+                              })}
+                              className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

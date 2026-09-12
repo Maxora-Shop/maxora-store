@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package } from 'lucide-react';
+import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
 interface ProductCardProps {
   product: Product;
   onAddToCart: (product: Product) => void;
+  onBuyNow?: (product: Product) => void;
   onQuickView: (product: Product, initialTab?: 'details' | 'reviews') => void;
   isAdded?: boolean;
   ratingStats?: ProductRatingStats;
@@ -16,6 +17,7 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
+  onBuyNow,
   onQuickView,
   isAdded = false,
   ratingStats,
@@ -319,32 +321,79 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            disabled={isOutOfStock}
-            onClick={() => onAddToCart(product)}
-            className={`w-full min-h-[38px] sm:min-h-[44px] py-1.5 sm:py-2.5 px-2 xs:px-3 sm:px-4 rounded-xl font-bold text-[11px] xs:text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer ${
-              isOutOfStock
-                ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
-                : isAdded
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-zinc-950 hover:bg-zinc-800 text-white active:scale-98 shadow-xs"
-            }`}
-          >
-            {isAdded ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-200" />
-                <span>Added</span>
-              </>
-            ) : isOutOfStock ? (
-              <span>Out of Stock</span>
-            ) : (
-              <>
-                <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span>Add to Cart</span>
-              </>
-            )}
-          </button>
+          {onBuyNow ? (
+            <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
+              <button
+                type="button"
+                disabled={isOutOfStock}
+                onClick={() => onAddToCart(product)}
+                className={`w-full min-h-[36px] sm:min-h-[40px] py-1.5 px-1.5 xs:px-2 rounded-xl font-bold text-[10px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  isOutOfStock
+                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                    : isAdded
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-800 active:scale-98"
+                }`}
+                title="Add to Cart"
+              >
+                {isAdded ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-200" />
+                    <span>Added</span>
+                  </>
+                ) : isOutOfStock ? (
+                  <span>Stock Out</span>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Cart</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={isOutOfStock}
+                onClick={() => onBuyNow(product)}
+                className={`w-full min-h-[36px] sm:min-h-[40px] py-1.5 px-1.5 xs:px-2 rounded-xl font-black text-[10px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs active:scale-98 ${
+                  isOutOfStock
+                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                    : "bg-zinc-950 hover:bg-zinc-800 text-white"
+                }`}
+                title="Buy Now with Instant Checkout"
+              >
+                <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                <span>Buy Now</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isOutOfStock}
+              onClick={() => onAddToCart(product)}
+              className={`w-full min-h-[38px] sm:min-h-[44px] py-1.5 sm:py-2.5 px-2 xs:px-3 sm:px-4 rounded-xl font-bold text-[11px] xs:text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer ${
+                isOutOfStock
+                  ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                  : isAdded
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-zinc-950 hover:bg-zinc-800 text-white active:scale-98 shadow-xs"
+              }`}
+            >
+              {isAdded ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-200" />
+                  <span>Added</span>
+                </>
+              ) : isOutOfStock ? (
+                <span>Out of Stock</span>
+              ) : (
+                <>
+                  <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>Add to Cart</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

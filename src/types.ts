@@ -129,6 +129,17 @@ export interface Product {
   brand_id?: string;
   brand_slug?: string;
   og_image?: string;
+  // Homepage Special Sections (backward-compatible)
+  is_hot_deal?: boolean | number;
+  is_flash_sale?: boolean | number;
+  is_new_arrival?: boolean | number;
+  is_best_seller?: boolean | number;
+  flash_sale_price?: number;
+  flash_sale_start?: string;
+  flash_sale_end?: string;
+  sold_count?: number;
+  rating?: number;
+  rating_count?: number;
 }
 
 export interface Customer {

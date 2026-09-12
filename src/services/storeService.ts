@@ -182,10 +182,17 @@ export function initLocalStorage(): void {
   } else {
     const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
     if (Array.isArray(existingProds) && existingProds.length > 0) {
+      // Remove any legacy hardcoded dummy demo products (prod-001 through prod-009) if present
       const cleaned = existingProds.filter(
-        (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+        (p) =>
+          !deletedProductIds.has(String(p.id)) &&
+          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
       );
-      if (cleaned.length !== existingProds.length) {
+      if (cleaned.length === 0) {
+        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
+      } else if (cleaned.length !== existingProds.length) {
         setLocal(PRODUCTS_KEY, cleaned);
       }
     }
@@ -259,6 +266,10 @@ export function initRealtimeFirestoreListeners() {
         const pId = String(d.id || docSnap.id);
         const pSku = String(d.sku || '');
         const pSlug = String(d.slug || '');
+        const pName = String(d.name || '').trim();
+        if (!pName) {
+          return;
+        }
         if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
           return;
         }
@@ -571,7 +582,11 @@ export const storeService = {
     const deletedProductIds = getDeletedProductIds();
     const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     return raw.filter(
-      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+      (p) =>
+        !deletedProductIds.has(String(p.id)) &&
+        (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+        (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+        !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
     );
   },
   getCachedCategories(): Category[] {
@@ -664,6 +679,10 @@ export const storeService = {
           const pId = String(item.id || d.id);
           const pSku = String(item.sku || '');
           const pSlug = String(item.slug || '');
+          const pName = String(item.name || '').trim();
+          if (!pName) {
+            return;
+          }
           if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
             return;
           }
@@ -681,7 +700,11 @@ export const storeService = {
     if (prods.length === 0) {
       const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       prods = cached.filter(
-        (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+        (p) =>
+          !deletedProductIds.has(String(p.id)) &&
+          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
       );
       setLocal(PRODUCTS_KEY, prods);
     }
@@ -772,6 +795,13 @@ export const storeService = {
       const sku = String(p.sku || '');
       const slug = String(p.slug || '');
       if (!id && !sku && !slug) return;
+      if (['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(id)) {
+        return;
+      }
+      const rawName = String(p.name || '').trim();
+      if (!rawName || rawName === 'Untitled Product') {
+        return;
+      }
 
       if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
         return;
