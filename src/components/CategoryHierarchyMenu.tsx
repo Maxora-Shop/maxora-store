@@ -95,121 +95,107 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   useEffect(() => {
     if (!isOpen || taxonomy.length === 0) return;
 
-    if (selectedCategory) {
-      // Re-sync with live updated taxonomy tree to keep product counts & references fresh
-      const liveCat = taxonomy.find(
+    // 1. If currentFilter has a category, sync from currentFilter
+    if (currentFilter.category) {
+      const matched = taxonomy.find(
         (c) =>
-          c.slug === selectedCategory.slug ||
-          (c.id && c.id === selectedCategory.id) ||
-          c.name.toLowerCase() === selectedCategory.name.toLowerCase()
+          c.slug.toLowerCase() === currentFilter.category?.toLowerCase() ||
+          c.name.toLowerCase() === currentFilter.category?.toLowerCase() ||
+          (c.id && currentFilter.categoryId && c.id === currentFilter.categoryId) ||
+          matchesTaxonomyField(c.slug, currentFilter.category) ||
+          matchesTaxonomyField(c.name, currentFilter.category)
       );
 
-      if (liveCat) {
-        setSelectedCategory(liveCat);
-
-        if (selectedSubcategory) {
-          const liveSub = liveCat.subCategories.find(
+      if (matched) {
+        setSelectedCategory(matched);
+        if (currentFilter.subCategory) {
+          const subMatched = matched.subCategories.find(
             (s) =>
-              s.slug === selectedSubcategory.slug ||
-              (s.id && s.id === selectedSubcategory.id) ||
-              s.name.toLowerCase() === selectedSubcategory.name.toLowerCase()
+              s.slug.toLowerCase() === currentFilter.subCategory?.toLowerCase() ||
+              s.name.toLowerCase() === currentFilter.subCategory?.toLowerCase() ||
+              (s.id && currentFilter.subCategoryId && s.id === currentFilter.subCategoryId) ||
+              matchesTaxonomyField(s.slug, currentFilter.subCategory) ||
+              matchesTaxonomyField(s.name, currentFilter.subCategory)
           );
-
-          if (liveSub) {
-            setSelectedSubcategory(liveSub);
-
-            if (selectedProductType) {
-              const liveType = liveSub.productTypes.find(
+          if (subMatched) {
+            setSelectedSubcategory(subMatched);
+            if (currentFilter.productType) {
+              const typeMatched = subMatched.productTypes.find(
                 (t) =>
-                  t.slug === selectedProductType.slug ||
-                  (t.id && t.id === selectedProductType.id) ||
-                  t.name.toLowerCase() === selectedProductType.name.toLowerCase()
+                  t.slug.toLowerCase() === currentFilter.productType?.toLowerCase() ||
+                  t.name.toLowerCase() === currentFilter.productType?.toLowerCase() ||
+                  (t.id && currentFilter.productTypeId && t.id === currentFilter.productTypeId) ||
+                  matchesTaxonomyField(t.slug, currentFilter.productType) ||
+                  matchesTaxonomyField(t.name, currentFilter.productType)
               );
-
-              if (liveType) {
-                setSelectedProductType(liveType);
-
-                if (selectedChildCategory) {
-                  const liveChild = liveType.childCategories.find(
+              if (typeMatched) {
+                setSelectedProductType(typeMatched);
+                if (currentFilter.childCategory) {
+                  const childMatched = typeMatched.childCategories.find(
                     (ch) =>
-                      ch.slug === selectedChildCategory.slug ||
-                      (ch.id && ch.id === selectedChildCategory.id) ||
-                      ch.name.toLowerCase() === selectedChildCategory.name.toLowerCase()
+                      ch.slug.toLowerCase() === currentFilter.childCategory?.toLowerCase() ||
+                      ch.name.toLowerCase() === currentFilter.childCategory?.toLowerCase() ||
+                      (ch.id && currentFilter.childCategoryId && ch.id === currentFilter.childCategoryId) ||
+                      matchesTaxonomyField(ch.slug, currentFilter.childCategory) ||
+                      matchesTaxonomyField(ch.name, currentFilter.childCategory)
                   );
-                  setSelectedChildCategory(liveChild || null);
+                  setSelectedChildCategory(childMatched || null);
+                } else {
+                  setSelectedChildCategory(null);
                 }
               } else {
                 setSelectedProductType(null);
                 setSelectedChildCategory(null);
               }
+            } else {
+              setSelectedProductType(null);
+              setSelectedChildCategory(null);
             }
           } else {
             setSelectedSubcategory(null);
             setSelectedProductType(null);
             setSelectedChildCategory(null);
           }
+        } else {
+          setSelectedSubcategory(null);
+          setSelectedProductType(null);
+          setSelectedChildCategory(null);
         }
-      } else {
-        setSelectedCategory(taxonomy[0]);
-        setSelectedSubcategory(null);
-        setSelectedProductType(null);
-        setSelectedChildCategory(null);
+        return;
       }
-    } else {
-      // First open: check if filter matches, else default to first category
-      if (currentFilter.category) {
-        const matched = taxonomy.find(
-          (c) =>
-            c.slug.toLowerCase() === currentFilter.category?.toLowerCase() ||
-            c.name.toLowerCase() === currentFilter.category?.toLowerCase() ||
-            (c.id && currentFilter.categoryId && c.id === currentFilter.categoryId)
-        );
-        if (matched) {
-          setSelectedCategory(matched);
-          if (currentFilter.subCategory) {
-            const subMatched = matched.subCategories.find(
-              (s) =>
-                s.slug.toLowerCase() === currentFilter.subCategory?.toLowerCase() ||
-                s.name.toLowerCase() === currentFilter.subCategory?.toLowerCase() ||
-                (s.id && currentFilter.subCategoryId && s.id === currentFilter.subCategoryId)
-            );
-            if (subMatched) {
-              setSelectedSubcategory(subMatched);
-              if (currentFilter.productType) {
-                const typeMatched = subMatched.productTypes.find(
-                  (t) =>
-                    t.slug.toLowerCase() === currentFilter.productType?.toLowerCase() ||
-                    t.name.toLowerCase() === currentFilter.productType?.toLowerCase() ||
-                    (t.id && currentFilter.productTypeId && t.id === currentFilter.productTypeId)
-                );
-                if (typeMatched) {
-                  setSelectedProductType(typeMatched);
-                  if (currentFilter.childCategory) {
-                    const childMatched = typeMatched.childCategories.find(
-                      (ch) =>
-                        ch.slug.toLowerCase() === currentFilter.childCategory?.toLowerCase() ||
-                        ch.name.toLowerCase() === currentFilter.childCategory?.toLowerCase() ||
-                        (ch.id && currentFilter.childCategoryId && ch.id === currentFilter.childCategoryId)
-                    );
-                    if (childMatched) {
-                      setSelectedChildCategory(childMatched);
-                    }
-                  }
-                }
-              }
-            }
-          }
-          return;
-        }
-      }
-
-      // Default to first category so user sees its subcategories immediately
-      setSelectedCategory(taxonomy[0]);
-      setSelectedSubcategory(null);
-      setSelectedProductType(null);
-      setSelectedChildCategory(null);
     }
-  }, [isOpen, taxonomy, currentFilter]);
+
+    // 2. If already have selectedCategory in internal state, keep it synced with updated taxonomy
+    if (selectedCategory) {
+      const liveCat = taxonomy.find(
+        (c) =>
+          c.slug === selectedCategory.slug ||
+          (c.id && c.id === selectedCategory.id) ||
+          c.name.toLowerCase() === selectedCategory.name.toLowerCase()
+      );
+      if (liveCat) {
+        setSelectedCategory(liveCat);
+        return;
+      }
+    }
+
+    // 3. Fallback to first category so user sees its subcategories immediately
+    setSelectedCategory(taxonomy[0]);
+    setSelectedSubcategory(null);
+    setSelectedProductType(null);
+    setSelectedChildCategory(null);
+  }, [
+    isOpen,
+    taxonomy,
+    currentFilter.category,
+    currentFilter.subCategory,
+    currentFilter.productType,
+    currentFilter.childCategory,
+    currentFilter.categoryId,
+    currentFilter.subCategoryId,
+    currentFilter.productTypeId,
+    currentFilter.childCategoryId,
+  ]);
 
   // Robust outside-click and escape handling
   useEffect(() => {

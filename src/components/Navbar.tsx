@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   ShoppingBag,
   Search,
@@ -15,7 +15,7 @@ import {
   Menu,
 } from 'lucide-react';
 import { StoreSettings, Category, Product, Customer } from '../types';
-import { TaxonomyCategory, TaxonomyFilterState } from '../utils/taxonomy';
+import { TaxonomyCategory, TaxonomyFilterState, matchesTaxonomyField } from '../utils/taxonomy';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 
 interface NavbarProps {
@@ -101,17 +101,36 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  // Nav category shortcuts for the dark sub-navigation bar matching screenshot
-  const subNavLinks = [
-    { name: 'Home', slug: '' },
-    { name: 'Electronics', slug: 'electronics' },
-    { name: 'Home & Living', slug: 'home-living' },
-    { name: 'Kitchen', slug: 'kitchen-appliances' },
-    { name: 'Beauty & Health', slug: 'beauty-health' },
-    { name: 'Fashion', slug: 'fashion' },
-    { name: 'Sports', slug: 'sports' },
-    { name: 'Toys & Baby', slug: 'toys-baby' },
-  ];
+  // Dynamic categories for the dark sub-navigation bar
+  const subNavLinks = useMemo(() => {
+    const defaultNav = [
+      { name: 'Home', slug: '', id: '' },
+      { name: 'Electronics', slug: 'electronics', id: 'cat-electronics' },
+      { name: 'Home & Living', slug: 'home-living', id: 'cat-home-living' },
+      { name: 'Smart Gadgets', slug: 'smart-gadgets', id: 'cat-smart-gadgets' },
+      { name: 'Beauty & Personal Care', slug: 'beauty-personal-care', id: 'cat-beauty-personal-care' },
+      { name: 'Fashion & Lifestyle', slug: 'fashion-lifestyle', id: 'cat-fashion-lifestyle' },
+    ];
+
+    if (categories && categories.length > 0) {
+      const activeCats = categories
+        .filter((c) => c.active !== 0 && c.active !== false && String(c.active) !== '0')
+        .sort((a, b) => (a.display_order ?? 99) - (b.display_order ?? 99));
+
+      if (activeCats.length > 0) {
+        return [
+          { name: 'Home', slug: '', id: '' },
+          ...activeCats.map((c) => ({
+            name: c.name,
+            slug: c.slug || c.name.toLowerCase().replace(/[\s_&]+/g, '-'),
+            id: c.id,
+          })),
+        ];
+      }
+    }
+
+    return defaultNav;
+  }, [categories]);
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-xs border-b border-zinc-200/90 w-full max-w-full">
@@ -340,16 +359,29 @@ export const Navbar: React.FC<NavbarProps> = ({
             {subNavLinks.map((link) => {
               const isActive =
                 (!link.slug && !currentTaxonomyFilter.category) ||
-                (link.slug && currentTaxonomyFilter.category === link.slug);
+                (Boolean(link.slug) &&
+                  Boolean(currentTaxonomyFilter.category) &&
+                  (matchesTaxonomyField(currentTaxonomyFilter.category, link.slug) ||
+                    matchesTaxonomyField(currentTaxonomyFilter.category, link.name) ||
+                    (link.id && currentTaxonomyFilter.categoryId === link.id)));
 
               return (
                 <button
-                  key={link.name}
+                  key={link.id || link.slug || link.name}
                   onClick={() => {
                     if (!link.slug) {
                       handleLogoClick();
                     } else {
-                      handleTaxonomySelect({ category: link.slug });
+                      handleTaxonomySelect({
+                        category: link.slug,
+                        subCategory: '',
+                        productType: '',
+                        childCategory: '',
+                        categoryId: link.id || '',
+                        subCategoryId: '',
+                        productTypeId: '',
+                        childCategoryId: '',
+                      });
                     }
                   }}
                   className={`hover:text-white transition-colors whitespace-nowrap cursor-pointer text-xs font-medium ${

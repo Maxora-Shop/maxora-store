@@ -15,7 +15,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
-import { PopularCategoriesSection } from './components/PopularCategoriesSection';
+import { CategoryFilter } from './components/CategoryFilter';
 import { PromoTripleSection } from './components/PromoTripleSection';
 import { BestSellersSection } from './components/BestSellersSection';
 import { TrustBenefitsSection } from './components/TrustBenefitsSection';
