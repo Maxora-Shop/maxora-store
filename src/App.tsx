@@ -16,6 +16,7 @@ import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
 import { CategoryFilter } from './components/CategoryFilter';
+import { ShopByCategorySection } from './components/ShopByCategorySection';
 import { PromoTripleSection } from './components/PromoTripleSection';
 import { BestSellersSection } from './components/BestSellersSection';
 import { TrustBenefitsSection } from './components/TrustBenefitsSection';
@@ -1020,6 +1021,23 @@ export default function App() {
                   onExploreClick={scrollToProducts}
                   onOpenProduct={handleOpenProductDetail}
                   onAddToCart={(p) => handleAddToCart(p, 1)}
+                />
+
+                {/* Shop by Category Section below Hero Banner */}
+                <ShopByCategorySection
+                  categories={reconciledCategories}
+                  taxonomy={taxonomyTree}
+                  products={products}
+                  onSelectCategory={(slug, id) => {
+                    handleTaxonomySelect({
+                      category: slug,
+                      subCategory: '',
+                      productType: '',
+                      childCategory: '',
+                      categoryId: id,
+                    });
+                  }}
+                  onSelectTaxonomy={handleTaxonomySelect}
                 />
 
                 {/* 3-Column Promo Section: Hot Deals | Flash Sale with countdown | New Arrivals */}
