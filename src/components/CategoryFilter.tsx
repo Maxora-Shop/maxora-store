@@ -29,9 +29,10 @@ import {
   TaxonomyChildCategory,
   matchesTaxonomyField,
 } from '../utils/taxonomy';
+import { useTaxonomy } from '../context/TaxonomyContext';
 
 export interface CategoryFilterProps {
-  categories: Category[];
+  categories?: Category[];
   selectedCategory: string;
   onSelectCategory?: (category: string) => void;
   subCategories?: SubCategory[];
@@ -84,22 +85,29 @@ function getCategoryIcon(nameOrSlug?: string): React.ReactNode {
 }
 
 export const CategoryFilter: React.FC<CategoryFilterProps> = ({
-  categories = [],
+  categories: propCategories,
   selectedCategory = '',
   onSelectCategory,
-  subCategories = [],
+  subCategories: propSubCategories,
   selectedSubCategory = '',
   onSelectSubCategory,
-  productTypes = [],
+  productTypes: propProductTypes,
   selectedProductType = '',
   onSelectProductType,
-  childCategories = [],
+  childCategories: propChildCategories,
   selectedChildCategory = '',
   onSelectChildCategory,
-  taxonomy = [],
+  taxonomy: propTaxonomy,
   products = [],
   onSelectTaxonomy,
 }) => {
+  const taxonomyContext = useTaxonomy();
+  const categories = (propCategories && propCategories.length > 0) ? propCategories : taxonomyContext.reconciledCategories;
+  const subCategories = (propSubCategories && propSubCategories.length > 0) ? propSubCategories : taxonomyContext.reconciledSubCategories;
+  const productTypes = (propProductTypes && propProductTypes.length > 0) ? propProductTypes : taxonomyContext.reconciledProductTypes;
+  const childCategories = (propChildCategories && propChildCategories.length > 0) ? propChildCategories : taxonomyContext.reconciledChildCategories;
+  const taxonomy = (propTaxonomy && propTaxonomy.length > 0) ? propTaxonomy : taxonomyContext.taxonomyTree;
+
   // Active Categories filtered and sorted
   const activeCats = useMemo(() => {
     return categories

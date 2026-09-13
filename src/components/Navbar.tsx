@@ -17,6 +17,7 @@ import {
 import { StoreSettings, Category, Product, Customer } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState, matchesTaxonomyField } from '../utils/taxonomy';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
+import { useTaxonomy } from '../context/TaxonomyContext';
 
 interface NavbarProps {
   settings: StoreSettings;
@@ -57,15 +58,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdmin,
   searchQuery,
   onSearchChange,
-  categories = [],
+  categories: propCategories = [],
   selectedCategory = '',
   onSelectCategory,
-  taxonomy = [],
+  taxonomy: propTaxonomy = [],
   currentTaxonomyFilter = {} as Partial<TaxonomyFilterState>,
   onSelectTaxonomy,
   products = [],
   onSelectProduct,
 }) => {
+  const taxonomyContext = useTaxonomy();
+  const categories = (propCategories && propCategories.length > 0) ? propCategories : taxonomyContext.reconciledCategories;
+  const taxonomy = (propTaxonomy && propTaxonomy.length > 0) ? propTaxonomy : taxonomyContext.taxonomyTree;
+
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);

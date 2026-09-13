@@ -70,6 +70,7 @@ import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
 import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
+import { useTaxonomy } from '../context/TaxonomyContext';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -155,10 +156,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [bestProducts, setBestProducts] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [dbCategories, setDbCategories] = useState<Category[]>([]);
-  const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
-  const [dbProductTypes, setDbProductTypes] = useState<ProductType[]>([]);
-  const [dbChildCategories, setDbChildCategories] = useState<ChildCategory[]>([]);
+
+  // Unified 4-tier taxonomy hierarchy from TaxonomyContext
+  const {
+    categories: contextCategories,
+    subCategories: contextSubCategories,
+    productTypes: contextProductTypes,
+    childCategories: contextChildCategories,
+    taxonomyTree: contextTaxonomyTree,
+    refreshTaxonomy,
+  } = useTaxonomy();
+
+  const dbCategories = contextCategories;
+  const dbSubCategories = contextSubCategories;
+  const dbProductTypes = contextProductTypes;
+  const dbChildCategories = contextChildCategories;
+  const taxonomy = contextTaxonomyTree;
+
   const [dbBrands, setDbBrands] = useState<Brand[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -541,18 +555,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadCategories = async () => {
     try {
-      const [cats, subs, types, childs, brands] = await Promise.all([
-        storeService.getCategories(),
-        storeService.getSubCategories(),
-        storeService.getProductTypes(),
-        storeService.getChildCategories(),
-        storeService.getBrands(false),
+      await Promise.all([
+        refreshTaxonomy(),
+        loadBrands(),
       ]);
-      setDbCategories(cats);
-      setDbSubCategories(subs);
-      setDbProductTypes(types);
-      setDbChildCategories(childs);
-      setDbBrands(brands);
     } catch (e) {
       console.error(e);
     }
@@ -566,17 +572,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.error(e);
     }
   };
-
-  // Real-time 4-tier taxonomy computation for Category Hierarchy panel
-  const taxonomy = React.useMemo(() => {
-    return buildTaxonomyTree(
-      products,
-      dbCategories,
-      dbSubCategories,
-      dbProductTypes,
-      dbChildCategories
-    );
-  }, [products, dbCategories, dbSubCategories, dbProductTypes, dbChildCategories]);
 
   const loadTabData = (tab: string, currentPassword = password) => {
     if (tab === 'overview') loadOverview(currentPassword);
@@ -3858,6 +3853,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
                         />
                         <datalist id="admin-childcategory-list-root">
+                          {dbChildCategories.map((child) => (
+                            <option key={child.id} value={child.name} />
+                          ))}
                           <option value="AMOLED Calling" />
                           <option value="Waterproof IP68" />
                           <option value="Active Noise Cancelling (ANC)" />

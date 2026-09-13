@@ -23,6 +23,7 @@ import { storeService } from '../services/storeService';
 import { generateSlug } from '../utils/seo';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
+import { useTaxonomy } from '../context/TaxonomyContext';
 
 interface AdminCategoriesProps {
   password?: string;
@@ -48,10 +49,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   onSelectProduct,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
-  const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
+
+  // Unified 4-tier taxonomy state from TaxonomyContext
+  const {
+    categories,
+    subCategories,
+    productTypes,
+    childCategories,
+    taxonomyTree: taxonomy,
+    refreshTaxonomy,
+  } = useTaxonomy();
+
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
@@ -65,16 +73,6 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     productTypeId?: string;
     childCategoryId?: string;
   }>({});
-
-  const taxonomy = React.useMemo(() => {
-    return buildTaxonomyTree(
-      products,
-      categories,
-      subCategories,
-      productTypes,
-      childCategories
-    );
-  }, [products, categories, subCategories, productTypes, childCategories]);
 
   // Hierarchy Tree expand/collapse state
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -113,29 +111,24 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     loadAllTaxonomy();
   }, []);
 
-  const loadAllTaxonomy = async () => {
-    setLoading(true);
-    try {
-      const [cats, subs, types, childs] = await Promise.all([
-        storeService.getCategories(),
-        storeService.getSubCategories(),
-        storeService.getProductTypes(),
-        storeService.getChildCategories(),
-      ]);
-      setCategories(cats);
-      setSubCategories(subs);
-      setProductTypes(types);
-      setChildCategories(childs);
-
-      // Auto-expand all top-level categories by default
+  // Auto-expand all top-level categories by default when categories load
+  useEffect(() => {
+    if (categories.length > 0) {
       const defaultExpanded: Record<string, boolean> = {};
-      cats.forEach((c) => {
+      categories.forEach((c) => {
         defaultExpanded[`cat-${c.id}`] = true;
       });
-      subs.forEach((s) => {
+      subCategories.forEach((s) => {
         defaultExpanded[`sub-${s.id}`] = true;
       });
       setExpandedNodes((prev) => ({ ...defaultExpanded, ...prev }));
+    }
+  }, [categories, subCategories]);
+
+  const loadAllTaxonomy = async () => {
+    setLoading(true);
+    try {
+      await refreshTaxonomy();
     } catch (err: any) {
       console.error('Failed to load taxonomy:', err);
       showToast('Failed to load categories', 'error');

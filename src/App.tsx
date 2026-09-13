@@ -35,11 +35,8 @@ import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, Che
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
+import { useTaxonomy } from './context/TaxonomyContext';
 import {
-  reconcileCategories,
-  reconcileSubCategories,
-  reconcileProductTypes,
-  reconcileChildCategories,
   isProductInCategory,
   isProductInSubCategory,
   isProductInProductType,
@@ -72,27 +69,33 @@ export default function App() {
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
 
-  // Products & 4-Tier Taxonomy State
+  // Products State
   const [products, setProducts] = useState<Product[]>(() => {
     const cached = typeof window !== 'undefined' ? storeService.getCachedProducts() : null;
     return cached && cached.length > 0 ? cached : INITIAL_PRODUCTS;
   });
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const cached = typeof window !== 'undefined' ? storeService.getCachedCategories() : null;
-    return cached && cached.length > 0 ? cached : INITIAL_CATEGORIES;
-  });
-  const [subCategories, setSubCategories] = useState<SubCategory[]>(() => {
-    const cached = typeof window !== 'undefined' ? storeService.getCachedSubCategories() : null;
-    return cached && cached.length > 0 ? cached : INITIAL_SUBCATEGORIES;
-  });
-  const [productTypes, setProductTypes] = useState<ProductType[]>(() => {
-    const cached = typeof window !== 'undefined' ? storeService.getCachedProductTypes() : null;
-    return cached && cached.length > 0 ? cached : INITIAL_PRODUCT_TYPES;
-  });
-  const [childCategories, setChildCategories] = useState<ChildCategory[]>(() => {
-    const cached = typeof window !== 'undefined' ? storeService.getCachedChildCategories() : null;
-    return cached && cached.length > 0 ? cached : INITIAL_CHILD_CATEGORIES;
-  });
+
+  // Unified 4-Tier Taxonomy Hierarchy from TaxonomyContext
+  const {
+    categories,
+    subCategories,
+    productTypes,
+    childCategories,
+    reconciledCategories,
+    reconciledSubCategories,
+    reconciledProductTypes,
+    reconciledChildCategories,
+    taxonomyTree,
+    categoryProductCountMap,
+    refreshTaxonomy,
+    updateProductsState,
+  } = useTaxonomy();
+
+  // Sync products into TaxonomyContext whenever products state updates
+  useEffect(() => {
+    updateProductsState(products);
+  }, [products, updateProductsState]);
+
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -461,16 +464,7 @@ export default function App() {
 
   const fetchCategories = async () => {
     try {
-      const [cats, subs, types, childs] = await Promise.all([
-        storeService.getCategories(),
-        storeService.getSubCategories(),
-        storeService.getProductTypes(),
-        storeService.getChildCategories(),
-      ]);
-      setCategories(cats);
-      setSubCategories(subs);
-      setProductTypes(types);
-      setChildCategories(childs);
+      await refreshTaxonomy();
     } catch (err) {
       console.error('Failed to load categories:', err);
     }
@@ -652,40 +646,6 @@ export default function App() {
   const scrollToProducts = () => {
     productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  // Reconcile categories and subcategories with existing product data
-  const reconciledCategories = useMemo(
-    () => reconcileCategories(categories, products),
-    [categories, products]
-  );
-  const reconciledSubCategories = useMemo(
-    () => reconcileSubCategories(subCategories, reconciledCategories, products),
-    [subCategories, reconciledCategories, products]
-  );
-  const reconciledProductTypes = useMemo(
-    () => reconcileProductTypes(productTypes, reconciledCategories, reconciledSubCategories, products),
-    [productTypes, reconciledCategories, reconciledSubCategories, products]
-  );
-  const reconciledChildCategories = useMemo(
-    () => reconcileChildCategories(childCategories, reconciledCategories, reconciledSubCategories, reconciledProductTypes, products),
-    [childCategories, reconciledCategories, reconciledSubCategories, reconciledProductTypes, products]
-  );
-
-  // Dynamic 4-Tier Taxonomy Hierarchy Tree (Category -> Subcategory -> Product Type -> Child Category)
-  const taxonomyTree = useMemo(() => {
-    return buildTaxonomyTree(products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories);
-  }, [products, reconciledCategories, reconciledSubCategories, reconciledProductTypes, reconciledChildCategories]);
-
-  // Product counts per category for Popular Categories Section
-  const categoryProductCountMap = useMemo(() => {
-    const countMap: Record<string, number> = {};
-    reconciledCategories.forEach((cat) => {
-      countMap[cat.slug] = products.filter(
-        (p) => p.active !== 0 && p.active !== false && isProductInCategory(p, cat)
-      ).length;
-    });
-    return countMap;
-  }, [products, reconciledCategories]);
 
   // Saved / Wishlisted products list
   const savedProducts = useMemo(() => {

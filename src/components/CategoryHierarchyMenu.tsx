@@ -9,6 +9,7 @@ import {
 } from '../utils/taxonomy';
 import { Product } from '../types';
 import { getProductSlug } from '../utils/seo';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import {
   LayoutGrid,
   ChevronRight,
@@ -33,7 +34,7 @@ import {
 export interface CategoryHierarchyMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  taxonomy: TaxonomyCategory[];
+  taxonomy?: TaxonomyCategory[];
   currentFilter?: Partial<TaxonomyFilterState>;
   onSelectTaxonomy?: (filter: {
     category?: string;
@@ -72,7 +73,7 @@ function getCategoryIcon(nameOrSlug?: string): React.ReactNode {
 export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   isOpen,
   onClose,
-  taxonomy = [],
+  taxonomy: propTaxonomy,
   currentFilter = {} as Partial<TaxonomyFilterState>,
   onSelectTaxonomy,
   products = [],
@@ -80,6 +81,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   mode = 'store',
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const { taxonomyTree: contextTaxonomy } = useTaxonomy();
+  const taxonomy = (propTaxonomy && propTaxonomy.length > 0) ? propTaxonomy : contextTaxonomy;
 
   // Separate, explicit states for each of the 4 levels
   const [selectedCategory, setSelectedCategory] = useState<TaxonomyCategory | null>(null);
