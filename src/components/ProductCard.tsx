@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap } from 'lucide-react';
+import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -63,7 +63,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   };
 
   return (
-    <div className="group bg-white rounded-2xl border border-zinc-200/90 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0">
+    <div className={`group bg-white rounded-2xl border ${isLowStock ? 'border-amber-300/80 hover:border-amber-400' : 'border-zinc-200/90'} overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0`}>
       {/* Product Image Area */}
       <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-2.5 xs:p-3 sm:p-4 overflow-hidden group/image w-full min-w-0">
         <a
@@ -93,6 +93,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Floating Badges */}
         <div className="absolute top-2 left-2 xs:top-2.5 xs:left-2.5 flex flex-col gap-1 z-10 pointer-events-none max-w-[75%]">
+          {isLowStock && (
+            <span className="bg-amber-500 text-zinc-950 font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-1 w-fit border border-amber-400/50 animate-pulse">
+              <AlertTriangle className="w-2.5 h-2.5 xs:w-3 xs:h-3 text-zinc-950 shrink-0" />
+              <span>Low Stock: {product.stock} left</span>
+            </span>
+          )}
           {Boolean(product.is_flash_sale && product.is_flash_sale !== 0) && (
             <span className="bg-amber-500 text-zinc-950 font-black text-[8px] xs:text-[9px] sm:text-[10px] tracking-wide px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5 w-fit">
               ⚡ Flash Sale
@@ -289,19 +295,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </a>
           </h3>
 
-          {/* Stock Indicator */}
-          <div className="mb-2 min-h-[18px]">
+          {/* Stock Indicator & Urgency Callout */}
+          <div className="mb-2 min-h-[20px] flex items-center">
             {isOutOfStock ? (
-              <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600">
-                Stock Out
+              <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-rose-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                <span>Stock Out</span>
               </span>
             ) : isLowStock ? (
-              <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
-                <span>Only {product.stock} left</span>
-              </span>
+              <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-300/80 text-amber-950 px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-bold shadow-2xs">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-80" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                </span>
+                <span>Only {product.stock} left — Order soon!</span>
+              </div>
             ) : (
-              <span className="text-[10px] sm:text-[11px] font-medium text-emerald-700 flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-emerald-700">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                 <span>In Stock ({product.stock})</span>
               </span>
