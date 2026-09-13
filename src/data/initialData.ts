@@ -1,5 +1,59 @@
 import userProductsJson from "./userProducts.json";
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner } from '../types';
+
+export const DEFAULT_HERO_BANNERS: HeroBanner[] = [
+  {
+    id: "banner-1",
+    pill: "Your Trusted Online Shopping Partner",
+    titlePrimary: "Shop Smart,",
+    titleAccent: "Live Better",
+    subtitle: "Discover top-tier electronics, modern kitchen essentials, and daily lifestyle gear with 100% Cash on Delivery across Bangladesh.",
+    cta: "Shop Now",
+    ctaLink: "#products-catalog-section",
+    badgeNote: "Better Products ~ Better Life",
+    image1: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
+    image2: "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600&auto=format&fit=crop&q=80",
+    image3: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80",
+    image4: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80",
+    bgGradient: "from-[#e0f2fe] via-[#e8f4fc] to-[#f0f7fd]",
+    active: true,
+    display_order: 1,
+  },
+  {
+    id: "banner-2",
+    pill: "Flash Deals & Discounts",
+    titlePrimary: "Premium Quality,",
+    titleAccent: "Best Prices",
+    subtitle: "Save big on verified gadgets, headphones, smart watches, and home appliances with 7-day replacement warranty.",
+    cta: "Explore Offers",
+    ctaLink: "#products-catalog-section",
+    badgeNote: "Verified Tech ~ Fast Delivery",
+    image1: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=600&auto=format&fit=crop&q=80",
+    image2: "https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?w=600&auto=format&fit=crop&q=80",
+    image3: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=500&auto=format&fit=crop&q=80",
+    image4: "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&auto=format&fit=crop&q=80",
+    bgGradient: "from-[#fef3c7] via-[#fffbeb] to-[#fef9c3]",
+    active: true,
+    display_order: 2,
+  },
+  {
+    id: "banner-3",
+    pill: "100% Cash On Delivery",
+    titlePrimary: "Smart Living,",
+    titleAccent: "Everyday Gear",
+    subtitle: "Upgrade your lifestyle with original quality electronics and gadgets delivered fast right to your doorstep.",
+    cta: "Order Now",
+    ctaLink: "#products-catalog-section",
+    badgeNote: "Satisfaction Guaranteed",
+    image1: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=600&auto=format&fit=crop&q=80",
+    image2: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80",
+    image3: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80",
+    image4: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80",
+    bgGradient: "from-[#dcfce7] via-[#f0fdf4] to-[#ecfdf5]",
+    active: true,
+    display_order: 3,
+  }
+];
 
 export const INITIAL_CATEGORIES: Category[] = [
   {
@@ -486,6 +540,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   hero_subtitle: "Quality lifestyle gadgets & accessories delivered across Bangladesh with 100% Cash on Delivery.",
   promo_text: "Cash on Delivery Available Across Bangladesh (All 64 Districts)",
   footer_text: "© Maxora Bangladesh. All rights reserved. Premium lifestyle gadgets & accessories.",
+  hero_banners: DEFAULT_HERO_BANNERS,
+  banner_slide_speed: 4500,
   site_meta_title: "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
   site_meta_description: "Shop premium smartwatches, earbuds, mechanical keyboards, and lifestyle accessories online in Bangladesh. Fast Cash on Delivery across all 64 districts & 7-day easy warranty return.",
   site_meta_keywords: "smartwatch bangladesh, wireless earbuds bd, gadgets store dhaka, cash on delivery online shopping bd",

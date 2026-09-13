@@ -48,6 +48,7 @@ import {
   Tag,
   Hash,
   Palette,
+  Sliders,
   FolderTree,
   Facebook,
   Instagram,
@@ -63,6 +64,7 @@ import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
+import { AdminBanners } from './AdminBanners';
 import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
@@ -145,7 +147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -591,6 +593,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadBrands();
       loadProducts(currentPassword);
     }
+    if (tab === 'banners') {
+      loadSettings(currentPassword);
+    }
     if (tab === 'orders') {
       loadOrders(currentPassword);
       loadProducts(currentPassword);
@@ -604,7 +609,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
@@ -1329,6 +1334,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {dbBrands.length}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('banners')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'banners'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Sliders className="w-4 h-4 shrink-0" />
+              <span>🖼️ Banners & Slider</span>
+              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'banners' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                {settingsForm.hero_banners?.length || 3}
+              </span>
             </button>
 
             <button
@@ -2712,6 +2732,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 setProductBrandFilter(brandName);
                 handleTabChange('products');
               }}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
+            4c. TAB: HERO BANNERS & SLIDER MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'banners' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminBanners
+              settings={settingsForm}
+              adminPassword={password}
+              onSettingsUpdated={() => {
+                loadSettings(password);
+                onSettingsUpdated();
+              }}
+              showToast={showToast}
             />
           </div>
         )}

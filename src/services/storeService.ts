@@ -31,6 +31,30 @@ const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
 const BRANDS_KEY = 'maxora_brands_v1';
 
+// Cross-tab broadcast channel for instant real-time synchronization between Admin and Storefront
+const syncChannel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('maxora_sync_bus_v1')
+  : null;
+
+if (syncChannel && typeof window !== 'undefined') {
+  syncChannel.onmessage = (event) => {
+    const type = event.data?.type;
+    if (type === 'products') {
+      window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+    } else if (type === 'settings') {
+      window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    } else if (type === 'categories') {
+      window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    } else if (type === 'orders') {
+      window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+    } else if (type === 'reviews') {
+      window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
+    } else if (type === 'brands') {
+      window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
+    }
+  };
+}
+
 function notifyCustomerAuthChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_customer_auth_changed'));
@@ -40,54 +64,113 @@ function notifyCustomerAuthChanged(): void {
 function notifyProductsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+    try {
+      localStorage.setItem('maxora_products_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'products' });
+    } catch {}
   }
 }
 
 function notifySettingsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    try {
+      localStorage.setItem('maxora_settings_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'settings' });
+    } catch {}
   }
 }
 
 function notifyOrdersChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+    try {
+      localStorage.setItem('maxora_orders_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'orders' });
+    } catch {}
   }
 }
 
 function notifyCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifySubCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_subcategories_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyProductTypesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_product_types_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyChildCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_child_categories_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyReviewsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
+    try {
+      localStorage.setItem('maxora_reviews_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'reviews' });
+    } catch {}
   }
 }
 
 function notifyBrandsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+      syncChannel?.postMessage({ type: 'brands' });
+    } catch {}
   }
 }
 
@@ -104,8 +187,6 @@ export function cleanForFirestore<T>(data: T): T {
     for (const [key, value] of Object.entries(data as Record<string, any>)) {
       if (value !== undefined) {
         cleaned[key] = cleanForFirestore(value);
-      } else {
-        cleaned[key] = '';
       }
     }
     return cleaned as T;
@@ -390,6 +471,20 @@ export function initRealtimeFirestoreListeners() {
         notifyReviewsChanged();
       }
     }, (err) => console.warn('Reviews Firestore snapshot warning:', err));
+
+    // 9. Listen for brands changes
+    onSnapshot(collection(db, 'brands'), (snapshot) => {
+      if (!snapshot.empty) {
+        const brandsList: Brand[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as Brand;
+          brandsList.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        brandsList.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(BRANDS_KEY, brandsList);
+        notifyBrandsChanged();
+      }
+    }, (err) => console.warn('Brands Firestore snapshot warning:', err));
   } catch (err) {
     console.warn('Realtime listener error:', err);
   }
@@ -639,7 +734,7 @@ export const storeService = {
 
     // 1. Update Firestore
     try {
-      await setDoc(doc(db, 'settings', 'store_settings'), updated, { merge: true });
+      await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
     } catch (e) {
       console.warn('Firestore updateSettings error:', e);
     }
@@ -912,7 +1007,7 @@ export const storeService = {
 
     // 1. Save directly to Cloud Firestore
     try {
-      await setDoc(doc(db, 'products', String(newProd.id)), newProd);
+      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd));
     } catch (e) {
       console.warn('Firestore save product error:', e);
     }
@@ -969,7 +1064,7 @@ export const storeService = {
 
     // 1. Update Firestore
     try {
-      await setDoc(doc(db, 'products', idStr), updated, { merge: true });
+      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
     } catch (e) {
       console.warn('Firestore update product error:', e);
     }
@@ -1970,7 +2065,7 @@ export const storeService = {
 
     // Save to Firestore
     try {
-      await setDoc(doc(db, 'categories', id), newCategory, { merge: true });
+      await setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true });
     } catch (e) {
       console.warn('Firestore saveCategory error:', e);
     }
@@ -2143,7 +2238,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'subcategories', id), newSubCategory, { merge: true });
+      await setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true });
     } catch (e) {
       console.warn('Firestore saveSubCategory error:', e);
     }
@@ -2329,7 +2424,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'product_types', id), newType, { merge: true });
+      await setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true });
     } catch (e) {
       console.warn('Firestore saveProductType error:', e);
     }
@@ -2544,7 +2639,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'child_categories', id), newChild, { merge: true });
+      await setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true });
     } catch (e) {
       console.warn('Firestore saveChildCategory error:', e);
     }
@@ -2874,7 +2969,7 @@ export const storeService = {
 
     // 1. Persist to Firestore
     try {
-      await setDoc(doc(db, 'brands', id), newBrand, { merge: true });
+      await setDoc(doc(db, 'brands', id), cleanForFirestore(newBrand), { merge: true });
     } catch (e) {
       console.warn('Firestore saveBrand error:', e);
     }

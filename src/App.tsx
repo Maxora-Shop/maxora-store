@@ -399,7 +399,7 @@ export default function App() {
       fetchCategories();
     };
 
-    // Auto-refresh products when tab becomes active again
+    // Auto-refresh products and settings when tab becomes active again
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchProducts();
@@ -408,26 +408,46 @@ export default function App() {
       }
     };
 
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (!e.key || e.key.includes('product')) {
+        fetchProducts();
+      }
+      if (!e.key || e.key.includes('setting')) {
+        fetchSettings();
+      }
+      if (!e.key || e.key.includes('categor') || e.key.includes('brand')) {
+        fetchCategories();
+      }
+    };
+
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
     window.addEventListener('maxora_settings_updated', handleSettingsUpdated);
     window.addEventListener('maxora_categories_updated', handleCategoriesUpdated);
-    window.addEventListener('storage', handleProductsUpdated);
-    window.addEventListener('storage', handleCategoriesUpdated);
+    window.addEventListener('maxora_subcategories_updated', handleCategoriesUpdated);
+    window.addEventListener('maxora_product_types_updated', handleCategoriesUpdated);
+    window.addEventListener('maxora_child_categories_updated', handleCategoriesUpdated);
+    window.addEventListener('maxora_brands_updated', handleCategoriesUpdated);
+    window.addEventListener('storage', handleStorageEvent);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
       window.removeEventListener('maxora_settings_updated', handleSettingsUpdated);
       window.removeEventListener('maxora_categories_updated', handleCategoriesUpdated);
-      window.removeEventListener('storage', handleProductsUpdated);
-      window.removeEventListener('storage', handleCategoriesUpdated);
+      window.removeEventListener('maxora_subcategories_updated', handleCategoriesUpdated);
+      window.removeEventListener('maxora_product_types_updated', handleCategoriesUpdated);
+      window.removeEventListener('maxora_child_categories_updated', handleCategoriesUpdated);
+      window.removeEventListener('maxora_brands_updated', handleCategoriesUpdated);
+      window.removeEventListener('storage', handleStorageEvent);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
-  // Fetch products on initial mount or when returning from admin
+  // Fetch products, settings, and categories on initial mount or when returning from admin
   useEffect(() => {
     fetchProducts();
+    fetchSettings();
+    fetchCategories();
   }, [isAdminView]);
 
   const fetchSettings = async () => {

@@ -205,22 +205,69 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
     });
   }, [selectedCategory, activeTaxonomyCat, subCategories, products]);
 
-  // Available Product Types under selected Subcategory
+  // Available Product Types under selected Category or Subcategory
   const availableProductTypes = useMemo(() => {
-    if (!selectedSubCategory || selectedSubCategory === 'All' || selectedSubCategory === 'all') {
+    if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') {
       return [];
     }
-    // 1. From active taxonomy sub
-    if (activeTaxonomySub && activeTaxonomySub.productTypes.length > 0) {
-      return activeTaxonomySub.productTypes;
+
+    // If a specific subcategory is selected, show types for that subcategory
+    if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
+      if (activeTaxonomySub && activeTaxonomySub.productTypes.length > 0) {
+        return activeTaxonomySub.productTypes;
+      }
+      const filteredTypes = productTypes.filter((pt) => {
+        if (pt.active === 0 || pt.active === false || String(pt.active) === '0') return false;
+        return (
+          matchesTaxonomyField(pt.subcategory_slug, selectedSubCategory) ||
+          matchesTaxonomyField(pt.subcategory_id, selectedSubCategory) ||
+          (activeTaxonomySub && pt.subcategory_id === activeTaxonomySub.id)
+        );
+      });
+
+      return filteredTypes.map((pt) => {
+        const count = products.filter(
+          (p) =>
+            p.active !== 0 &&
+            p.active !== false &&
+            String(p.active) !== '0' &&
+            (matchesTaxonomyField(p.product_type, pt.name) ||
+              matchesTaxonomyField(p.product_type_slug, pt.slug || pt.name))
+        ).length;
+
+        return {
+          id: pt.id,
+          name: pt.name,
+          slug: pt.slug || pt.name.toLowerCase().replace(/[\s_]+/g, '-'),
+          count,
+          childCategories: [],
+        };
+      });
     }
-    // 2. Direct fallback from productTypes prop
+
+    // If NO subcategory selected yet, gather ALL product types under selected Category!
+    if (activeTaxonomyCat && activeTaxonomyCat.subCategories.length > 0) {
+      const allTypes: TaxonomyProductType[] = [];
+      const seen = new Set<string>();
+      activeTaxonomyCat.subCategories.forEach((sub) => {
+        sub.productTypes.forEach((pt) => {
+          const key = pt.slug || pt.name;
+          if (!seen.has(key)) {
+            seen.add(key);
+            allTypes.push(pt);
+          }
+        });
+      });
+      if (allTypes.length > 0) return allTypes;
+    }
+
+    // Direct fallback from productTypes prop
     const filteredTypes = productTypes.filter((pt) => {
       if (pt.active === 0 || pt.active === false || String(pt.active) === '0') return false;
       return (
-        matchesTaxonomyField(pt.subcategory_slug, selectedSubCategory) ||
-        matchesTaxonomyField(pt.subcategory_id, selectedSubCategory) ||
-        (activeTaxonomySub && pt.subcategory_id === activeTaxonomySub.id)
+        matchesTaxonomyField(pt.category_slug, selectedCategory) ||
+        matchesTaxonomyField(pt.category_id, selectedCategory) ||
+        (activeTaxonomyCat && pt.category_id === activeTaxonomyCat.id)
       );
     });
 
@@ -242,24 +289,70 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
         childCategories: [],
       };
     });
-  }, [selectedSubCategory, activeTaxonomySub, productTypes, products]);
+  }, [selectedCategory, selectedSubCategory, activeTaxonomyCat, activeTaxonomySub, productTypes, products]);
 
-  // Available Child Categories under selected Product Type
+  // Available Child Categories under selected Product Type, Subcategory, or Category
   const availableChildCategories = useMemo(() => {
-    if (!selectedProductType || selectedProductType === 'All' || selectedProductType === 'all') {
+    if (!selectedCategory || selectedCategory === 'All' || selectedCategory === 'all') {
       return [];
     }
-    // 1. From active taxonomy type
-    if (activeTaxonomyType && activeTaxonomyType.childCategories.length > 0) {
-      return activeTaxonomyType.childCategories;
+
+    // 1. If a specific product type is selected:
+    if (selectedProductType && selectedProductType !== 'All' && selectedProductType !== 'all') {
+      if (activeTaxonomyType && activeTaxonomyType.childCategories.length > 0) {
+        return activeTaxonomyType.childCategories;
+      }
+      const filteredChildren = childCategories.filter((ch) => {
+        if (ch.active === 0 || ch.active === false || String(ch.active) === '0') return false;
+        return (
+          matchesTaxonomyField(ch.product_type_slug, selectedProductType) ||
+          matchesTaxonomyField(ch.product_type_id, selectedProductType) ||
+          (activeTaxonomyType && ch.product_type_id === activeTaxonomyType.id)
+        );
+      });
+
+      return filteredChildren.map((ch) => {
+        const count = products.filter(
+          (p) =>
+            p.active !== 0 &&
+            p.active !== false &&
+            String(p.active) !== '0' &&
+            (matchesTaxonomyField(p.child_category, ch.name) ||
+              matchesTaxonomyField(p.childcategory_slug, ch.slug || ch.name))
+        ).length;
+
+        return {
+          id: ch.id,
+          name: ch.name,
+          slug: ch.slug || ch.name.toLowerCase().replace(/[\s_]+/g, '-'),
+          count,
+        };
+      });
     }
-    // 2. Direct fallback from childCategories prop
+
+    // 2. If NO product type is selected yet, gather ALL child categories in the current branch!
+    if (availableProductTypes.length > 0) {
+      const allChildren: TaxonomyChildCategory[] = [];
+      const seen = new Set<string>();
+      availableProductTypes.forEach((pt) => {
+        pt.childCategories?.forEach((ch) => {
+          const key = ch.slug || ch.name;
+          if (!seen.has(key)) {
+            seen.add(key);
+            allChildren.push(ch);
+          }
+        });
+      });
+      if (allChildren.length > 0) return allChildren;
+    }
+
+    // Direct fallback from childCategories prop
     const filteredChildren = childCategories.filter((ch) => {
       if (ch.active === 0 || ch.active === false || String(ch.active) === '0') return false;
       return (
-        matchesTaxonomyField(ch.product_type_slug, selectedProductType) ||
-        matchesTaxonomyField(ch.product_type_id, selectedProductType) ||
-        (activeTaxonomyType && ch.product_type_id === activeTaxonomyType.id)
+        matchesTaxonomyField(ch.category_slug, selectedCategory) ||
+        matchesTaxonomyField(ch.category_id, selectedCategory) ||
+        (activeTaxonomyCat && ch.category_id === activeTaxonomyCat.id)
       );
     });
 
@@ -280,7 +373,15 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
         count,
       };
     });
-  }, [selectedProductType, activeTaxonomyType, childCategories, products]);
+  }, [
+    selectedCategory,
+    selectedProductType,
+    activeTaxonomyType,
+    availableProductTypes,
+    childCategories,
+    products,
+    activeTaxonomyCat,
+  ]);
 
   // Handlers for 4-tier selection
   const handleClearAll = () => {
@@ -343,36 +444,85 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   };
 
   const handleSelectType = (typeSlugOrName: string, typeId?: string) => {
+    // If subCategory is not yet selected, auto-resolve parent subcategory
+    let targetSubSlug = selectedSubCategory;
+    let targetSubId = activeTaxonomySub?.id || '';
+    if (!targetSubSlug && activeTaxonomyCat) {
+      for (const sub of activeTaxonomyCat.subCategories) {
+        const hasType = sub.productTypes.some(
+          (t) =>
+            t.slug === typeSlugOrName ||
+            t.name === typeSlugOrName ||
+            (typeId && t.id === typeId)
+        );
+        if (hasType) {
+          targetSubSlug = sub.slug || sub.name;
+          targetSubId = sub.id || '';
+          break;
+        }
+      }
+    }
+
     if (onSelectTaxonomy) {
       onSelectTaxonomy({
         category: selectedCategory,
-        subCategory: selectedSubCategory,
+        subCategory: targetSubSlug,
         productType: typeSlugOrName,
         childCategory: '',
         categoryId: activeTaxonomyCat?.id || '',
-        subCategoryId: activeTaxonomySub?.id || '',
+        subCategoryId: targetSubId,
         productTypeId: typeId || '',
         childCategoryId: '',
       });
     } else {
+      if (targetSubSlug && onSelectSubCategory && !selectedSubCategory) onSelectSubCategory(targetSubSlug);
       if (onSelectProductType) onSelectProductType(typeSlugOrName);
       if (onSelectChildCategory) onSelectChildCategory('');
     }
   };
 
   const handleSelectChild = (childSlugOrName: string, childId?: string) => {
+    let targetSubSlug = selectedSubCategory;
+    let targetSubId = activeTaxonomySub?.id || '';
+    let targetTypeSlug = selectedProductType;
+    let targetTypeId = activeTaxonomyType?.id || '';
+
+    // Auto-resolve parent type & subcategory if missing
+    if ((!targetTypeSlug || !targetSubSlug) && activeTaxonomyCat) {
+      for (const sub of activeTaxonomyCat.subCategories) {
+        for (const type of sub.productTypes) {
+          const hasChild = type.childCategories.some(
+            (ch) =>
+              ch.slug === childSlugOrName ||
+              ch.name === childSlugOrName ||
+              (childId && ch.id === childId)
+          );
+          if (hasChild) {
+            targetSubSlug = sub.slug || sub.name;
+            targetSubId = sub.id || '';
+            targetTypeSlug = type.slug || type.name;
+            targetTypeId = type.id || '';
+            break;
+          }
+        }
+        if (targetTypeSlug) break;
+      }
+    }
+
     if (onSelectTaxonomy) {
       onSelectTaxonomy({
         category: selectedCategory,
-        subCategory: selectedSubCategory,
-        productType: selectedProductType,
+        subCategory: targetSubSlug,
+        productType: targetTypeSlug,
         childCategory: childSlugOrName,
         categoryId: activeTaxonomyCat?.id || '',
-        subCategoryId: activeTaxonomySub?.id || '',
-        productTypeId: activeTaxonomyType?.id || '',
+        subCategoryId: targetSubId,
+        productTypeId: targetTypeId,
         childCategoryId: childId || '',
       });
     } else {
+      if (targetSubSlug && onSelectSubCategory && !selectedSubCategory) onSelectSubCategory(targetSubSlug);
+      if (targetTypeSlug && onSelectProductType && !selectedProductType) onSelectProductType(targetTypeSlug);
       if (onSelectChildCategory) onSelectChildCategory(childSlugOrName);
     }
   };
@@ -508,8 +658,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
         </div>
       )}
 
-      {/* Tier 3: Product Types Ribbon (shows whenever a Sub-Category is selected) */}
-      {selectedSubCategory && availableProductTypes.length > 0 && (
+      {/* Tier 3: Product Types Ribbon (shows whenever Category is selected and product types are available) */}
+      {selectedCategory && availableProductTypes.length > 0 && (
         <div
           id="product-types-filter-bar"
           className="mt-2.5 p-3 bg-zinc-100/80 border border-zinc-200/90 rounded-2xl animate-in fade-in-50 duration-200 shadow-2xs"
@@ -529,14 +679,20 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
             <button
               type="button"
               id="type-filter-all"
-              onClick={() => handleSelectSub(selectedSubCategory, activeTaxonomySub?.id)}
+              onClick={() => {
+                if (selectedSubCategory) {
+                  handleSelectSub(selectedSubCategory, activeTaxonomySub?.id);
+                } else {
+                  handleSelectCat(selectedCategory, activeTaxonomyCat?.id);
+                }
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 !selectedProductType
                   ? 'bg-zinc-950 text-white shadow-2xs font-bold'
                   : 'bg-white text-zinc-700 hover:bg-zinc-200 border border-zinc-200'
               }`}
             >
-              All {activeTaxonomySub?.name || 'Types'}
+              All {activeTaxonomySub?.name || 'Product Types'}
             </button>
 
             {availableProductTypes.map((type) => {
@@ -577,8 +733,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
         </div>
       )}
 
-      {/* Tier 4: Child Categories Ribbon (shows whenever a Product Type is selected) */}
-      {selectedProductType && availableChildCategories.length > 0 && (
+      {/* Tier 4: Child Categories Ribbon (shows whenever Category is selected and child categories are available) */}
+      {selectedCategory && availableChildCategories.length > 0 && (
         <div
           id="child-categories-filter-bar"
           className="mt-2.5 p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl animate-in fade-in-50 duration-200 shadow-2xs"
@@ -598,7 +754,15 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
             <button
               type="button"
               id="child-filter-all"
-              onClick={() => handleSelectType(selectedProductType, activeTaxonomyType?.id)}
+              onClick={() => {
+                if (selectedProductType) {
+                  handleSelectType(selectedProductType, activeTaxonomyType?.id);
+                } else if (selectedSubCategory) {
+                  handleSelectSub(selectedSubCategory, activeTaxonomySub?.id);
+                } else {
+                  handleSelectCat(selectedCategory, activeTaxonomyCat?.id);
+                }
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                 !selectedChildCategory
                   ? 'bg-emerald-600 text-white shadow-2xs font-bold'

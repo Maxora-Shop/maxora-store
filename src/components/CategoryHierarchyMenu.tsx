@@ -180,9 +180,12 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     }
 
     // 3. Fallback to first category so user sees its subcategories immediately
-    setSelectedCategory(taxonomy[0]);
-    setSelectedSubcategory(null);
-    setSelectedProductType(null);
+    const firstCat = taxonomy[0] || null;
+    setSelectedCategory(firstCat);
+    const firstSub = firstCat?.subCategories?.[0] || null;
+    setSelectedSubcategory(firstSub);
+    const firstType = firstSub?.productTypes?.[0] || null;
+    setSelectedProductType(firstType);
     setSelectedChildCategory(null);
   }, [
     isOpen,
@@ -253,6 +256,50 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     };
   }, [isOpen, onClose]);
 
+  // All Product Types under the current selection
+  const displayedProductTypes = useMemo(() => {
+    if (selectedSubcategory && selectedSubcategory.productTypes?.length > 0) {
+      return selectedSubcategory.productTypes;
+    }
+    if (selectedCategory && selectedCategory.subCategories?.length > 0) {
+      const types: TaxonomyProductType[] = [];
+      const seen = new Set<string>();
+      selectedCategory.subCategories.forEach((s) => {
+        s.productTypes?.forEach((pt) => {
+          const k = pt.slug || pt.name || pt.id;
+          if (!seen.has(k)) {
+            seen.add(k);
+            types.push(pt);
+          }
+        });
+      });
+      return types;
+    }
+    return [];
+  }, [selectedSubcategory, selectedCategory]);
+
+  // All Child Categories under the current selection
+  const displayedChildCategories = useMemo(() => {
+    if (selectedProductType && selectedProductType.childCategories?.length > 0) {
+      return selectedProductType.childCategories;
+    }
+    if (displayedProductTypes.length > 0) {
+      const children: TaxonomyChildCategory[] = [];
+      const seen = new Set<string>();
+      displayedProductTypes.forEach((pt) => {
+        pt.childCategories?.forEach((ch) => {
+          const k = ch.slug || ch.name || ch.id;
+          if (!seen.has(k)) {
+            seen.add(k);
+            children.push(ch);
+          }
+        });
+      });
+      return children;
+    }
+    return [];
+  }, [selectedProductType, displayedProductTypes]);
+
   // Real-time matching products within the current active hierarchy selection
   const matchingProducts = useMemo(() => {
     if (!products || products.length === 0) return [];
@@ -316,15 +363,17 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
   // INTERACTION HANDLERS: ALL PRESERVE OPEN STATE & RESET ONLY LOWER TIERS
   // =========================================================================
 
-  // 1. Level 1: Category Click -> Reset subcategory, productType, childCategory
+  // 1. Level 1: Category Click -> Auto-select first sub & type so lower tiers show immediately
   const handleCategoryClick = (cat: TaxonomyCategory, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     setSelectedCategory(cat);
-    setSelectedSubcategory(null);
-    setSelectedProductType(null);
+    const firstSub = cat.subCategories?.[0] || null;
+    setSelectedSubcategory(firstSub);
+    const firstType = firstSub?.productTypes?.[0] || null;
+    setSelectedProductType(firstType);
     setSelectedChildCategory(null);
 
     if (onSelectTaxonomy) {
@@ -342,14 +391,15 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     // DO NOT call onClose()
   };
 
-  // 2. Level 2: Subcategory Click -> Reset productType, childCategory
+  // 2. Level 2: Subcategory Click -> Auto-select first product type
   const handleSubCategoryClick = (sub: TaxonomySubCategory, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     setSelectedSubcategory(sub);
-    setSelectedProductType(null);
+    const firstType = sub.productTypes?.[0] || null;
+    setSelectedProductType(firstType);
     setSelectedChildCategory(null);
 
     if (onSelectTaxonomy && selectedCategory) {
@@ -367,7 +417,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     // DO NOT call onClose()
   };
 
-  // 3. Level 3: Product Type Click -> Reset childCategory
+  // 3. Level 3: Product Type Click -> Auto-resolve subcategory if needed
   const handleProductTypeClick = (type: TaxonomyProductType, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -376,14 +426,25 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     setSelectedProductType(type);
     setSelectedChildCategory(null);
 
-    if (onSelectTaxonomy && selectedCategory && selectedSubcategory) {
+    let activeSub = selectedSubcategory;
+    if (!activeSub && selectedCategory) {
+      activeSub =
+        selectedCategory.subCategories.find((s) =>
+          s.productTypes?.some((pt) => pt.slug === type.slug || pt.id === type.id)
+        ) || null;
+      if (activeSub) {
+        setSelectedSubcategory(activeSub);
+      }
+    }
+
+    if (onSelectTaxonomy && selectedCategory) {
       onSelectTaxonomy({
         category: selectedCategory.slug || selectedCategory.name,
-        subCategory: selectedSubcategory.slug || selectedSubcategory.name,
+        subCategory: activeSub?.slug || activeSub?.name || '',
         productType: type.slug || type.name,
         childCategory: '',
         categoryId: selectedCategory.id,
-        subCategoryId: selectedSubcategory.id,
+        subCategoryId: activeSub?.id || '',
         productTypeId: type.id,
         childCategoryId: '',
       });
@@ -391,7 +452,7 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     // DO NOT call onClose()
   };
 
-  // 4. Level 4: Child Category Click
+  // 4. Level 4: Child Category Click -> Auto-resolve type and sub if needed
   const handleChildCategoryClick = (child: TaxonomyChildCategory, e?: React.MouseEvent) => {
     if (e) {
       e.preventDefault();
@@ -399,15 +460,36 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
     }
     setSelectedChildCategory(child);
 
-    if (onSelectTaxonomy && selectedCategory && selectedSubcategory && selectedProductType) {
+    let activeType = selectedProductType;
+    let activeSub = selectedSubcategory;
+    if ((!activeType || !activeSub) && selectedCategory) {
+      for (const s of selectedCategory.subCategories) {
+        for (const pt of s.productTypes) {
+          if (
+            pt.childCategories?.some(
+              (c) => c.slug === child.slug || c.id === child.id || c.name === child.name
+            )
+          ) {
+            activeType = pt;
+            activeSub = s;
+            setSelectedProductType(pt);
+            setSelectedSubcategory(s);
+            break;
+          }
+        }
+        if (activeType) break;
+      }
+    }
+
+    if (onSelectTaxonomy && selectedCategory) {
       onSelectTaxonomy({
         category: selectedCategory.slug || selectedCategory.name,
-        subCategory: selectedSubcategory.slug || selectedSubcategory.name,
-        productType: selectedProductType.slug || selectedProductType.name,
+        subCategory: activeSub?.slug || activeSub?.name || '',
+        productType: activeType?.slug || activeType?.name || '',
         childCategory: child.slug || child.name,
         categoryId: selectedCategory.id,
-        subCategoryId: selectedSubcategory.id,
-        productTypeId: selectedProductType.id,
+        subCategoryId: activeSub?.id || '',
+        productTypeId: activeType?.id || '',
         childCategoryId: child.id,
       });
     }
@@ -723,26 +805,28 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
           <div className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 flex items-center justify-between">
             <span>3. Product Type</span>
             <span className="text-[10px] text-zinc-400">
-              {selectedSubcategory?.productTypes.length || 0}
+              {displayedProductTypes.length}
             </span>
           </div>
 
-          {selectedSubcategory ? (
+          {displayedProductTypes.length > 0 ? (
             <div className="space-y-1">
-              {/* Direct "View all [SubCategory]" button */}
-              <button
-                type="button"
-                onClick={handleViewAllSubcategory}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center justify-between mb-1 border border-dashed border-emerald-200 cursor-pointer"
-                title={`Filter all items in ${selectedSubcategory.name}`}
-              >
-                <span>View All {selectedSubcategory.name}</span>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
-                  {selectedSubcategory.count} items
-                </span>
-              </button>
+              {/* Direct "View all [SubCategory/Category]" button */}
+              {selectedSubcategory && (
+                <button
+                  type="button"
+                  onClick={handleViewAllSubcategory}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center justify-between mb-1 border border-dashed border-emerald-200 cursor-pointer"
+                  title={`Filter all items in ${selectedSubcategory.name}`}
+                >
+                  <span>View All {selectedSubcategory.name}</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                    {selectedSubcategory.count} items
+                  </span>
+                </button>
+              )}
 
-              {selectedSubcategory.productTypes.map((type) => {
+              {displayedProductTypes.map((type) => {
                 const isSelected = selectedProductType?.slug === type.slug || selectedProductType?.id === type.id;
 
                 return (
@@ -775,15 +859,11 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                   </button>
                 );
               })}
-
-              {selectedSubcategory.productTypes.length === 0 && (
-                <div className="p-4 text-center text-xs text-zinc-400 italic">
-                  No product types under {selectedSubcategory.name}
-                </div>
-              )}
             </div>
           ) : (
-            <div className="p-4 text-center text-xs text-zinc-400">Select a subcategory in column 2</div>
+            <div className="p-4 text-center text-xs text-zinc-400 italic">
+              {selectedCategory ? 'No product types available' : 'Select a category in column 1'}
+            </div>
           )}
         </div>
 
@@ -792,26 +872,28 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
           <div className="px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-emerald-800 flex items-center justify-between bg-emerald-50/50 rounded-lg mb-1">
             <span>4. Child Category</span>
             <span className="text-[10px] text-emerald-600 font-bold">
-              {selectedProductType?.childCategories.length || 0}
+              {displayedChildCategories.length}
             </span>
           </div>
 
-          {selectedProductType ? (
+          {displayedChildCategories.length > 0 ? (
             <div className="space-y-1">
               {/* Direct "View all [Product Type]" button */}
-              <button
-                type="button"
-                onClick={handleViewAllProductType}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 hover:bg-zinc-100 transition-colors flex items-center justify-between mb-1 border border-zinc-200 cursor-pointer"
-                title={`Filter all items in ${selectedProductType.name}`}
-              >
-                <span>All {selectedProductType.name}</span>
-                <span className="text-[10px] bg-zinc-200 text-zinc-800 px-1.5 py-0.5 rounded font-bold">
-                  {selectedProductType.count} items
-                </span>
-              </button>
+              {selectedProductType && (
+                <button
+                  type="button"
+                  onClick={handleViewAllProductType}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 hover:bg-zinc-100 transition-colors flex items-center justify-between mb-1 border border-zinc-200 cursor-pointer"
+                  title={`Filter all items in ${selectedProductType.name}`}
+                >
+                  <span>All {selectedProductType.name}</span>
+                  <span className="text-[10px] bg-zinc-200 text-zinc-800 px-1.5 py-0.5 rounded font-bold">
+                    {selectedProductType.count} items
+                  </span>
+                </button>
+              )}
 
-              {selectedProductType.childCategories.map((child) => {
+              {displayedChildCategories.map((child) => {
                 const isSelected =
                   selectedChildCategory?.slug === child.slug || selectedChildCategory?.name === child.name;
 
@@ -840,16 +922,10 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                   </button>
                 );
               })}
-
-              {selectedProductType.childCategories.length === 0 && (
-                <div className="p-3 text-center text-xs text-zinc-400 italic">
-                  No child categories under {selectedProductType.name}
-                </div>
-              )}
             </div>
           ) : (
             <div className="p-3 text-center text-xs text-zinc-400 italic">
-              Select a product type to view child categories
+              {selectedCategory ? 'No child categories available' : 'Select a product type to view child categories'}
             </div>
           )}
 

@@ -210,6 +210,25 @@ export interface Order {
   items?: OrderItem[];
 }
 
+export interface HeroBanner {
+  id: string;
+  pill?: string;
+  titlePrimary: string;
+  titleAccent: string;
+  subtitle: string;
+  cta: string;
+  ctaLink?: string;
+  badgeNote?: string;
+  image1?: string;
+  image2?: string;
+  image3?: string;
+  image4?: string;
+  singleBannerImage?: string;
+  bgGradient?: string;
+  active: boolean;
+  display_order?: number;
+}
+
 export interface StoreSettings {
   store_name: string;
   store_tagline: string;
@@ -228,6 +247,9 @@ export interface StoreSettings {
   hero_subtitle: string;
   promo_text: string;
   footer_text: string;
+  // Hero Banners & Slider Configuration
+  hero_banners?: HeroBanner[];
+  banner_slide_speed?: number;
   // Ads Tracking & Marketing Pixels
   meta_pixel_id?: string;
   google_tag_id?: string;
