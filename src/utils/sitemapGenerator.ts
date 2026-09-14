@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, getDocs, collection } from 'firebase/firestore';
+import { getFirestore, getDocs, collection, setLogLevel } from 'firebase/firestore';
+
+try {
+  setLogLevel('error');
+} catch (e) {}
 
 export const SITEMAP_BASE_URL = 'https://maxora-store-ruby.vercel.app';
 

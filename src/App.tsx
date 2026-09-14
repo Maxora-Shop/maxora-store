@@ -21,6 +21,7 @@ import { PromoTripleSection } from './components/PromoTripleSection';
 import { BestSellersSection } from './components/BestSellersSection';
 import { TrustBenefitsSection } from './components/TrustBenefitsSection';
 import { FooterSection } from './components/FooterSection';
+import { ProductPagination } from './components/ProductPagination';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand } from './types';
 import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
@@ -918,6 +919,56 @@ export default function App() {
     wishlistIds,
   ]);
 
+  // Product Pagination State (Exactly 20 products per page by default)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const PRODUCTS_PER_PAGE = 20;
+
+  // Automatically reset to Page 1 whenever any filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchQuery,
+    selectedCategory,
+    selectedSubCategory,
+    selectedProductType,
+    selectedChildCategory,
+    selectedBrand,
+    priceRange.min,
+    priceRange.max,
+    selectedPricePreset,
+    showSavedOnly,
+  ]);
+
+  const totalFilteredCount = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / PRODUCTS_PER_PAGE));
+
+  // If page index exceeds totalPages after filtering or deleting products, clamp smoothly
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  // Paginated product slice for the active page
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  }, [filteredProducts, currentPage, PRODUCTS_PER_PAGE]);
+
+  // Page change handler with smooth scrolling to the catalog view
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > totalPages || page === currentPage) return;
+    setCurrentPage(page);
+    const catalogElement = document.getElementById('products-catalog-section');
+    if (catalogElement) {
+      const yOffset = -90;
+      const y = catalogElement.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    } else if (productSectionRef.current) {
+      productSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   if (isAdminView) {
@@ -1326,29 +1377,40 @@ export default function App() {
                   ))}
                 </div>
               ) : filteredProducts.length > 0 ? (
-                <div
-                  className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
-                    filteredProducts.length === 1
-                      ? 'grid-cols-1 max-w-xs sm:max-w-sm'
-                      : filteredProducts.length === 2
-                      ? 'grid-cols-2'
-                      : 'grid-cols-2 sm:grid-cols-3'
-                  }`}
-                >
-                  {filteredProducts.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      ratingStats={ratingStatsMap[product.id]}
-                      isWishlisted={wishlistIds.includes(product.id)}
-                      onToggleWishlist={handleToggleWishlist}
-                      onAddToCart={(p) => handleAddToCart(p, 1)}
-                      onBuyNow={(p) => handleBuyNow(p, 1)}
-                      onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
-                      isAdded={recentlyAddedId === product.id}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div
+                    className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
+                      paginatedProducts.length === 1
+                        ? 'grid-cols-1 max-w-xs sm:max-w-sm'
+                        : paginatedProducts.length === 2
+                        ? 'grid-cols-2'
+                        : 'grid-cols-2 sm:grid-cols-3'
+                    }`}
+                  >
+                    {paginatedProducts.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        ratingStats={ratingStatsMap[product.id]}
+                        isWishlisted={wishlistIds.includes(product.id)}
+                        onToggleWishlist={handleToggleWishlist}
+                        onAddToCart={(p) => handleAddToCart(p, 1)}
+                        onBuyNow={(p) => handleBuyNow(p, 1)}
+                        onQuickView={(p, initialTab) => handleOpenProductDetail(p, true, initialTab || 'details')}
+                        isAdded={recentlyAddedId === product.id}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Clean & Premium Product Pagination */}
+                  <ProductPagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalFilteredCount}
+                    itemsPerPage={PRODUCTS_PER_PAGE}
+                    onPageChange={handlePageChange}
+                  />
+                </>
               ) : (
                 <div className="bg-white rounded-3xl border border-zinc-200 p-8 sm:p-12 text-center max-w-lg mx-auto shadow-xs">
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${

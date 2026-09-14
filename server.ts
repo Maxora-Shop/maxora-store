@@ -3,8 +3,21 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
 import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
+
+// Set Firestore log level to error to avoid noisy internal idle-stream disconnect warnings
+try {
+  setLogLevel('error');
+} catch (e) {}
+
+// Suppress benign gRPC idle stream cancellation notices from unhandled warning stream
+process.on('warning', (warning) => {
+  if (warning.message?.includes('Disconnecting idle stream')) {
+    return;
+  }
+  console.warn(warning);
+});
 
 const app = express();
 const PORT = 3000;
