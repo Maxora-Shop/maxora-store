@@ -1616,11 +1616,36 @@ function getProductSsrHtml(rawSlug: string): { html: string; status: number } | 
   const mainImage = product.og_image || product.image_url || imagesArr[0] || '';
   const canonicalUrl = `${baseUrl}/product/${cleanSlug(product.slug || product.name || String(product.id))}`;
 
-  const jsonLd = {
+  // Extract only valid publicly accessible HTTP/HTTPS image URLs for Google Merchant Listings
+  // Strictly reject any data URIs (e.g. data:image/webp;base64,...)
+  const rawCandidates = [
+    ...(Array.isArray(imagesArr) ? imagesArr : []),
+    product.image_url,
+    product.og_image,
+  ];
+  const validPublicImages: string[] = [];
+  for (const item of rawCandidates) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.toLowerCase().startsWith('data:')) continue;
+    if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+      if (!validPublicImages.includes(trimmed)) validPublicImages.push(trimmed);
+    } else if (trimmed.startsWith('//')) {
+      const full = `https:${trimmed}`;
+      if (!validPublicImages.includes(full)) validPublicImages.push(full);
+    } else if (trimmed.startsWith('/')) {
+      const full = `${baseUrl.replace(/\/+$/, '')}${trimmed}`;
+      if (!validPublicImages.includes(full)) validPublicImages.push(full);
+    }
+  }
+
+  const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org/',
     '@type': 'Product',
     name: product.name,
-    image: imagesArr.length > 0 ? imagesArr : [mainImage],
+    ...(validPublicImages.length > 0
+      ? { image: validPublicImages.length === 1 ? validPublicImages[0] : validPublicImages }
+      : {}),
     description: plainDesc || description,
     sku: product.sku || product.id,
     mpn: product.sku || product.id,
@@ -1678,10 +1703,10 @@ function getProductSsrHtml(rawSlug: string): { html: string; status: number } | 
     <meta name="twitter:image" content="${escapeHtml(mainImage)}" />
 
     <!-- Schema.org JSON-LD Structured Data -->
-    <script type="application/ld+json">
+    <script type="application/ld+json" id="ssr-product-schema">
 ${JSON.stringify(jsonLd, null, 2)}
     </script>
-    <script type="application/ld+json">
+    <script type="application/ld+json" id="ssr-breadcrumb-schema">
 ${JSON.stringify(breadcrumbLd, null, 2)}
     </script>
   `;

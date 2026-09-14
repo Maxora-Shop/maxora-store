@@ -184,58 +184,28 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     canonicalLink.setAttribute('href', canonicalUrl);
 
     // 6. Schema.org JSON-LD Structured Data
-    // Remove previous script to guarantee no duplicate JSON-LD
+    // Remove previous client-side script to guarantee no duplicate JSON-LD
     const SCRIPT_ID = 'maxora-structured-data';
     const oldScript = document.getElementById(SCRIPT_ID);
     if (oldScript) {
       oldScript.remove();
     }
 
-    let schemaData: any;
+    // For product pages, the single authoritative Product & BreadcrumbList structured data
+    // is already provided by SSR (server.ts / api/render.ts).
+    // To prevent duplicate Product items in Google Search Console Merchant Listings,
+    // do NOT inject a redundant secondary Product schema.
+    if (activeProduct || isProductPage) {
+      return;
+    }
 
-    if (activeProduct) {
-      // Phase 7: Product Schema. NO fake ratings/reviews!
-      const productImages = [
-        activeProduct.image_url,
-        ...(Array.isArray(activeProduct.images) ? activeProduct.images : []),
-      ].filter(Boolean);
+    // Phase 8: Organization + WebSite Schema (For non-product pages like Home)
+    const homeUrl = getHomepageCanonicalUrl(SITE_URL);
+    const contactPhone = settings.phone?.trim();
 
-      schemaData = {
-        '@context': 'https://schema.org/',
-        '@type': 'Product',
-        name: activeProduct.name,
-        image: productImages.length > 0 ? productImages : [ogImage],
-        description: cleanSeoText(activeProduct.description || pageDescription, 200),
-        sku: activeProduct.sku || String(activeProduct.id),
-        brand: {
-          '@type': 'Brand',
-          name: activeProduct.brand?.trim() || storeBrand,
-        },
-        offers: {
-          '@type': 'Offer',
-          url: canonicalUrl,
-          priceCurrency: 'BDT',
-          price: finalPrice,
-          priceValidUntil: '2028-12-31',
-          itemCondition: 'https://schema.org/NewCondition',
-          availability: isOutOfStock
-            ? 'https://schema.org/OutOfStock'
-            : 'https://schema.org/InStock',
-          seller: {
-            '@type': 'Organization',
-            name: storeBrand,
-            url: getHomepageCanonicalUrl(SITE_URL),
-          },
-        },
-      };
-    } else {
-      // Phase 8: Organization + WebSite Schema
-      const homeUrl = getHomepageCanonicalUrl(SITE_URL);
-      const contactPhone = settings.phone?.trim();
-
-      schemaData = {
-        '@context': 'https://schema.org',
-        '@graph': [
+    const schemaData = {
+      '@context': 'https://schema.org',
+      '@graph': [
           {
             '@type': 'Organization',
             '@id': `${homeUrl}#organization`,
@@ -274,7 +244,6 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
           },
         ],
       };
-    }
 
     const script = document.createElement('script');
     script.id = SCRIPT_ID;
