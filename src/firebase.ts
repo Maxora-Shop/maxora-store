@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import localConfig from '../firebase-applet-config.json';
 
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env || {} : {};
@@ -46,4 +47,20 @@ try {
 }
 
 export const db = firestoreDb;
+
+// Initialize Firebase Storage safely
+let storageInstance: FirebaseStorage | null = null;
+try {
+  const bucket = firebaseConfig.storageBucket || `${firebaseConfig.projectId}.firebasestorage.app`;
+  storageInstance = getStorage(app, bucket);
+} catch (err) {
+  console.warn('Initializing Firebase Storage failed:', err);
+  try {
+    storageInstance = getStorage(app);
+  } catch (err2) {
+    console.error('Fallback Firebase Storage initialization error:', err2);
+  }
+}
+
+export const storage = storageInstance;
 export default app;

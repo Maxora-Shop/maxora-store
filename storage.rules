@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Firebase Cloud Storage Security Rules for Maxora Store
+// Allows public read for product images so visitors, Googlebot, and social crawlers can access them.
+// Restricts write operations to image files under the products/ directory.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Product Images: Public read access, validated writes
+    match /products/{productId}/{allPaths=**} {
+      // Anyone can read product images
+      allow read: if true;
+      
+      // Allow upload if file is an image and under 15MB
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default media rule: Public read, validated image write
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

@@ -33,6 +33,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     // Load from Firestore
     let productData: any = null;
+    let rawImage: string = '';
     try {
       let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
       const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -47,23 +48,37 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
         : getFirestore(app);
 
-      // Try by document ID first
-      const docRef = doc(db, 'products', productId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        productData = docSnap.data();
-      } else {
-        // Query by id field
-        const qId = query(collection(db, 'products'), where('id', '==', productId));
-        const qSnap = await getDocs(qId);
-        if (!qSnap.empty) {
-          productData = qSnap.docs[0].data();
+      // If ID starts with img-, check uploaded_images collection first
+      if (productId.startsWith('img-')) {
+        const imgDoc = await getDoc(doc(db, 'uploaded_images', productId));
+        if (imgDoc.exists()) {
+          const imgData = imgDoc.data();
+          if (imgData.data_url) {
+            rawImage = imgData.data_url;
+            productData = { id: productId, image_url: imgData.data_url };
+          }
+        }
+      }
+
+      if (!productData) {
+        // Try by document ID first
+        const docRef = doc(db, 'products', productId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          productData = docSnap.data();
         } else {
-          // Query by slug
-          const qSlug = query(collection(db, 'products'), where('slug', '==', productId));
-          const slugSnap = await getDocs(qSlug);
-          if (!slugSnap.empty) {
-            productData = slugSnap.docs[0].data();
+          // Query by id field
+          const qId = query(collection(db, 'products'), where('id', '==', productId));
+          const qSnap = await getDocs(qId);
+          if (!qSnap.empty) {
+            productData = qSnap.docs[0].data();
+          } else {
+            // Query by slug
+            const qSlug = query(collection(db, 'products'), where('slug', '==', productId));
+            const slugSnap = await getDocs(qSlug);
+            if (!slugSnap.empty) {
+              productData = slugSnap.docs[0].data();
+            }
           }
         }
       }
@@ -94,20 +109,21 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     // Determine the product image
-    let rawImage: string = '';
-    if (productData.image_url && typeof productData.image_url === 'string') {
-      rawImage = productData.image_url;
-    } else if (Array.isArray(productData.images) && productData.images.length > 0) {
-      rawImage = productData.images[0];
-    } else if (typeof productData.images === 'string') {
-      try {
-        const parsed = JSON.parse(productData.images);
-        if (Array.isArray(parsed) && parsed.length > 0) rawImage = parsed[0];
-      } catch {
-        rawImage = productData.images;
+    if (!rawImage) {
+      if (productData.image_url && typeof productData.image_url === 'string') {
+        rawImage = productData.image_url;
+      } else if (Array.isArray(productData.images) && productData.images.length > 0) {
+        rawImage = productData.images[0];
+      } else if (typeof productData.images === 'string') {
+        try {
+          const parsed = JSON.parse(productData.images);
+          if (Array.isArray(parsed) && parsed.length > 0) rawImage = parsed[0];
+        } catch {
+          rawImage = productData.images;
+        }
+      } else if (productData.og_image && typeof productData.og_image === 'string') {
+        rawImage = productData.og_image;
       }
-    } else if (productData.og_image && typeof productData.og_image === 'string') {
-      rawImage = productData.og_image;
     }
 
     rawImage = (rawImage || '').trim();

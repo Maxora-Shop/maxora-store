@@ -68,6 +68,7 @@ import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
 import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
+import { uploadProductImageToStorage } from '../utils/imageStorage';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -251,9 +252,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     try {
       setIsUploadingImage(true);
-      const dataUrl = await compressAndReadImage(file);
-      setEditingProduct((prev) => (prev ? { ...prev, image_url: dataUrl } : prev));
-      showToast('Product image uploaded successfully!', 'success');
+      const prodId = editingProduct?.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+      const httpsUrl = await uploadProductImageToStorage(file, prodId, { isGallery: false });
+      setEditingProduct((prev) => (prev ? { ...prev, id: prev.id || prodId, image_url: httpsUrl } : prev));
+      showToast('Product image uploaded successfully (Public HTTPS URL)!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Image upload failed', 'error');
     } finally {
@@ -265,13 +267,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     try {
       setIsUploadingImage(true);
-      const dataUrl = await compressAndReadImage(file);
+      const prodId = editingProduct?.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+      const currentImages = Array.isArray(editingProduct?.images) ? editingProduct.images : [];
+      const httpsUrl = await uploadProductImageToStorage(file, prodId, {
+        isGallery: true,
+        galleryIndex: currentImages.length + 1,
+      });
       setEditingProduct((prev) => {
         if (!prev) return prev;
         const current = Array.isArray(prev.images) ? prev.images : [];
-        return { ...prev, images: [...current, dataUrl] };
+        return { ...prev, id: prev.id || prodId, images: [...current, httpsUrl] };
       });
-      showToast('Gallery image added!', 'success');
+      showToast('Gallery image added successfully (Public HTTPS URL)!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Gallery image upload failed', 'error');
     } finally {
@@ -393,8 +400,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     try {
       setIsUploadingColorImage(true);
-      const dataUrl = await compressAndReadImage(file);
-      setNewColorImageUrl(dataUrl);
+      const prodId = editingProduct?.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+      const httpsUrl = await uploadProductImageToStorage(file, prodId, {
+        customName: `color-${newColorName || 'variant'}`,
+      });
+      setNewColorImageUrl(httpsUrl);
       showToast('কালার ছবি আপলোড সফল হয়েছে!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Image upload failed', 'error');
@@ -709,9 +719,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       setLoading(true);
       const cleanedSlug = generateSlug(editingProduct.slug || editingProduct.name);
+      const publicImage = editingProduct.image_url || (Array.isArray(editingProduct.images) && editingProduct.images.length > 0 ? editingProduct.images[0] : '');
       const productToSave: Product = {
         ...editingProduct,
         slug: cleanedSlug,
+        og_image: editingProduct.og_image?.trim() || publicImage || '',
         meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       };

@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
 
 const app = express();
@@ -333,25 +333,42 @@ app.get('/api/product-image/:id', async (req, res) => {
     return res.status(400).type('text/plain').send('Product ID is required');
   }
 
-  const product = await getProductByIdOrSlug(productId);
-  if (!product) {
-    return res.status(404).type('text/plain').send('Product not found');
+  let rawImage: string = '';
+
+  // Check if it's an uploaded image ID (e.g. img-...)
+  if (productId.startsWith('img-')) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      const imgDoc = await getDoc(doc(firestoreDb, 'uploaded_images', productId));
+      if (imgDoc.exists()) {
+        const imgData = imgDoc.data();
+        if (imgData.data_url) {
+          rawImage = imgData.data_url;
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore uploaded_images lookup error:', e);
+    }
   }
 
-  let rawImage: string = '';
-  if (product.image_url && typeof product.image_url === 'string') {
-    rawImage = product.image_url;
-  } else if (Array.isArray(product.images) && product.images.length > 0) {
-    rawImage = product.images[0];
-  } else if (typeof product.images === 'string') {
-    try {
-      const parsed = JSON.parse(product.images);
-      if (Array.isArray(parsed) && parsed.length > 0) rawImage = parsed[0];
-    } catch {
-      rawImage = product.images;
+  if (!rawImage) {
+    const product = await getProductByIdOrSlug(productId);
+    if (product) {
+      if (product.image_url && typeof product.image_url === 'string') {
+        rawImage = product.image_url;
+      } else if (Array.isArray(product.images) && product.images.length > 0) {
+        rawImage = product.images[0];
+      } else if (typeof product.images === 'string') {
+        try {
+          const parsed = JSON.parse(product.images);
+          if (Array.isArray(parsed) && parsed.length > 0) rawImage = parsed[0];
+        } catch {
+          rawImage = product.images;
+        }
+      } else if (product.og_image && typeof product.og_image === 'string') {
+        rawImage = product.og_image;
+      }
     }
-  } else if (product.og_image && typeof product.og_image === 'string') {
-    rawImage = product.og_image;
   }
 
   rawImage = (rawImage || '').trim();
@@ -383,6 +400,41 @@ app.get('/api/product-image/:id', async (req, res) => {
   }
 
   return res.status(404).type('text/plain').send('Unsupported image format');
+});
+
+// POST /api/upload-image (Server-assisted image upload endpoint)
+app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) => {
+  try {
+    const { data_url, filename, product_id } = req.body || {};
+    if (!data_url || typeof data_url !== 'string') {
+      return res.status(400).json({ success: false, error: 'data_url is required' });
+    }
+
+    const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const cleanProdId = (product_id || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+
+    const firestoreDb = getFirestoreInstance();
+    await setDoc(doc(firestoreDb, 'uploaded_images', imageId), {
+      id: imageId,
+      product_id: cleanProdId,
+      filename: filename || 'image.webp',
+      data_url,
+      created_at: new Date().toISOString(),
+    });
+
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'maxora-store-ruby.vercel.app';
+    const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
+    const publicUrl = `${proto === 'http' && host.includes('vercel.app') ? 'https' : proto}://${host}/api/product-image/${imageId}`;
+
+    res.json({
+      success: true,
+      url: publicUrl,
+      id: imageId,
+    });
+  } catch (err: any) {
+    console.error('Server upload-image error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Server error' });
+  }
 });
 
 // POST /api/orders
