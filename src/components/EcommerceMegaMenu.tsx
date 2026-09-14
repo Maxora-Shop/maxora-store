@@ -280,7 +280,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
       {/* Top Header Bar */}
       <div className="px-4 sm:px-6 py-3 bg-[#0f172a] text-white flex items-center justify-between gap-3 border-b border-zinc-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+          <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
             <LayoutGrid className="w-4 h-4" />
           </div>
           <div>
@@ -301,7 +301,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
             placeholder="Search categories & items..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-900/90 text-white placeholder-zinc-400 text-xs pl-8 pr-7 py-1.5 rounded-xl border border-zinc-700/80 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="w-full bg-zinc-900/90 text-white placeholder-zinc-400 text-xs pl-8 pr-7 py-1.5 rounded-xl border border-zinc-700/80 focus:outline-none focus:border-teal-500 transition-colors"
           />
           <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2" />
           {searchQuery && (
@@ -362,12 +362,12 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleCategoryClick(cat, e)}
-                      className={`flex items-center gap-2 font-black text-xs sm:text-sm text-left group-hover/category:text-emerald-700 transition-colors cursor-pointer truncate ${
-                        isCatActive ? 'text-emerald-700' : 'text-zinc-950'
+                      className={`flex items-center gap-2 font-black text-xs sm:text-sm text-left group-hover/category:text-teal-700 transition-colors cursor-pointer truncate ${
+                        isCatActive ? 'text-teal-700' : 'text-zinc-950'
                       }`}
                       title={`Browse ${cat.name}`}
                     >
-                      <span className="w-6 h-6 rounded-lg bg-zinc-100 text-zinc-700 group-hover/category:bg-emerald-50 group-hover/category:text-emerald-600 flex items-center justify-center shrink-0 transition-colors">
+                      <span className="w-6 h-6 rounded-lg bg-zinc-100 text-zinc-700 group-hover/category:bg-teal-50 group-hover/category:text-teal-600 flex items-center justify-center shrink-0 transition-colors">
                         {getCategoryIcon(cat.slug || cat.name)}
                       </span>
                       <span className="truncate">{cat.name}</span>
@@ -376,7 +376,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleCategoryClick(cat, e)}
-                      className="text-[10px] font-bold text-zinc-400 hover:text-emerald-600 shrink-0 cursor-pointer flex items-center gap-0.5"
+                      className="text-[10px] font-bold text-zinc-400 hover:text-teal-600 shrink-0 cursor-pointer flex items-center gap-0.5"
                       title="View all items in this category"
                     >
                       <span>View</span>
@@ -401,14 +401,14 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                               onClick={(e) => handleSubCategoryClick(cat, sub, e)}
                               className={`w-full group/item flex items-center justify-between text-left text-xs py-1 px-1.5 rounded-lg transition-colors cursor-pointer ${
                                 isSubActive
-                                  ? 'bg-emerald-50 text-emerald-800 font-bold'
+                                  ? 'bg-teal-50 text-teal-800 font-bold'
                                   : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-100/80 font-medium'
                               }`}
                               title={`Shop ${sub.name}`}
                             >
                               <span className="truncate flex items-center gap-1.5">
                                 <span className={`w-1 h-1 rounded-full transition-all ${
-                                  isSubActive ? 'bg-emerald-600 w-1.5 h-1.5' : 'bg-zinc-300 group-hover/item:bg-emerald-500'
+                                  isSubActive ? 'bg-teal-600 w-1.5 h-1.5' : 'bg-zinc-300 group-hover/item:bg-teal-500'
                                 }`} />
                                 <span className="truncate">{sub.name}</span>
                               </span>
@@ -434,7 +434,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleCategoryClick(cat, e)}
-                      className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-colors cursor-pointer group-hover/category:translate-x-0.5"
+                      className="text-[11px] font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1 transition-colors cursor-pointer group-hover/category:translate-x-0.5"
                     >
                       <span>Explore {cat.name}</span>
                       <ArrowRight className="w-3 h-3" />
@@ -491,7 +491,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                   <span className="w-7 h-7 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center shrink-0">
                     {getCategoryIcon(cat.slug || cat.name)}
                   </span>
-                  <span className={`truncate ${isCatActive ? 'text-emerald-600' : ''}`}>{cat.name}</span>
+                  <span className={`truncate ${isCatActive ? 'text-teal-600' : ''}`}>{cat.name}</span>
                   {cat.count > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 text-zinc-500 shrink-0 font-medium">
                       {cat.count}
@@ -503,7 +503,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                   <button
                     type="button"
                     onClick={(e) => handleCategoryClick(cat, e)}
-                    className="px-2 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-50 rounded-md cursor-pointer"
+                    className="px-2 py-1 text-[11px] font-bold text-teal-600 hover:bg-teal-50 rounded-md cursor-pointer"
                   >
                     View All
                   </button>
@@ -515,7 +515,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                   >
                     <ChevronDown
                       className={`w-4 h-4 transition-transform duration-200 ${
-                        isExpanded ? 'rotate-180 text-emerald-600' : ''
+                        isExpanded ? 'rotate-180 text-teal-600' : ''
                       }`}
                     />
                   </button>
@@ -539,7 +539,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                           onClick={(e) => handleSubCategoryClick(cat, sub, e)}
                           className={`w-full flex items-center justify-between text-left text-xs py-2 px-2.5 rounded-lg min-h-[40px] transition-colors cursor-pointer ${
                             isSubActive
-                              ? 'bg-emerald-50 text-emerald-800 font-bold'
+                              ? 'bg-teal-50 text-teal-800 font-bold'
                               : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 font-medium'
                           }`}
                         >
@@ -556,7 +556,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleCategoryClick(cat, e)}
-                      className="w-full text-left text-xs text-emerald-600 font-bold py-2 px-2"
+                      className="w-full text-left text-xs text-teal-600 font-bold py-2 px-2"
                     >
                       Browse all items in {cat.name} →
                     </button>
@@ -572,12 +572,12 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
       <div className="px-4 sm:px-6 py-2.5 bg-zinc-50 border-t border-zinc-200/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-zinc-500">
         <div className="flex items-center gap-4 flex-wrap justify-center sm:justify-start">
           <span className="flex items-center gap-1.5 font-medium">
-            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <Check className="w-3.5 h-3.5 text-teal-600 shrink-0" />
             <span>100% Authentic Quality</span>
           </span>
           <span className="hidden sm:inline text-zinc-300">•</span>
           <span className="flex items-center gap-1.5 font-medium">
-            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <Check className="w-3.5 h-3.5 text-teal-600 shrink-0" />
             <span>Cash on Delivery across 64 Districts</span>
           </span>
         </div>
@@ -585,7 +585,7 @@ export const EcommerceMegaMenu: React.FC<EcommerceMegaMenuProps> = ({
         <button
           type="button"
           onClick={handleViewAllProducts}
-          className="text-xs font-bold text-zinc-900 hover:text-emerald-700 flex items-center gap-1 transition-colors cursor-pointer"
+          className="text-xs font-bold text-zinc-900 hover:text-teal-700 flex items-center gap-1 transition-colors cursor-pointer"
         >
           <span>Browse Complete Catalog</span>
           <ArrowRight className="w-3 h-3" />

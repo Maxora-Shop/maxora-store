@@ -46,6 +46,42 @@ function getFirestoreInstance() {
     : getFirestore(fbApp);
 }
 
+function isQuotaExceededError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || String(err)).toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('quota exceeded') ||
+    msg.includes('free daily read units') ||
+    msg.includes('rate-limit') ||
+    msg.includes('disconnecting idle stream')
+  );
+}
+
+let firestoreQuotaCooldownUntil = 0;
+let firestoreQuotaNoticeLogged = false;
+
+function isFirestoreQuotaCooldownActive(): boolean {
+  return Date.now() < firestoreQuotaCooldownUntil;
+}
+
+function handleFirestoreError(context: string, err: any) {
+  if (isQuotaExceededError(err)) {
+    firestoreQuotaCooldownUntil = Date.now() + 15 * 60 * 1000;
+    if (!firestoreQuotaNoticeLogged) {
+      firestoreQuotaNoticeLogged = true;
+      console.log(`[Firestore Notice] Free quota limit reached during ${context}. Operating seamlessly in cached/local mode until quota resets.`);
+    }
+    return;
+  }
+  const msg = err?.message || String(err);
+  if (!msg.includes('idle stream') && !msg.includes('CANCELLED')) {
+    console.warn(`${context} notice:`, msg);
+  }
+}
+
 // Enable CORS for separate admin panel (e.g. maxora-admin.vercel.app or local dev)
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -350,17 +386,19 @@ app.get('/api/product-image/:id', async (req, res) => {
 
   // Check if it's an uploaded image ID (e.g. img-...)
   if (productId.startsWith('img-')) {
-    try {
-      const firestoreDb = getFirestoreInstance();
-      const imgDoc = await getDoc(doc(firestoreDb, 'uploaded_images', productId));
-      if (imgDoc.exists()) {
-        const imgData = imgDoc.data();
-        if (imgData.data_url) {
-          rawImage = imgData.data_url;
+    if (!isFirestoreQuotaCooldownActive()) {
+      try {
+        const firestoreDb = getFirestoreInstance();
+        const imgDoc = await getDoc(doc(firestoreDb, 'uploaded_images', productId));
+        if (imgDoc.exists()) {
+          const imgData = imgDoc.data();
+          if (imgData.data_url) {
+            rawImage = imgData.data_url;
+          }
         }
+      } catch (e) {
+        handleFirestoreError('Firestore uploaded_images lookup', e);
       }
-    } catch (e) {
-      console.warn('Firestore uploaded_images lookup error:', e);
     }
   }
 
@@ -1690,6 +1728,13 @@ app.get(['/sitemap.xml', '/api/sitemap.xml'], async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
     res.send(sitemap);
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      handleFirestoreError('Dynamic Firestore sitemap', error);
+      const fallbackSitemap = buildDynamicSitemap(baseUrl);
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      return res.send(fallbackSitemap);
+    }
     console.error('Error generating dynamic Firestore sitemap in server.ts:', error);
     res.status(500).send('Error generating dynamic sitemap');
   }
@@ -1709,6 +1754,7 @@ function cleanSlug(text: string): string {
 }
 
 async function syncFirestoreProducts() {
+  if (isFirestoreQuotaCooldownActive()) return;
   try {
     const firestoreDb = getFirestoreInstance();
     const snap = await getDocs(collection(firestoreDb, 'products'));
@@ -1724,7 +1770,7 @@ async function syncFirestoreProducts() {
       });
     }
   } catch (err) {
-    console.warn('Sync products from Firestore warning:', err);
+    handleFirestoreError('Sync products from Firestore', err);
   }
 }
 
@@ -1735,6 +1781,23 @@ async function getProductByIdOrSlug(idOrSlug: string): Promise<any | null> {
     return pSlug === clean || String(prod.id).toLowerCase() === clean.toLowerCase() || (prod.sku && prod.sku.toLowerCase() === clean.toLowerCase());
   });
   if (p) return p;
+
+  // Check static default products as well (zero read cost)
+  if (Array.isArray(defaultProducts)) {
+    const def = defaultProducts.find((prod: any) => {
+      const pSlug = cleanSlug(prod.slug || prod.name || String(prod.id));
+      return pSlug === clean || String(prod.id).toLowerCase() === clean.toLowerCase() || (prod.sku && prod.sku.toLowerCase() === clean.toLowerCase());
+    });
+    if (def) {
+      db.products.push(def);
+      return def;
+    }
+  }
+
+  // If quota cooldown is currently active, avoid making failing network roundtrips
+  if (isFirestoreQuotaCooldownActive()) {
+    return null;
+  }
 
   // Try direct Firestore lookup
   try {
@@ -1762,7 +1825,7 @@ async function getProductByIdOrSlug(idOrSlug: string): Promise<any | null> {
       return data;
     }
   } catch (err) {
-    console.warn('Firestore single product lookup warning:', err);
+    handleFirestoreError('Firestore single product lookup', err);
   }
   return null;
 }

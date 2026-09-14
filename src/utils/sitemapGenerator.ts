@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, getDocs, collection, setLogLevel } from 'firebase/firestore';
+import { INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES } from '../data/initialData';
+import userProductsJson from '../data/userProducts.json';
 
 try {
   setLogLevel('error');
@@ -117,36 +119,62 @@ export async function generateDynamicSitemapXml(baseUrl = SITEMAP_BASE_URL): Pro
     ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
     : getFirestore(app);
 
-  // Directly query live Firestore collections
-  const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
-    getDocs(collection(db, 'products')),
-    getDocs(collection(db, 'categories')),
-    getDocs(collection(db, 'subcategories')),
-  ]);
-
   const liveProducts: any[] = [];
-  prodsSnap.forEach((doc) => {
-    const data = doc.data();
-    if (isPublicIndexableProduct(data)) {
-      liveProducts.push({ ...data, id: String(data.id || doc.id) });
-    }
-  });
-
   const liveCategories: any[] = [];
-  catsSnap.forEach((doc) => {
-    const data = doc.data();
-    if (isPublicIndexableCategory(data)) {
-      liveCategories.push({ ...data, id: String(data.id || doc.id) });
-    }
-  });
-
   const liveSubcategories: any[] = [];
-  subsSnap.forEach((doc) => {
-    const data = doc.data();
-    if (isPublicIndexableCategory(data)) {
-      liveSubcategories.push({ ...data, id: String(data.id || doc.id) });
+
+  // Directly query live Firestore collections with fallback to static dataset
+  try {
+    const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+      getDocs(collection(db, 'products')),
+      getDocs(collection(db, 'categories')),
+      getDocs(collection(db, 'subcategories')),
+    ]);
+
+    prodsSnap.forEach((doc) => {
+      const data = doc.data();
+      if (isPublicIndexableProduct(data)) {
+        liveProducts.push({ ...data, id: String(data.id || doc.id) });
+      }
+    });
+
+    catsSnap.forEach((doc) => {
+      const data = doc.data();
+      if (isPublicIndexableCategory(data)) {
+        liveCategories.push({ ...data, id: String(data.id || doc.id) });
+      }
+    });
+
+    subsSnap.forEach((doc) => {
+      const data = doc.data();
+      if (isPublicIndexableCategory(data)) {
+        liveSubcategories.push({ ...data, id: String(data.id || doc.id) });
+      }
+    });
+  } catch (err: any) {
+    // Graceful offline/quota-exceeded fallback to user products and initial taxonomy
+    if (Array.isArray(userProductsJson)) {
+      userProductsJson.forEach((p: any) => {
+        if (isPublicIndexableProduct(p)) {
+          liveProducts.push(p);
+        }
+      });
     }
-  });
+    if (Array.isArray(INITIAL_CATEGORIES)) {
+      INITIAL_CATEGORIES.forEach((c: any) => {
+        if (isPublicIndexableCategory(c)) {
+          liveCategories.push(c);
+        }
+      });
+    }
+    if (Array.isArray(INITIAL_SUBCATEGORIES)) {
+      INITIAL_SUBCATEGORIES.forEach((s: any) => {
+        if (isPublicIndexableCategory(s)) {
+          liveSubcategories.push(s);
+        }
+      });
+    }
+  }
 
   // Dynamic Product XML URLs (Iterates over ALL eligible live products from Firestore)
   const productUrls = liveProducts
