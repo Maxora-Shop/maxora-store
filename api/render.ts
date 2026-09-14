@@ -209,37 +209,53 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const mainImage = product.og_image || product.image_url || imagesArr[0] || '';
       const canonicalUrl = `${BASE_URL}/product/${cleanSlug(product.slug || product.name || String(product.id))}`;
 
-      // Extract only valid publicly accessible HTTP/HTTPS image URLs for Google Merchant Listings
-      // Strictly reject any data URIs (e.g. data:image/webp;base64,...)
+      // Extract valid publicly accessible HTTP/HTTPS image URLs for Google Merchant Listings
+      // For Base64 data URIs, expose them via the public server-side endpoint: /api/product-image/:productId
       const rawCandidates = [
         ...(Array.isArray(imagesArr) ? imagesArr : []),
         product.image_url,
         product.og_image,
       ];
       const validPublicImages: string[] = [];
+      let hasStoredImage = false;
+
       for (const item of rawCandidates) {
         if (typeof item !== 'string') continue;
         const trimmed = item.trim();
-        if (!trimmed || trimmed.toLowerCase().startsWith('data:')) continue;
-        if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+        if (!trimmed) continue;
+        hasStoredImage = true;
+        if (trimmed.toLowerCase().startsWith('data:') || trimmed.toLowerCase().includes('base64')) {
+          continue;
+        }
+        if (trimmed.startsWith('https://')) {
           if (!validPublicImages.includes(trimmed)) validPublicImages.push(trimmed);
+        } else if (trimmed.startsWith('http://')) {
+          const secure = trimmed.replace(/^http:\/\//i, 'https://');
+          if (!validPublicImages.includes(secure)) validPublicImages.push(secure);
         } else if (trimmed.startsWith('//')) {
           const full = `https:${trimmed}`;
           if (!validPublicImages.includes(full)) validPublicImages.push(full);
-        } else if (trimmed.startsWith('/')) {
-          const full = `${BASE_URL.replace(/\/+$/, '')}${trimmed}`;
+        } else if (trimmed.startsWith('/') || /^[a-zA-Z0-9_-]+\//.test(trimmed)) {
+          const full = `${BASE_URL.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`;
           if (!validPublicImages.includes(full)) validPublicImages.push(full);
         }
       }
+
+      // If no external HTTPS URL exists, but the product has a stored image (Base64 data URI),
+      // point Google Merchant Listings to the public image serving endpoint
+      if (validPublicImages.length === 0 && (hasStoredImage || product.id)) {
+        const publicEndpoint = `${BASE_URL}/api/product-image/${product.id}`;
+        validPublicImages.push(publicEndpoint);
+      }
+
+      const publicOgImage = validPublicImages[0] || (mainImage.startsWith('data:') ? `${BASE_URL}/api/product-image/${product.id}` : mainImage);
 
       // Schema.org Product JSON-LD Structured Data
       const jsonLd: Record<string, any> = {
         '@context': 'https://schema.org/',
         '@type': 'Product',
         name: product.name,
-        ...(validPublicImages.length > 0
-          ? { image: validPublicImages.length === 1 ? validPublicImages[0] : validPublicImages }
-          : {}),
+        ...(validPublicImages.length > 0 ? { image: validPublicImages } : {}),
         description: plainDesc || description,
         sku: product.sku || product.id,
         mpn: product.sku || product.id,
@@ -316,7 +332,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
-    <meta property="og:image" content="${escapeHtml(mainImage)}" />
+    <meta property="og:image" content="${escapeHtml(publicOgImage)}" />
     <meta property="og:image:alt" content="${escapeHtml(product.name)}" />
     <meta property="product:price:amount" content="${finalPrice}" />
     <meta property="product:price:currency" content="BDT" />
@@ -326,7 +342,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
-    <meta name="twitter:image" content="${escapeHtml(mainImage)}" />
+    <meta name="twitter:image" content="${escapeHtml(publicOgImage)}" />
 
     <!-- Schema.org JSON-LD Structured Data -->
     <script type="application/ld+json" id="ssr-product-schema">

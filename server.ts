@@ -2,10 +2,36 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
 
 const app = express();
 const PORT = 3000;
+
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: 'gen-lang-client-0786093112',
+  appId: '1:69433257808:web:fb4fbbe84e9a5188354655',
+  apiKey: 'AIzaSyCTbIx95MxDltN100CSrPA9e9J-YrdF3Gg',
+  authDomain: 'gen-lang-client-0786093112.firebaseapp.com',
+  firestoreDatabaseId: 'ai-studio-maxorapremiumonl-a712e7fa-09e4-41f4-9cfb-9515c7736ab5',
+  storageBucket: 'gen-lang-client-0786093112.firebasestorage.app',
+  messagingSenderId: '69433257808',
+};
+
+function getFirestoreInstance() {
+  let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) {}
+  }
+  const fbApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  return firebaseConfig.firestoreDatabaseId
+    ? getFirestore(fbApp, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(fbApp);
+}
 
 // Enable CORS for separate admin panel (e.g. maxora-admin.vercel.app or local dev)
 app.use((req, res, next) => {
@@ -298,6 +324,65 @@ app.get('/api/products/:id', (req, res) => {
       final_price: Math.max(0, price - discount)
     }
   });
+});
+
+// GET /api/product-image/:id (Public product image server - decodes Base64 data URIs or redirects to HTTPS)
+app.get('/api/product-image/:id', async (req, res) => {
+  const productId = req.params.id;
+  if (!productId) {
+    return res.status(400).type('text/plain').send('Product ID is required');
+  }
+
+  const product = await getProductByIdOrSlug(productId);
+  if (!product) {
+    return res.status(404).type('text/plain').send('Product not found');
+  }
+
+  let rawImage: string = '';
+  if (product.image_url && typeof product.image_url === 'string') {
+    rawImage = product.image_url;
+  } else if (Array.isArray(product.images) && product.images.length > 0) {
+    rawImage = product.images[0];
+  } else if (typeof product.images === 'string') {
+    try {
+      const parsed = JSON.parse(product.images);
+      if (Array.isArray(parsed) && parsed.length > 0) rawImage = parsed[0];
+    } catch {
+      rawImage = product.images;
+    }
+  } else if (product.og_image && typeof product.og_image === 'string') {
+    rawImage = product.og_image;
+  }
+
+  rawImage = (rawImage || '').trim();
+
+  if (!rawImage) {
+    return res.status(404).type('text/plain').send('Product image not found');
+  }
+
+  // Case 1: Base64 data URI
+  if (rawImage.startsWith('data:')) {
+    const match = rawImage.match(/^data:([^;]+);base64,(.+)$/s);
+    if (match) {
+      const contentType = match[1] || 'image/webp';
+      const buffer = Buffer.from(match[2], 'base64');
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length.toString());
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400');
+      return res.status(200).send(buffer);
+    }
+  }
+
+  // Case 2: Public HTTP / HTTPS URL
+  if (rawImage.startsWith('http://') || rawImage.startsWith('https://')) {
+    const redirectUrl = rawImage.startsWith('http://')
+      ? rawImage.replace(/^http:\/\//i, 'https://')
+      : rawImage;
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.redirect(302, redirectUrl);
+  }
+
+  return res.status(404).type('text/plain').send('Unsupported image format');
 });
 
 // POST /api/orders
@@ -1558,14 +1643,69 @@ function cleanSlug(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-// Helper to render product SSR HTML
-function getProductSsrHtml(rawSlug: string): { html: string; status: number } | null {
-  const baseUrl = 'https://maxora-store-ruby.vercel.app';
-  const slug = cleanSlug(rawSlug);
-  const product = db.products.find(p => {
-    const pSlug = cleanSlug(p.slug || p.name || String(p.id));
-    return pSlug === slug || String(p.id).toLowerCase() === slug.toLowerCase() || (p.sku && p.sku.toLowerCase() === slug.toLowerCase());
+async function syncFirestoreProducts() {
+  try {
+    const firestoreDb = getFirestoreInstance();
+    const snap = await getDocs(collection(firestoreDb, 'products'));
+    if (!snap.empty) {
+      snap.forEach(d => {
+        const data = { ...d.data(), id: String(d.data().id || d.id) };
+        const idx = db.products.findIndex(p => p.id === data.id);
+        if (idx >= 0) {
+          db.products[idx] = { ...db.products[idx], ...data };
+        } else {
+          db.products.push(data);
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('Sync products from Firestore warning:', err);
+  }
+}
+
+async function getProductByIdOrSlug(idOrSlug: string): Promise<any | null> {
+  const clean = cleanSlug(idOrSlug);
+  let p = db.products.find(prod => {
+    const pSlug = cleanSlug(prod.slug || prod.name || String(prod.id));
+    return pSlug === clean || String(prod.id).toLowerCase() === clean.toLowerCase() || (prod.sku && prod.sku.toLowerCase() === clean.toLowerCase());
   });
+  if (p) return p;
+
+  // Try direct Firestore lookup
+  try {
+    const firestoreDb = getFirestoreInstance();
+    const directSnap = await getDoc(doc(firestoreDb, 'products', idOrSlug));
+    if (directSnap.exists()) {
+      const data = { ...directSnap.data(), id: String(directSnap.data().id || directSnap.id) };
+      const idx = db.products.findIndex(x => x.id === data.id);
+      if (idx >= 0) db.products[idx] = data;
+      else db.products.push(data);
+      return data;
+    }
+
+    const qSnap = await getDocs(query(collection(firestoreDb, 'products'), where('id', '==', idOrSlug)));
+    if (!qSnap.empty) {
+      const data = { ...qSnap.docs[0].data(), id: String(qSnap.docs[0].data().id || qSnap.docs[0].id) };
+      db.products.push(data);
+      return data;
+    }
+
+    const qSlugSnap = await getDocs(query(collection(firestoreDb, 'products'), where('slug', '==', idOrSlug)));
+    if (!qSlugSnap.empty) {
+      const data = { ...qSlugSnap.docs[0].data(), id: String(qSlugSnap.docs[0].data().id || qSlugSnap.docs[0].id) };
+      db.products.push(data);
+      return data;
+    }
+  } catch (err) {
+    console.warn('Firestore single product lookup warning:', err);
+  }
+  return null;
+}
+
+// Helper to render product SSR HTML
+async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; status: number } | null> {
+  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const product = await getProductByIdOrSlug(rawSlug);
 
   const distIndex = path.join(process.cwd(), 'dist', 'index.html');
   const rootIndex = path.join(process.cwd(), 'index.html');
@@ -1616,36 +1756,49 @@ function getProductSsrHtml(rawSlug: string): { html: string; status: number } | 
   const mainImage = product.og_image || product.image_url || imagesArr[0] || '';
   const canonicalUrl = `${baseUrl}/product/${cleanSlug(product.slug || product.name || String(product.id))}`;
 
-  // Extract only valid publicly accessible HTTP/HTTPS image URLs for Google Merchant Listings
-  // Strictly reject any data URIs (e.g. data:image/webp;base64,...)
+  // Extract valid publicly accessible HTTP/HTTPS image URLs for Google Merchant Listings
+  // For Base64 data URIs, expose them via the public server-side endpoint: /api/product-image/:productId
   const rawCandidates = [
     ...(Array.isArray(imagesArr) ? imagesArr : []),
     product.image_url,
     product.og_image,
   ];
   const validPublicImages: string[] = [];
+  let hasStoredImage = false;
   for (const item of rawCandidates) {
     if (typeof item !== 'string') continue;
     const trimmed = item.trim();
-    if (!trimmed || trimmed.toLowerCase().startsWith('data:')) continue;
-    if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    if (!trimmed) continue;
+    hasStoredImage = true;
+    if (trimmed.toLowerCase().startsWith('data:') || trimmed.toLowerCase().includes('base64')) continue;
+    if (trimmed.startsWith('https://')) {
       if (!validPublicImages.includes(trimmed)) validPublicImages.push(trimmed);
+    } else if (trimmed.startsWith('http://')) {
+      const secure = trimmed.replace(/^http:\/\//i, 'https://');
+      if (!validPublicImages.includes(secure)) validPublicImages.push(secure);
     } else if (trimmed.startsWith('//')) {
       const full = `https:${trimmed}`;
       if (!validPublicImages.includes(full)) validPublicImages.push(full);
-    } else if (trimmed.startsWith('/')) {
-      const full = `${baseUrl.replace(/\/+$/, '')}${trimmed}`;
+    } else if (trimmed.startsWith('/') || /^[a-zA-Z0-9_-]+\//.test(trimmed)) {
+      const full = `${baseUrl.replace(/\/+$/, '')}/${trimmed.replace(/^\/+/, '')}`;
       if (!validPublicImages.includes(full)) validPublicImages.push(full);
     }
   }
+
+  // If no external HTTPS URL exists, but the product has a stored image (Base64 data URI),
+  // point Google Merchant Listings to the public image serving endpoint
+  if (validPublicImages.length === 0 && (hasStoredImage || product.id)) {
+    const publicEndpoint = `${baseUrl}/api/product-image/${product.id}`;
+    validPublicImages.push(publicEndpoint);
+  }
+
+  const publicOgImage = validPublicImages[0] || (mainImage.startsWith('data:') ? `${baseUrl}/api/product-image/${product.id}` : mainImage);
 
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org/',
     '@type': 'Product',
     name: product.name,
-    ...(validPublicImages.length > 0
-      ? { image: validPublicImages.length === 1 ? validPublicImages[0] : validPublicImages }
-      : {}),
+    ...(validPublicImages.length > 0 ? { image: validPublicImages } : {}),
     description: plainDesc || description,
     sku: product.sku || product.id,
     mpn: product.sku || product.id,
@@ -1690,7 +1843,7 @@ function getProductSsrHtml(rawSlug: string): { html: string; status: number } | 
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
-    <meta property="og:image" content="${escapeHtml(mainImage)}" />
+    <meta property="og:image" content="${escapeHtml(publicOgImage)}" />
     <meta property="og:image:alt" content="${escapeHtml(product.name)}" />
     <meta property="product:price:amount" content="${finalPrice}" />
     <meta property="product:price:currency" content="BDT" />
@@ -1700,7 +1853,7 @@ function getProductSsrHtml(rawSlug: string): { html: string; status: number } | 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(title)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
-    <meta name="twitter:image" content="${escapeHtml(mainImage)}" />
+    <meta name="twitter:image" content="${escapeHtml(publicOgImage)}" />
 
     <!-- Schema.org JSON-LD Structured Data -->
     <script type="application/ld+json" id="ssr-product-schema">
@@ -1896,8 +2049,8 @@ ${JSON.stringify(itemListLd, null, 2)}
 }
 
 // GET /product/:slug (SSR pre-rendered product page for Googlebot & Social Crawlers)
-app.get('/product/:slug', (req, res, next) => {
-  const result = getProductSsrHtml(req.params.slug);
+app.get('/product/:slug', async (req, res, next) => {
+  const result = await getProductSsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (result.status === 200) {
@@ -1942,6 +2095,7 @@ Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
 // VITE / STATIC INTEGRATION
 // ==========================================
 async function startServer() {
+  await syncFirestoreProducts();
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

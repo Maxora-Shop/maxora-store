@@ -11,6 +11,10 @@
       "destination": "/api/robots"
     },
     {
+      "source": "/api/product-image/(.*)",
+      "destination": "/api/product-image?id=$1"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
