@@ -54,6 +54,7 @@ import {
   Instagram,
   Youtube,
   Music2,
+  Loader2,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -167,6 +168,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     childCategories: contextChildCategories,
     taxonomyTree: contextTaxonomyTree,
     refreshTaxonomy,
+    saveCategory: taxonomySaveCategory,
+    saveSubCategory: taxonomySaveSubCategory,
+    saveChildCategory: taxonomySaveChildCategory,
   } = useTaxonomy();
 
   const dbCategories = contextCategories;
@@ -250,6 +254,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProductTypeInput, setNewProductTypeInput] = useState('');
   const [isManageTypesModalOpen, setIsManageTypesModalOpen] = useState(false);
 
+  // Quick Category, Subcategory, Child Category inline creation states in Product Modal
+  const [showAddCategoryInput, setShowAddCategoryInput] = useState(false);
+  const [newCategoryNameInput, setNewCategoryNameInput] = useState('');
+  const [isSavingNewCategory, setIsSavingNewCategory] = useState(false);
+
+  const [showAddSubCategoryInput, setShowAddSubCategoryInput] = useState(false);
+  const [newSubCategoryNameInput, setNewSubCategoryNameInput] = useState('');
+  const [isSavingNewSubCategory, setIsSavingNewSubCategory] = useState(false);
+
+  const [showAddChildCategoryInput, setShowAddChildCategoryInput] = useState(false);
+  const [newChildCategoryNameInput, setNewChildCategoryNameInput] = useState('');
+  const [isSavingNewChildCategory, setIsSavingNewChildCategory] = useState(false);
+
   // Sync settings custom_product_types & global settings
   useEffect(() => {
     if (globalSettings) {
@@ -310,6 +327,182 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       current.splice(index, 1);
       return { ...prev, images: current };
     });
+  };
+
+  // Quick creation handlers for Category, Subcategory, and Child Category in Product Modal
+  const handleQuickCreateCategory = async (catName?: string) => {
+    const rawName = (catName || newCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a category name (ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    try {
+      setIsSavingNewCategory(true);
+      const res = await taxonomySaveCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          display_order: dbCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.category) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                category: res.category.name,
+                category_id: res.category.id,
+                category_slug: res.category.slug,
+              }
+            : prev
+        );
+        setNewCategoryNameInput('');
+        setShowAddCategoryInput(false);
+        showToast(`Category "${res.category.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save category', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving category: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewCategory(false);
+    }
+  };
+
+  const handleQuickCreateSubCategory = async (subName?: string) => {
+    const rawName = (subName || newSubCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a subcategory name (সাব-ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    // Determine parent category from editingProduct
+    let parentCat = dbCategories.find(
+      (c) =>
+        c.id === editingProduct?.category_id ||
+        (editingProduct?.category && c.name.toLowerCase() === editingProduct.category.toLowerCase())
+    );
+
+    let categoryId = parentCat?.id || editingProduct?.category_id || '';
+    let categorySlug = parentCat?.slug || editingProduct?.category_slug || '';
+
+    // If no category was selected yet, create parent category or attach
+    if (!categoryId && editingProduct?.category) {
+      try {
+        const catRes = await taxonomySaveCategory(
+          {
+            name: editingProduct.category,
+            slug: generateSlug(editingProduct.category),
+            display_order: dbCategories.length + 1,
+            active: 1,
+          },
+          password
+        );
+        if (catRes.success && catRes.category) {
+          parentCat = catRes.category;
+          categoryId = catRes.category.id;
+          categorySlug = catRes.category.slug;
+        }
+      } catch {}
+    }
+
+    try {
+      setIsSavingNewSubCategory(true);
+      const res = await taxonomySaveSubCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          category_id: categoryId,
+          category_slug: categorySlug,
+          display_order: dbSubCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.subCategory) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                sub_category: res.subCategory.name,
+                subcategory_id: res.subCategory.id,
+                subcategory_slug: res.subCategory.slug,
+                category: parentCat ? parentCat.name : prev.category,
+                category_id: categoryId || prev.category_id,
+                category_slug: categorySlug || prev.category_slug,
+              }
+            : prev
+        );
+        setNewSubCategoryNameInput('');
+        setShowAddSubCategoryInput(false);
+        showToast(`Subcategory "${res.subCategory.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save subcategory', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving subcategory: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewSubCategory(false);
+    }
+  };
+
+  const handleQuickCreateChildCategory = async (childName?: string) => {
+    const rawName = (childName || newChildCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a child category name (চাইল্ড ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    const categoryId = editingProduct?.category_id || '';
+    const categorySlug = editingProduct?.category_slug || '';
+    const subcategoryId = editingProduct?.subcategory_id || '';
+    const subcategorySlug = editingProduct?.subcategory_slug || '';
+
+    try {
+      setIsSavingNewChildCategory(true);
+      const res = await taxonomySaveChildCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          category_id: categoryId,
+          category_slug: categorySlug,
+          subcategory_id: subcategoryId,
+          subcategory_slug: subcategorySlug,
+          display_order: dbChildCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.childCategory) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                child_category: res.childCategory.name,
+                childcategory_id: res.childCategory.id,
+                child_category_id: res.childCategory.id,
+                childcategory_slug: res.childCategory.slug,
+                child_category_slug: res.childCategory.slug,
+              }
+            : prev
+        );
+        setNewChildCategoryNameInput('');
+        setShowAddChildCategoryInput(false);
+        showToast(`Child category "${res.childCategory.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save child category', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving child category: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewChildCategory(false);
+    }
   };
 
   // Handlers for Custom Product Types
@@ -3811,7 +4004,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => setIsProductModalOpen(false)}
+                onClick={() => {
+                  setIsProductModalOpen(false);
+                  setShowAddCategoryInput(false);
+                  setShowAddSubCategoryInput(false);
+                  setShowAddChildCategoryInput(false);
+                  setShowAddTypeInput(false);
+                }}
                 className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
               >
                 ✕
@@ -3878,155 +4077,341 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* 1. Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Category (ক্যাটেগরি) *
-                        </label>
-                        <select
-                          required
-                          value={
-                            dbCategories.some(
-                              (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
-                            )
-                              ? dbCategories.find(
-                                  (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
-                                )?.name
-                              : editingProduct?.category || ''
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              const customName = prompt('Enter custom category name:');
-                              if (customName && customName.trim()) {
-                                setEditingProduct({
-                                  ...editingProduct,
-                                  category: customName.trim(),
-                                  category_id: '',
-                                  category_slug: customName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                                });
-                              }
-                              return;
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Category (ক্যাটেগরি) *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddCategoryInput(!showAddCategoryInput);
+                              setNewCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new category name (e.g. Smart Gadgets)..."
+                                value={newCategoryNameInput}
+                                onChange={(e) => setNewCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewCategory}
+                                onClick={() => handleQuickCreateCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this category
+                            </p>
+                          </div>
+                        ) : (
+                          <select
+                            required
+                            value={
+                              dbCategories.some(
+                                (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                              )
+                                ? dbCategories.find(
+                                    (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                                  )?.name
+                                : editingProduct?.category || ''
                             }
-                            const matchedCat = dbCategories.find(
-                              (c) => c.name === val || c.id === val || c.slug === val
-                            );
-                            setEditingProduct({
-                              ...editingProduct,
-                              category: matchedCat ? matchedCat.name : val,
-                              category_id: matchedCat?.id || '',
-                              category_slug: matchedCat?.slug || '',
-                            });
-                          }}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        >
-                          <option value="">-- Select Category --</option>
-                          {dbCategories.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                setShowAddCategoryInput(true);
+                                setNewCategoryNameInput('');
+                                return;
+                              }
+                              const matchedCat = dbCategories.find(
+                                (c) => c.name === val || c.id === val || c.slug === val
+                              );
+                              setEditingProduct({
+                                ...editingProduct,
+                                category: matchedCat ? matchedCat.name : val,
+                                category_id: matchedCat?.id || '',
+                                category_slug: matchedCat?.slug || '',
+                              });
+                            }}
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                          >
+                            <option value="">-- Select Category --</option>
+                            {dbCategories.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                            {dbCategories.length === 0 && (
+                              <>
+                                <option value="Smart Gadgets">Smart Gadgets</option>
+                                <option value="Audio">Audio</option>
+                                <option value="Computer & Gaming">Computer & Gaming</option>
+                                <option value="Mobile Accessories">Mobile Accessories</option>
+                                <option value="Lifestyle & Bags">Lifestyle & Bags</option>
+                                <option value="Home & Living">Home & Living</option>
+                                <option value="Fashion & Apparel">Fashion & Apparel</option>
+                                <option value="Watches & Wearables">Watches & Wearables</option>
+                              </>
+                            )}
+                            <option value="__custom__" className="font-semibold text-emerald-700 bg-emerald-50">
+                              + Add Custom Category (নতুন ক্যাটেগরি)...
                             </option>
-                          ))}
-                          {dbCategories.length === 0 && (
-                            <>
-                              <option value="Smart Gadgets">Smart Gadgets</option>
-                              <option value="Audio">Audio</option>
-                              <option value="Computer & Gaming">Computer & Gaming</option>
-                              <option value="Mobile Accessories">Mobile Accessories</option>
-                              <option value="Lifestyle & Bags">Lifestyle & Bags</option>
-                              <option value="Home & Living">Home & Living</option>
-                              <option value="Fashion & Apparel">Fashion & Apparel</option>
-                              <option value="Watches & Wearables">Watches & Wearables</option>
-                            </>
-                          )}
-                          <option value="__custom__">+ Add Custom Category...</option>
-                        </select>
+                          </select>
+                        )}
                       </div>
 
                       {/* 2. Sub Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Sub Category (সাব ক্যাটেগরি)
-                        </label>
-                        <select
-                          value={
-                            dbSubCategories.some(
-                              (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
-                            )
-                              ? dbSubCategories.find(
-                                  (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
-                                )?.name
-                              : editingProduct?.sub_category || ''
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              const customSub = prompt('Enter custom subcategory name:');
-                              if (customSub && customSub.trim()) {
-                                setEditingProduct({
-                                  ...editingProduct,
-                                  sub_category: customSub.trim(),
-                                  subcategory_id: '',
-                                  subcategory_slug: customSub.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                                });
-                              }
-                              return;
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Sub Category (সাব ক্যাটেগরি)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddSubCategoryInput(!showAddSubCategoryInput);
+                              setNewSubCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddSubCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddSubCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            {editingProduct?.category && (
+                              <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1">
+                                <span className="text-zinc-500">Parent:</span>
+                                <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {editingProduct.category}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new subcategory name (e.g. Smart Watch)..."
+                                value={newSubCategoryNameInput}
+                                onChange={(e) => setNewSubCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateSubCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewSubCategory}
+                                onClick={() => handleQuickCreateSubCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewSubCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this subcategory
+                            </p>
+                          </div>
+                        ) : (
+                          <select
+                            value={
+                              dbSubCategories.some(
+                                (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                              )
+                                ? dbSubCategories.find(
+                                    (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                                  )?.name
+                                : editingProduct?.sub_category || ''
                             }
-                            const matchedSub = dbSubCategories.find(
-                              (s) => s.name === val || s.id === val || s.slug === val
-                            );
-                            setEditingProduct({
-                              ...editingProduct,
-                              sub_category: matchedSub ? matchedSub.name : val,
-                              subcategory_id: matchedSub?.id || '',
-                              subcategory_slug: matchedSub?.slug || '',
-                            });
-                          }}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        >
-                          <option value="">-- Select Sub Category (Optional) --</option>
-                          {dbSubCategories
-                            .filter((s) => {
-                              if (!editingProduct?.category) return true;
-                              const currentCat = editingProduct.category.toLowerCase().trim();
-                              const parentCat = dbCategories.find((c) => c.id === s.category_id);
-                              return (
-                                s.category_id === editingProduct.category_id ||
-                                s.category_slug === editingProduct.category_slug ||
-                                (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                setShowAddSubCategoryInput(true);
+                                setNewSubCategoryNameInput('');
+                                return;
+                              }
+                              const matchedSub = dbSubCategories.find(
+                                (s) => s.name === val || s.id === val || s.slug === val
                               );
-                            })
-                            .map((s) => (
-                              <option key={s.id} value={s.name}>
-                                {s.name}
-                              </option>
-                            ))}
-                          <option value="__custom__">+ Add Custom Subcategory...</option>
-                        </select>
+                              setEditingProduct({
+                                ...editingProduct,
+                                sub_category: matchedSub ? matchedSub.name : val,
+                                subcategory_id: matchedSub?.id || '',
+                                subcategory_slug: matchedSub?.slug || '',
+                              });
+                            }}
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                          >
+                            <option value="">-- Select Sub Category (Optional) --</option>
+                            {dbSubCategories
+                              .filter((s) => {
+                                if (!editingProduct?.category) return true;
+                                const currentCat = editingProduct.category.toLowerCase().trim();
+                                const parentCat = dbCategories.find((c) => c.id === s.category_id);
+                                return (
+                                  s.category_id === editingProduct.category_id ||
+                                  s.category_slug === editingProduct.category_slug ||
+                                  (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                                );
+                              })
+                              .map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            <option value="__custom__" className="font-semibold text-emerald-700 bg-emerald-50">
+                              + Add Custom Subcategory (নতুন সাব-ক্যাটেগরি)...
+                            </option>
+                          </select>
+                        )}
                       </div>
 
                       {/* 3. Child Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Child Category (চাইল্ড ক্যাটেগরি)
-                        </label>
-                        <input
-                          list="admin-childcategory-list-root"
-                          type="text"
-                          placeholder="e.g. AMOLED Display, ANC Earbuds"
-                          value={editingProduct?.child_category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, child_category: e.target.value })}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-childcategory-list-root">
-                          {dbChildCategories.map((child) => (
-                            <option key={child.id} value={child.name} />
-                          ))}
-                          <option value="AMOLED Calling" />
-                          <option value="Waterproof IP68" />
-                          <option value="Active Noise Cancelling (ANC)" />
-                          <option value="Deep Bass Gaming" />
-                          <option value="65W Fast GaN" />
-                          <option value="100W PD Type-C" />
-                          <option value="RGB Hot-swappable" />
-                        </datalist>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Child Category (চাইল্ড ক্যাটেগরি)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddChildCategoryInput(!showAddChildCategoryInput);
+                              setNewChildCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddChildCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddChildCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            {(editingProduct?.category || editingProduct?.sub_category) && (
+                              <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1 flex-wrap">
+                                <span className="text-zinc-500">Under:</span>
+                                {editingProduct.category && (
+                                  <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                    {editingProduct.category}
+                                  </span>
+                                )}
+                                {editingProduct.sub_category && (
+                                  <>
+                                    <span className="text-zinc-400">/</span>
+                                    <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                      {editingProduct.sub_category}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new child category (e.g. AMOLED Calling, ANC)..."
+                                value={newChildCategoryNameInput}
+                                onChange={(e) => setNewChildCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateChildCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewChildCategory}
+                                onClick={() => handleQuickCreateChildCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewChildCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this child category
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              list="admin-childcategory-list-root"
+                              type="text"
+                              placeholder="Select or type child category (e.g. AMOLED Display, ANC Earbuds)"
+                              value={editingProduct?.child_category || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '__custom__' || val === '+ Add Custom Child Category...') {
+                                  setShowAddChildCategoryInput(true);
+                                  setNewChildCategoryNameInput('');
+                                  return;
+                                }
+                                setEditingProduct({ ...editingProduct, child_category: val });
+                              }}
+                              className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                            />
+                            <datalist id="admin-childcategory-list-root">
+                              {dbChildCategories
+                                .filter((c) => {
+                                  if (!editingProduct?.subcategory_id && !editingProduct?.sub_category) return true;
+                                  return (
+                                    c.subcategory_id === editingProduct.subcategory_id ||
+                                    c.subcategory_slug === editingProduct.subcategory_slug ||
+                                    c.category_id === editingProduct.category_id
+                                  );
+                                })
+                                .map((child) => (
+                                  <option key={child.id} value={child.name} />
+                                ))}
+                              <option value="+ Add Custom Child Category..." />
+                              <option value="AMOLED Calling" />
+                              <option value="Waterproof IP68" />
+                              <option value="Active Noise Cancelling (ANC)" />
+                              <option value="Deep Bass Gaming" />
+                              <option value="65W Fast GaN" />
+                              <option value="100W PD Type-C" />
+                              <option value="RGB Hot-swappable" />
+                            </datalist>
+                          </div>
+                        )}
                       </div>
 
                       {/* 4. Product Type */}
