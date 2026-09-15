@@ -1285,36 +1285,6 @@ export default function App() {
 
           <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 mb-6">
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSavedOnly(false)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    !showSavedOnly
-                      ? 'bg-zinc-950 text-white shadow-xs'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
-                  }`}
-                >
-                  All Products ({products.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSavedOnly(true)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    showSavedOnly
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60'
-                  }`}
-                >
-                  <Heart
-                    className={`w-3.5 h-3.5 ${
-                      showSavedOnly ? 'fill-white text-white' : 'fill-rose-500 text-rose-500'
-                    }`}
-                  />
-                  <span>Saved Items ({wishlistIds.length})</span>
-                </button>
-              </div>
-
               <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight flex items-center flex-wrap gap-2">
                 {showSavedOnly ? (
                   <span className="flex items-center gap-2 text-rose-600">
