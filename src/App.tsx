@@ -15,6 +15,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { CustomerAccountModal } from './components/CustomerAccountModal';
 import { InvoiceModal } from './components/InvoiceModal';
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
+import { ProductFilterSidebar } from './components/ProductFilterSidebar';
 import { CategoryFilter } from './components/CategoryFilter';
 import { ShopByCategorySection } from './components/ShopByCategorySection';
 import { PromoTripleSection } from './components/PromoTripleSection';
@@ -33,7 +34,7 @@ import {
   INITIAL_PRODUCT_TYPES,
   INITIAL_CHILD_CATEGORIES,
 } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
@@ -110,6 +111,15 @@ export default function App() {
   // Price Filter State
   const [priceRange, setPriceRange] = useState<PriceRange>({ min: 0, max: 50000 });
   const [selectedPricePreset, setSelectedPricePreset] = useState<string>('all');
+
+  // Availability Filter State ('all' | 'in_stock' | 'out_of_stock')
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+
+  // Rating Filter State (0 for all, 4 for 4+ stars, 3 for 3+ stars, etc.)
+  const [minRatingFilter, setMinRatingFilter] = useState<number>(0);
+
+  // Mobile Filter Drawer State
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
 
   // Modals & Drawers
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -808,6 +818,73 @@ export default function App() {
     setPriceRange({ min: 0, max: 50000 });
   };
 
+  const handleResetAllFilters = () => {
+    setSelectedBrand('');
+    handleResetPrice();
+    setAvailabilityFilter('all');
+    setMinRatingFilter(0);
+  };
+
+  // Source products for sidebar filter counts (scoped to category/search if active)
+  const sidebarSourceProducts = useMemo(() => {
+    if (!selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !searchQuery.trim() && !showSavedOnly) {
+      return products;
+    }
+    return products.filter((p) => {
+      if (showSavedOnly && !wishlistIds.includes(p.id)) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matches =
+          p.name.toLowerCase().includes(q) ||
+          (p.description && p.description.toLowerCase().includes(q)) ||
+          (p.brand && p.brand.toLowerCase().includes(q)) ||
+          (p.sku && p.sku.toLowerCase().includes(q));
+        if (!matches) return false;
+      }
+      if (selectedCategory && selectedCategory !== 'All' && selectedCategory !== 'all') {
+        const matchCat =
+          (p.category_id && p.category_id === selectedCategory) ||
+          matchesTaxonomyField(p.category, selectedCategory) ||
+          matchesTaxonomyField(p.category_slug, selectedCategory);
+        if (!matchCat) return false;
+      }
+      if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
+        const matchSub =
+          (p.sub_category_id && p.sub_category_id === selectedSubCategory) ||
+          matchesTaxonomyField(p.sub_category, selectedSubCategory) ||
+          matchesTaxonomyField(p.subcategory_slug, selectedSubCategory) ||
+          matchesTaxonomyField(p.sub_category_slug, selectedSubCategory);
+        if (!matchSub) return false;
+      }
+      if (selectedProductType && selectedProductType !== 'All' && selectedProductType !== 'all') {
+        const matchType =
+          (p.product_type_id && p.product_type_id === selectedProductType) ||
+          matchesTaxonomyField(p.product_type, selectedProductType) ||
+          matchesTaxonomyField(p.producttype_slug, selectedProductType) ||
+          matchesTaxonomyField(p.product_type_slug, selectedProductType);
+        if (!matchType) return false;
+      }
+      if (selectedChildCategory && selectedChildCategory !== 'All' && selectedChildCategory !== 'all') {
+        const matchChild =
+          (p.child_category_id && p.child_category_id === selectedChildCategory) ||
+          matchesTaxonomyField(p.child_category, selectedChildCategory) ||
+          matchesTaxonomyField(p.childcategory_slug, selectedChildCategory) ||
+          matchesTaxonomyField(p.child_category_slug, selectedChildCategory);
+        if (!matchChild) return false;
+      }
+      return true;
+    });
+  }, [
+    products,
+    searchQuery,
+    selectedCategory,
+    selectedSubCategory,
+    selectedProductType,
+    selectedChildCategory,
+    showSavedOnly,
+    wishlistIds,
+  ]);
+
   // Filter products by search, 4-tier taxonomy, and budget price range
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -900,6 +977,18 @@ export default function App() {
       if (finalPrice < priceRange.min) return false;
       if (priceRange.max < 50000 && finalPrice > priceRange.max) return false;
 
+      // 7. Availability Filter
+      const stock = Number(p.stock || 0);
+      if (availabilityFilter === 'in_stock' && stock <= 0) return false;
+      if (availabilityFilter === 'out_of_stock' && stock > 0) return false;
+
+      // 8. Rating Filter
+      if (minRatingFilter > 0) {
+        const stats = ratingStatsMap[p.id];
+        const rating = stats && stats.count > 0 ? stats.average : (Number(p.rating) || 0);
+        if (rating < minRatingFilter) return false;
+      }
+
       return true;
     });
   }, [
@@ -915,6 +1004,9 @@ export default function App() {
     activeProductTypeObj,
     activeChildCategoryObj,
     priceRange,
+    availabilityFilter,
+    minRatingFilter,
+    ratingStatsMap,
     showSavedOnly,
     wishlistIds,
   ]);
@@ -936,6 +1028,8 @@ export default function App() {
     priceRange.min,
     priceRange.max,
     selectedPricePreset,
+    availabilityFilter,
+    minRatingFilter,
     showSavedOnly,
   ]);
 
@@ -1265,7 +1359,7 @@ export default function App() {
             </div>
 
             {/* Active Filters Badges & Clear Controls */}
-            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) && (
+            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000 || availabilityFilter !== 'all' || minRatingFilter > 0) && (
               <div className="flex items-center flex-wrap gap-2">
                 {selectedBrand && (
                   <button
@@ -1274,6 +1368,24 @@ export default function App() {
                   >
                     <Tag className="w-3 h-3 text-orange-600" />
                     <span>Brand: {selectedBrand} ✕</span>
+                  </button>
+                )}
+                {availabilityFilter !== 'all' && (
+                  <button
+                    onClick={() => setAvailabilityFilter('all')}
+                    className="text-xs font-bold text-teal-950 bg-teal-100 hover:bg-teal-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <PackageCheck className="w-3 h-3 text-teal-600" />
+                    <span>Availability: {availabilityFilter === 'in_stock' ? 'In Stock' : 'Out of Stock'} ✕</span>
+                  </button>
+                )}
+                {minRatingFilter > 0 && (
+                  <button
+                    onClick={() => setMinRatingFilter(0)}
+                    className="text-xs font-bold text-amber-950 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                    <span>Rating: {minRatingFilter}★ & above ✕</span>
                   </button>
                 )}
                 {selectedChildCategory && (
@@ -1316,53 +1428,95 @@ export default function App() {
                     Budget: {priceRange.min} - {priceRange.max >= 50000 ? 'Any' : `${priceRange.max} TK`} ✕
                   </button>
                 )}
+                <button
+                  onClick={() => {
+                    handleClearAllTaxonomy();
+                    handleResetAllFilters();
+                  }}
+                  className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 underline ml-1 cursor-pointer"
+                >
+                  Clear All
+                </button>
               </div>
             )}
           </div>
 
-          {/* Products List Grid with Brand Sidebar */}
+          {/* Products List Grid with Left-side Filter Sidebar */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            {/* Left Sidebar Filter for Brands (desktop) */}
+            {/* Left Sidebar Filter with 4 Sections (Brand, Price Range, Availability, Rating) */}
             <div className="hidden lg:block lg:col-span-1 space-y-4 sticky top-24">
-              <BrandSidebarFilter
-                products={products}
+              <ProductFilterSidebar
+                products={sidebarSourceProducts}
                 selectedBrand={selectedBrand}
                 onSelectBrand={setSelectedBrand}
+                priceRange={priceRange}
+                maxStorePrice={10000}
+                onPriceRangeChange={setPriceRange}
+                selectedPricePreset={selectedPricePreset}
+                onSelectPricePreset={handleSelectPricePreset}
+                onResetPrice={handleResetPrice}
+                availability={availabilityFilter}
+                onSelectAvailability={setAvailabilityFilter}
+                minRating={minRatingFilter}
+                onSelectRating={setMinRatingFilter}
+                ratingStatsMap={ratingStatsMap}
+                onResetAll={handleResetAllFilters}
               />
             </div>
 
             {/* Product Cards Grid & Mobile Filter */}
             <div className="lg:col-span-3">
-              {/* Mobile Brand Chips Bar */}
-              <div className="lg:hidden mb-4 overflow-x-auto pb-1 scrollbar-thin">
-                <div className="flex items-center gap-2">
+              {/* Mobile Filter Button & Brand Chips Bar */}
+              <div className="lg:hidden mb-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFilterOpen(true)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
+                    selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000 || availabilityFilter !== 'all' || minRatingFilter > 0
+                      ? 'bg-teal-50 border-teal-300 text-teal-900 shadow-2xs'
+                      : 'bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5 text-teal-600" />
+                  <span>Filters</span>
+                  {(Number(Boolean(selectedBrand)) +
+                    Number(selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) +
+                    Number(availabilityFilter !== 'all') +
+                    Number(minRatingFilter > 0)) > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-teal-600 text-white text-[10px] flex items-center justify-center font-black">
+                      {Number(Boolean(selectedBrand)) +
+                        Number(selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000) +
+                        Number(availabilityFilter !== 'all') +
+                        Number(minRatingFilter > 0)}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBrand('')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    !selectedBrand
+                      ? 'bg-zinc-950 text-white shadow-xs'
+                      : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                  }`}
+                >
+                  All Brands
+                </button>
+                {Array.from(new Set(sidebarSourceProducts.map((p) => (p.brand || '').trim()).filter(Boolean))).map((bName) => (
                   <button
+                    key={bName}
                     type="button"
-                    onClick={() => setSelectedBrand('')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      !selectedBrand
-                        ? 'bg-zinc-950 text-white shadow-xs'
+                    onClick={() => setSelectedBrand(selectedBrand === bName ? '' : bName)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
+                      selectedBrand === bName
+                        ? 'bg-orange-600 text-white shadow-xs'
                         : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
                     }`}
                   >
-                    All Brands
+                    <Tag className="w-3 h-3" />
+                    <span>{bName}</span>
                   </button>
-                  {Array.from(new Set(products.map((p) => (p.brand || '').trim()).filter(Boolean))).map((bName) => (
-                    <button
-                      key={bName}
-                      type="button"
-                      onClick={() => setSelectedBrand(selectedBrand === bName ? '' : bName)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
-                        selectedBrand === bName
-                          ? 'bg-orange-600 text-white shadow-xs'
-                          : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
-                      }`}
-                    >
-                      <Tag className="w-3 h-3" />
-                      <span>{bName}</span>
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
 
               {loadingProducts ? (
@@ -1440,18 +1594,17 @@ export default function App() {
                     <button
                       onClick={() => {
                         handleClearAllTaxonomy();
-                        handleResetPrice();
-                        setSelectedBrand('');
+                        handleResetAllFilters();
                       }}
                       className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
                     >
                       {showSavedOnly ? 'Browse All Products' : 'Clear All Filters'}
                     </button>
-                    {(selectedChildCategory || selectedProductType || selectedBrand) && (
+                    {(selectedChildCategory || selectedProductType || selectedBrand || availabilityFilter !== 'all' || minRatingFilter > 0) && (
                       <button
                         onClick={() => {
                           updateTaxonomyFilter({ childCategory: '', productType: '' });
-                          setSelectedBrand('');
+                          handleResetAllFilters();
                         }}
                         className="px-5 py-2.5 rounded-full bg-zinc-100 text-zinc-800 text-xs font-bold hover:bg-zinc-200 transition-colors cursor-pointer"
                       >
@@ -1578,6 +1731,28 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Mobile Product Filter Sidebar Drawer */}
+      <ProductFilterSidebar
+        isMobileDrawer
+        isOpenMobile={isMobileFilterOpen}
+        onCloseMobile={() => setIsMobileFilterOpen(false)}
+        products={sidebarSourceProducts}
+        selectedBrand={selectedBrand}
+        onSelectBrand={setSelectedBrand}
+        priceRange={priceRange}
+        maxStorePrice={10000}
+        onPriceRangeChange={setPriceRange}
+        selectedPricePreset={selectedPricePreset}
+        onSelectPricePreset={handleSelectPricePreset}
+        onResetPrice={handleResetPrice}
+        availability={availabilityFilter}
+        onSelectAvailability={setAvailabilityFilter}
+        minRating={minRatingFilter}
+        onSelectRating={setMinRatingFilter}
+        ratingStatsMap={ratingStatsMap}
+        onResetAll={handleResetAllFilters}
+      />
 
       {/* Floating WhatsApp / Live Chat Support Button */}
       <FloatingSupportButton settings={settings} />
