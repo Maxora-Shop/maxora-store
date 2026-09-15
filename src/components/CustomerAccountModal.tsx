@@ -21,6 +21,8 @@ import {
   Clock,
   ArrowRight,
   Package,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Customer, Order, Product, StoreSettings } from '../types';
 import { storeService } from '../services/storeService';
@@ -98,6 +100,34 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
   const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState('');
+
+  // Copy Order ID state & handler
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  const handleCopyOrderId = (idToCopy: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(idToCopy);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = idToCopy;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
+    } catch (err) {
+      console.error('Failed to copy order ID:', err);
+    }
+    setCopiedOrderId(idToCopy);
+    setTimeout(() => {
+      setCopiedOrderId((prev) => (prev === idToCopy ? null : prev));
+    }, 2000);
+  };
 
   // Synchronize customer session
   const refreshCustomer = () => {
@@ -706,10 +736,28 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                       >
                         <div className="flex items-start justify-between gap-2 mb-2.5">
                           <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-black text-xs sm:text-sm text-zinc-950">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-xs sm:text-sm text-zinc-950 font-mono tracking-tight">
                                 {order.order_number || `#${order.id.slice(0, 8)}`}
                               </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyOrderId(order.order_number || order.id, e)}
+                                className="p-1 rounded-md text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors inline-flex items-center justify-center cursor-pointer group"
+                                title={copiedOrderId === (order.order_number || order.id) ? "Copied to clipboard!" : "Copy Order ID"}
+                                aria-label="Copy Order ID"
+                              >
+                                {copiedOrderId === (order.order_number || order.id) ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5 group-hover:scale-110 transition-transform shrink-0" />
+                                )}
+                              </button>
+                              {copiedOrderId === (order.order_number || order.id) && (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded animate-in fade-in leading-none">
+                                  Copied!
+                                </span>
+                              )}
                               {getStatusBadge(order.status)}
                             </div>
                             <span className="text-[11px] text-zinc-500 font-medium">
@@ -852,10 +900,30 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                     <div className="bg-zinc-50 rounded-2xl border border-zinc-200 p-4 space-y-4 animate-in fade-in-50">
                       <div className="flex items-center justify-between gap-2 border-b border-zinc-200 pb-3">
                         <div>
-                          <span className="font-extrabold text-sm text-zinc-950">
-                            {trackedOrder.order_number || trackedOrder.id}
-                          </span>
-                          <span className="text-xs text-zinc-500 block">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-sm text-zinc-950 font-mono">
+                              {trackedOrder.order_number || trackedOrder.id}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyOrderId(trackedOrder.order_number || trackedOrder.id, e)}
+                              className="p-1 rounded-md text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/70 transition-colors inline-flex items-center justify-center cursor-pointer group"
+                              title={copiedOrderId === (trackedOrder.order_number || trackedOrder.id) ? "Copied to clipboard!" : "Copy Order ID"}
+                              aria-label="Copy Order ID"
+                            >
+                              {copiedOrderId === (trackedOrder.order_number || trackedOrder.id) ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5 group-hover:scale-110 transition-transform shrink-0" />
+                              )}
+                            </button>
+                            {copiedOrderId === (trackedOrder.order_number || trackedOrder.id) && (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded animate-in fade-in leading-none">
+                                Copied!
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-zinc-500 block mt-0.5">
                             Recipient: {trackedOrder.customer_name} ({trackedOrder.phone})
                           </span>
                         </div>
