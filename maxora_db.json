@@ -1147,55 +1147,13 @@
       "category_id": "cat-home-living"
     }
   ],
-  "product_types": [
-    {
-      "meta_title": "",
-      "id": "pt-phone-cover",
-      "meta_description": "",
-      "updated_at": "2026-09-09T16:49:29.029Z",
-      "category_id": "cat-accessories",
-      "image_url": "",
-      "created_at": "2026-09-09T16:49:29.029Z",
-      "display_order": 10,
-      "slug": "phone-cover",
-      "active": 1,
-      "category_slug": "accessories",
-      "name": "Phone Cover",
-      "subcategory_slug": "mobile-accessories",
-      "subcategory_id": "subcat-mobile-accessories"
-    },
-    {
-      "display_order": 1,
-      "subcategory_id": "subcat-kitchen-dining",
-      "category_id": "cat-home-living",
-      "id": "pt-vacuum-flask",
-      "slug": "vacuum-flask",
-      "subcategory_slug": "kitchen-dining",
-      "category_slug": "home-living",
-      "active": 1,
-      "name": "Vacuum Flask"
+  "uploaded_images": {
+    "img-mu2vs17p-h9xy8": {
+      "id": "img-mu2vs17p-h9xy8",
+      "product_id": "general",
+      "filename": "test.png",
+      "data_url": "data:image/png;base64,iVBORw0KGgo=",
+      "created_at": "2026-09-15T16:23:08.581Z"
     }
-  ],
-  "child_categories": [
-    {
-      "name": "Kitchen Tools",
-      "subcategory_slug": "kitchen-dining",
-      "product_type_name": "Kitchen Appliances",
-      "id": "child-kitchen-tools",
-      "display_order": 10,
-      "active": 1,
-      "product_type_slug": "home-kitchen-appliances",
-      "category_id": "cat-home-kitchen-appliances",
-      "product_type_id": "pt-home-kitchen-appliances",
-      "created_at": "2026-09-09T16:33:38.578Z",
-      "slug": "kitchen-tools",
-      "image_url": "",
-      "updated_at": "2026-09-09T16:33:38.578Z",
-      "subcategory_id": "subcat-kitchen-dining",
-      "meta_title": "",
-      "meta_description": "",
-      "category_slug": "home-kitchen-appliances"
-    }
-  ],
-  "last_synced": "2026-09-11T07:41:44.631Z"
+  }
 }
