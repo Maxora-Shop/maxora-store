@@ -96,7 +96,8 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
           return (
             <div
               key={product.id}
-              className="group bg-white rounded-2xl border border-zinc-200 hover:border-rose-300 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col justify-between hover:-translate-y-1 h-full"
+              onClick={() => onQuickView(product)}
+              className="group bg-white rounded-2xl border border-zinc-200 hover:border-rose-300 overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col justify-between hover:-translate-y-1 h-full cursor-pointer"
             >
               {/* Product Image & Badges */}
               <div className="relative aspect-square bg-zinc-50 border-b border-zinc-100 flex items-center justify-center p-3 sm:p-4 overflow-hidden">
@@ -230,7 +231,10 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                     <button
                       type="button"
                       disabled={isOutOfStock}
-                      onClick={() => onAddToCart(product)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToCart(product);
+                      }}
                       className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
@@ -256,7 +260,10 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                     <button
                       type="button"
                       disabled={isOutOfStock}
-                      onClick={() => onBuyNow(product)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onBuyNow(product);
+                      }}
                       className={`py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'

@@ -7,6 +7,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
+import { getProductSlug } from '../utils/seo';
 
 interface PromoTripleSectionProps {
   products: Product[];
@@ -229,56 +230,76 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Safe handler to open product or add to cart for demo products
-  const handleItemClick = (item: Product | Partial<Product>) => {
-    if ('category_id' in item) {
-      onQuickView(item as Product);
+  // Resolve exact product from existing products pool by ID, slug, or name
+  const resolveProduct = (item: Product | Partial<Product>): Product => {
+    if (item.id) {
+      const found = products.find((p) => p.id === item.id);
+      if (found) return found;
     }
+    if (item.slug) {
+      const found = products.find((p) => p.slug === item.slug);
+      if (found) return found;
+    }
+    if (item.name) {
+      const found = products.find(
+        (p) => p.name?.toLowerCase().trim() === item.name?.toLowerCase().trim()
+      );
+      if (found) return found;
+    }
+    // If it is already a complete product
+    if (item.id && item.name && item.selling_price && item.image_url) {
+      return item as Product;
+    }
+    // For demo or partial fallback items, synthesize a complete Product record
+    const synthSlug = getProductSlug({
+      slug: item.slug,
+      name: item.name,
+      id: item.id || 'deal',
+    });
+
+    return {
+      id: item.id || `prod-${synthSlug}`,
+      name: item.name || 'Product',
+      slug: synthSlug,
+      category: item.category || 'Special Offer',
+      category_id: item.category_id,
+      category_slug: item.category_slug,
+      sub_category: item.sub_category,
+      subcategory_id: item.subcategory_id,
+      subcategory_slug: item.subcategory_slug,
+      child_category: item.child_category,
+      product_type: item.product_type,
+      image_url: item.image_url || (item.images && item.images[0]) || '',
+      images: item.images || (item.image_url ? [item.image_url] : []),
+      buying_price: Number(
+        item.buying_price || Math.round(Number(item.selling_price || 1500) * 0.7)
+      ),
+      selling_price: Number(item.selling_price || 1500),
+      discount: Number(item.discount || 0),
+      stock: Number(item.stock ?? 20),
+      active: 1,
+      featured: 1,
+      badge: item.badge,
+      description:
+        item.description ||
+        (item.name ? `${item.name} - Available with cash on delivery at Maxora.` : ''),
+    };
+  };
+
+  // Safe handler to open product details page
+  const handleItemClick = (item: Product | Partial<Product>) => {
+    const targetProduct = resolveProduct(item);
+    onQuickView(targetProduct);
   };
 
   const handleItemAddToCart = (item: Product | Partial<Product>) => {
-    if ('category_id' in item) {
-      onAddToCart(item as Product);
-    } else {
-      // Synthesize complete product object for demo products so user can test Add to Cart
-      const synthProduct: Product = {
-        id: item.id || 'demo-prod',
-        name: item.name || 'Product',
-        slug: (item.name || 'product').toLowerCase().replace(/\s+/g, '-'),
-        category: 'Electronics & Appliances',
-        category_id: 'cat-kitchen',
-        buying_price: Math.round(Number(item.selling_price || 1500) * 0.7),
-        selling_price: Number(item.selling_price || 1500),
-        discount: Number(item.discount || 0),
-        stock: 20,
-        image_url: item.image_url || '',
-        active: 1,
-        featured: 1,
-      };
-      onAddToCart(synthProduct);
-    }
+    const targetProduct = resolveProduct(item);
+    onAddToCart(targetProduct);
   };
 
   const handleItemBuyNow = (item: Product | Partial<Product>) => {
-    if ('category_id' in item) {
-      onBuyNow(item as Product);
-    } else {
-      const synthProduct: Product = {
-        id: item.id || 'demo-prod',
-        name: item.name || 'Product',
-        slug: (item.name || 'product').toLowerCase().replace(/\s+/g, '-'),
-        category: 'Electronics & Appliances',
-        category_id: 'cat-kitchen',
-        buying_price: Math.round(Number(item.selling_price || 1500) * 0.7),
-        selling_price: Number(item.selling_price || 1500),
-        discount: Number(item.discount || 0),
-        stock: 20,
-        image_url: item.image_url || '',
-        active: 1,
-        featured: 1,
-      };
-      onBuyNow(synthProduct);
-    }
+    const targetProduct = resolveProduct(item);
+    onBuyNow(targetProduct);
   };
 
   return (
@@ -343,27 +364,34 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                 return (
                   <div
                     key={product.id || `hd-${idx}`}
-                    className="bg-white rounded-xl border border-rose-100/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200"
+                    onClick={() => handleItemClick(product)}
+                    className="bg-white rounded-xl border border-rose-100/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>
                       {/* Image & Discount Badge */}
                       <div className="relative w-full h-18 sm:h-22 rounded-lg bg-zinc-50 flex items-center justify-center p-1 mb-1.5 overflow-hidden">
-                        <span className="absolute top-1 left-1 bg-red-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs">
+                        <span className="absolute top-1 left-1 bg-red-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs pointer-events-none">
                           -{percent}%
                         </span>
                         <img
                           src={imageSrc}
                           alt={product.name || 'Hot Deal'}
-                          onClick={() => handleItemClick(product)}
-                          className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleItemClick(product);
+                          }}
+                          className="w-full h-full object-contain cursor-pointer group-hover:scale-105 transition-transform"
                           loading="lazy"
                         />
                       </div>
 
                       {/* Title */}
                       <h4
-                        onClick={() => handleItemClick(product)}
-                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate hover:text-red-600 transition-colors cursor-pointer leading-tight mb-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleItemClick(product);
+                        }}
+                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate group-hover:text-red-600 transition-colors cursor-pointer leading-tight mb-1"
                         title={product.name}
                       >
                         {product.name}
@@ -394,7 +422,10 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                     {/* Add to Cart Button */}
                     <button
                       type="button"
-                      onClick={() => handleItemAddToCart(product)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemAddToCart(product);
+                      }}
                       className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                         isAdded
                           ? 'bg-emerald-600 text-white'
@@ -504,27 +535,34 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                 return (
                   <div
                     key={product.id || `fs-${idx}`}
-                    className="bg-white text-zinc-900 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200"
+                    onClick={() => handleItemClick(product)}
+                    className="bg-white text-zinc-900 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>
                       {/* Image & Discount Badge */}
                       <div className="relative w-full h-18 sm:h-22 rounded-lg bg-zinc-50 flex items-center justify-center p-1 mb-1.5 overflow-hidden">
-                        <span className="absolute top-1 left-1 bg-red-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs">
+                        <span className="absolute top-1 left-1 bg-red-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs pointer-events-none">
                           -{percent}%
                         </span>
                         <img
                           src={imageSrc}
                           alt={product.name || 'Flash Sale'}
-                          onClick={() => handleItemClick(product)}
-                          className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleItemClick(product);
+                          }}
+                          className="w-full h-full object-contain cursor-pointer group-hover:scale-105 transition-transform"
                           loading="lazy"
                         />
                       </div>
 
                       {/* Title */}
                       <h4
-                        onClick={() => handleItemClick(product)}
-                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate hover:text-red-600 transition-colors cursor-pointer leading-tight mb-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleItemClick(product);
+                        }}
+                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate group-hover:text-red-600 transition-colors cursor-pointer leading-tight mb-1"
                         title={product.name}
                       >
                         {product.name}
@@ -546,7 +584,10 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                     {/* Buy Now Button (matching screenshot "Buy Now") */}
                     <button
                       type="button"
-                      onClick={() => handleItemBuyNow(product)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemBuyNow(product);
+                      }}
                       className="w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-[#0f172a] hover:bg-zinc-800 text-white flex items-center justify-center gap-1 transition-colors cursor-pointer"
                     >
                       <span>Buy Now</span>
@@ -605,27 +646,34 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                 return (
                   <div
                     key={product.id || `na-${idx}`}
-                    className="bg-white rounded-xl border border-zinc-100 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200"
+                    onClick={() => handleItemClick(product)}
+                    className="bg-white rounded-xl border border-zinc-100 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>
                       {/* Image & Green NEW Badge */}
                       <div className="relative w-full h-18 sm:h-22 rounded-lg bg-zinc-50 flex items-center justify-center p-1 mb-1.5 overflow-hidden">
-                        <span className="absolute top-1 left-1 bg-emerald-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs">
+                        <span className="absolute top-1 left-1 bg-emerald-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full z-10 shadow-xs pointer-events-none">
                           NEW
                         </span>
                         <img
                           src={imageSrc}
                           alt={product.name || 'New Arrival'}
-                          onClick={() => handleItemClick(product)}
-                          className="w-full h-full object-contain cursor-pointer hover:scale-105 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleItemClick(product);
+                          }}
+                          className="w-full h-full object-contain cursor-pointer group-hover:scale-105 transition-transform"
                           loading="lazy"
                         />
                       </div>
 
                       {/* Title */}
                       <h4
-                        onClick={() => handleItemClick(product)}
-                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate hover:text-emerald-600 transition-colors cursor-pointer leading-tight mb-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleItemClick(product);
+                        }}
+                        className="text-[11px] sm:text-xs font-bold text-zinc-900 line-clamp-1 truncate group-hover:text-emerald-600 transition-colors cursor-pointer leading-tight mb-1"
                         title={product.name}
                       >
                         {product.name}
@@ -646,7 +694,10 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                     {/* Add to Cart Button */}
                     <button
                       type="button"
-                      onClick={() => handleItemAddToCart(product)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleItemAddToCart(product);
+                      }}
                       className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                         isAdded
                           ? 'bg-emerald-600 text-white'
