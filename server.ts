@@ -1513,6 +1513,30 @@ app.put('/api/admin/orders/:id', requireAdmin, (req, res) => {
     updated_at: new Date().toISOString()
   };
 
+  if (Array.isArray(body.items)) {
+    db.orders[oIndex].items = body.items;
+    db.order_items = db.order_items.filter(
+      (i: any) => String(i.order_id) !== String(orderId) && String(i.order_id) !== String(existing.order_number)
+    );
+    for (const item of body.items) {
+      db.order_items.push({
+        id: item.id || `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
+        order_id: orderId,
+        product_id: String(item.product_id || ""),
+        product_name: String(item.product_name || ""),
+        sku: String(item.sku || ""),
+        quantity: Math.max(1, Number(item.quantity) || 1),
+        unit_price: Number(item.unit_price) || 0,
+        buying_price: Number(item.buying_price) || 0,
+        line_total: Number(item.line_total ?? (Number(item.unit_price || 0) * Number(item.quantity || 1))),
+        image_url: String(item.image_url || ""),
+        selected_color: String(item.selected_color || ""),
+        selected_color_code: String(item.selected_color_code || ""),
+        slug: String(item.slug || "")
+      });
+    }
+  }
+
   saveDB();
   res.json({
     success: true,
