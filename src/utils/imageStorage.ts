@@ -214,3 +214,83 @@ export async function uploadProductImageToStorage(
     'Image upload failed. Please ensure Firebase Cloud Storage is enabled in your Firebase Console (Firebase Console -> Storage -> Get Started).'
   );
 }
+
+/**
+ * Uploads a category image and returns a permanent, public HTTPS image URL.
+ * 
+ * 1. Primary: Firebase Storage upload to `categories/{categoryId}/{timestamp}-category.webp`
+ * 2. Fallback: Server-assisted endpoint `/api/upload-image`
+ * 3. Final Fallback: Compressed WebP Data URL to ensure zero data loss
+ */
+export async function uploadCategoryImageToStorage(
+  file: File,
+  categoryId?: string
+): Promise<string> {
+  const cleanId = sanitizePathSegment(categoryId || `cat-${Date.now().toString(36)}`);
+
+  // Step 1: Compress image to binary Blob (1000x1000 max, 0.85 quality)
+  const { blob, mimeType, extension } = await compressImageToBlob(file, 1000, 1000, 0.85);
+
+  const timestamp = Date.now();
+  const cleanFileName = `${timestamp}-category.${extension}`;
+  const storagePath = `categories/${cleanId}/${cleanFileName}`;
+
+  // Step 2: Attempt primary Firebase Storage upload
+  if (storage) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      const snapshot = await uploadBytes(storageRef, blob, {
+        contentType: mimeType,
+        cacheControl: 'public, max-age=31536000, s-maxage=31536000',
+      });
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      if (downloadUrl && (downloadUrl.startsWith('https://') || downloadUrl.startsWith('http://'))) {
+        return downloadUrl.replace(/^http:\/\//i, 'https://');
+      }
+    } catch (storageErr: any) {
+      console.warn('Direct Firebase Storage category upload failed, falling back to server upload:', storageErr?.message);
+    }
+  }
+
+  // Step 3: Server Fallback Upload
+  try {
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const resp = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data_url: dataUrl,
+        filename: cleanFileName,
+        product_id: `category-${cleanId}`,
+      }),
+    });
+
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json.success && json.url && typeof json.url === 'string') {
+        return json.url;
+      }
+    }
+
+    if (dataUrl && dataUrl.startsWith('data:image/')) {
+      return dataUrl;
+    }
+  } catch (serverErr) {
+    console.warn('Server fallback category upload error:', serverErr);
+  }
+
+  // Step 4: Final reliable fallback
+  const fallbackReader = new FileReader();
+  return new Promise((resolve, reject) => {
+    fallbackReader.onload = () => resolve(fallbackReader.result as string);
+    fallbackReader.onerror = () => reject(new Error('Failed to read image file'));
+    fallbackReader.readAsDataURL(blob);
+  });
+}
+

@@ -75,7 +75,8 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "slug": { "type": "string" }
+        "slug": { "type": "string" },
+        "image_url": { "type": "string" }
       },
       "required": ["id", "name", "slug"]
     },

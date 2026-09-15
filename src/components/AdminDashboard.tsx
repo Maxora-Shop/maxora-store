@@ -72,6 +72,7 @@ import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
 import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
+import { CategoryImageUploader } from './CategoryImageUploader';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -926,6 +927,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       active: cat.active !== undefined ? Number(cat.active) : 1,
       display_order: cat.display_order ?? 1,
       icon: cat.icon || '',
+      image_url: cat.image_url || '',
     });
     setIsCategoryEditModalOpen(true);
   };
@@ -964,6 +966,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         active: Number(categoryToEdit.active) === 1 ? 1 : 0,
         display_order: Number(categoryToEdit.display_order) || 1,
         icon: categoryToEdit.icon?.trim() || '',
+        image_url: categoryToEdit.image_url?.trim() || '',
       };
 
       const res = await storeService.saveCategory(catData, password);
@@ -2865,6 +2868,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           slug: '',
                           active: 1,
                           display_order: dbCategories.length + 1,
+                          image_url: '',
                         });
                         setIsCategoryEditModalOpen(true);
                       }}
@@ -2916,8 +2920,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/80 transition-colors"
                         >
                           <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs">
-                              <FolderTree className="w-5 h-5 text-emerald-600" />
+                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                              {cat.image_url ? (
+                                <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <FolderTree className="w-5 h-5 text-emerald-600" />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -3398,6 +3406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               slug: '',
                               active: 1,
                               display_order: dbCategories.length + 1,
+                              image_url: '',
                             });
                             setIsCategoryEditModalOpen(true);
                           }}
@@ -3425,8 +3434,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/70 transition-colors"
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
-                                  <FolderTree className="w-4 h-4" />
+                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                                  {cat.image_url ? (
+                                    <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <FolderTree className="w-4 h-4" />
+                                  )}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -5630,6 +5643,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Direct File Upload for Category Image */}
+              <CategoryImageUploader
+                imageUrl={categoryToEdit.image_url || ''}
+                categoryId={categoryToEdit.id || categoryToEdit.slug || 'cat'}
+                onChange={(url) =>
+                  setCategoryToEdit({
+                    ...categoryToEdit,
+                    image_url: url,
+                  })
+                }
+              />
 
               {/* Modal Actions */}
               <div className="pt-3 border-t border-zinc-200 flex items-center justify-end gap-3">

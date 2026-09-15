@@ -24,6 +24,7 @@ import { generateSlug } from '../utils/seo';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
 import { useTaxonomy } from '../context/TaxonomyContext';
+import { CategoryImageUploader } from './CategoryImageUploader';
 
 interface AdminCategoriesProps {
   password?: string;
@@ -279,6 +280,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         slug,
         display_order: Number(editingCategory.display_order) || 1,
         active: editingCategory.active !== 0 && editingCategory.active !== false ? 1 : 0,
+        image_url: editingCategory.image_url?.trim() || '',
       };
 
       await storeService.saveCategory(catToSave, password);
@@ -920,9 +922,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                         )}
                       </button>
 
-                      <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shrink-0">
-                        1
-                      </span>
+                      {cat.image_url ? (
+                        <img
+                          src={cat.image_url}
+                          alt={cat.name}
+                          className="w-6 h-6 rounded-full object-cover border border-emerald-300 shrink-0 shadow-2xs"
+                        />
+                      ) : (
+                        <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shrink-0">
+                          1
+                        </span>
+                      )}
 
                       <div className="truncate">
                         <span className="font-black text-sm text-zinc-950">{cat.name}</span>
@@ -1284,7 +1294,20 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                     <tr key={cat.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="p-3.5 font-bold text-zinc-500">{cat.display_order ?? 1}</td>
                       <td className="p-3.5">
-                        <div className="font-black text-zinc-900 text-sm">{cat.name}</div>
+                        <div className="flex items-center gap-2.5">
+                          {cat.image_url ? (
+                            <img
+                              src={cat.image_url}
+                              alt={cat.name}
+                              className="w-8 h-8 rounded-full object-cover border border-emerald-300 shrink-0 shadow-2xs"
+                            />
+                          ) : (
+                            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-500 shrink-0">
+                              {cat.name.charAt(0)}
+                            </span>
+                          )}
+                          <div className="font-black text-zinc-900 text-sm">{cat.name}</div>
+                        </div>
                       </td>
                       <td className="p-3.5 font-mono text-zinc-500">{cat.slug}</td>
                       <td className="p-3.5 font-bold text-emerald-700">{subsCount} subs</td>
@@ -1783,20 +1806,14 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Image URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={editingCategory.image_url || ''}
-                  onChange={(e) =>
-                    setEditingCategory({ ...editingCategory, image_url: e.target.value })
-                  }
-                  className="w-full text-xs p-3 rounded-xl border border-zinc-300"
-                />
-              </div>
+              {/* Direct File Upload for Category Image */}
+              <CategoryImageUploader
+                imageUrl={editingCategory.image_url || ''}
+                categoryId={editingCategory.id || editingCategory.slug || 'category'}
+                onChange={(url) =>
+                  setEditingCategory({ ...editingCategory, image_url: url })
+                }
+              />
 
               <div className="flex items-center gap-2 pt-1">
                 <input

@@ -108,6 +108,7 @@ interface DBSchema {
   subcategories: any[];
   product_types?: any[];
   child_categories?: any[];
+  uploaded_images?: Record<string, any>;
 }
 
 const defaultSettings: Record<string, string> = {
@@ -179,7 +180,8 @@ try {
       orders: Array.isArray(parsed.orders) ? parsed.orders : [],
       order_items: Array.isArray(parsed.order_items) ? parsed.order_items : [],
       categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : defaultCategories,
-      subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories
+      subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories,
+      uploaded_images: parsed.uploaded_images || {}
     };
   } else {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -386,7 +388,10 @@ app.get('/api/product-image/:id', async (req, res) => {
 
   // Check if it's an uploaded image ID (e.g. img-...)
   if (productId.startsWith('img-')) {
-    if (!isFirestoreQuotaCooldownActive()) {
+    if (db.uploaded_images && db.uploaded_images[productId]?.data_url) {
+      rawImage = db.uploaded_images[productId].data_url;
+    }
+    if (!rawImage && !isFirestoreQuotaCooldownActive()) {
       try {
         const firestoreDb = getFirestoreInstance();
         const imgDoc = await getDoc(doc(firestoreDb, 'uploaded_images', productId));
@@ -394,6 +399,8 @@ app.get('/api/product-image/:id', async (req, res) => {
           const imgData = imgDoc.data();
           if (imgData.data_url) {
             rawImage = imgData.data_url;
+            if (!db.uploaded_images) db.uploaded_images = {};
+            db.uploaded_images[productId] = imgData;
           }
         }
       } catch (e) {
@@ -463,15 +470,26 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
 
     const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
     const cleanProdId = (product_id || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-
-    const firestoreDb = getFirestoreInstance();
-    await setDoc(doc(firestoreDb, 'uploaded_images', imageId), {
+    const imagePayload = {
       id: imageId,
       product_id: cleanProdId,
       filename: filename || 'image.webp',
       data_url,
       created_at: new Date().toISOString(),
-    });
+    };
+
+    // Save to local DB for instant fallback
+    if (!db.uploaded_images) db.uploaded_images = {};
+    db.uploaded_images[imageId] = imagePayload;
+    saveDB();
+
+    // Save to Firestore
+    try {
+      const firestoreDb = getFirestoreInstance();
+      await setDoc(doc(firestoreDb, 'uploaded_images', imageId), imagePayload);
+    } catch (fsErr) {
+      console.warn('Firestore setDoc uploaded_images warning (cached locally):', fsErr);
+    }
 
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'maxora-store-ruby.vercel.app';
     const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
