@@ -735,6 +735,15 @@ export const storeService = {
   getCachedBrands(): Brand[] {
     return getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
   },
+  getCachedOrders(): Order[] {
+    const deletedOrderIds = getDeletedOrderIds();
+    const raw = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    return raw.filter(
+      (o) =>
+        !deletedOrderIds.has(String(o.id)) &&
+        (!o.order_number || !deletedOrderIds.has(String(o.order_number)))
+    );
+  },
 
   // 1. SETTINGS
   async getSettings(): Promise<StoreSettings> {

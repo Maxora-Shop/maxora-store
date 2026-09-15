@@ -348,3 +348,5 @@ export interface ProductRatingStats {
   average: number;
   count: number;
 }
+
+export type ProductSortOption = 'newest' | 'best_selling' | 'price_asc' | 'price_desc';

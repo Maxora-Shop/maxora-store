@@ -23,7 +23,8 @@ import { BestSellersSection } from './components/BestSellersSection';
 import { TrustBenefitsSection } from './components/TrustBenefitsSection';
 import { FooterSection } from './components/FooterSection';
 import { ProductPagination } from './components/ProductPagination';
-import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand } from './types';
+import { ProductSortDropdown } from './components/ProductSortDropdown';
+import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand, ProductSortOption } from './types';
 import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import {
@@ -120,6 +121,10 @@ export default function App() {
 
   // Mobile Filter Drawer State
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
+
+  // Sort State ('newest' | 'best_selling' | 'price_asc' | 'price_desc')
+  const [sortBy, setSortBy] = useState<ProductSortOption>('newest');
+  const [ordersVersion, setOrdersVersion] = useState<number>(0);
 
   // Modals & Drawers
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -435,7 +440,12 @@ export default function App() {
       }
     };
 
+    const handleOrdersUpdated = () => {
+      setOrdersVersion((v) => v + 1);
+    };
+
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
+    window.addEventListener('maxora_orders_updated', handleOrdersUpdated);
     window.addEventListener('maxora_settings_updated', handleSettingsUpdated);
     window.addEventListener('maxora_categories_updated', handleCategoriesUpdated);
     window.addEventListener('maxora_subcategories_updated', handleCategoriesUpdated);
@@ -447,6 +457,7 @@ export default function App() {
 
     return () => {
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
+      window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
       window.removeEventListener('maxora_settings_updated', handleSettingsUpdated);
       window.removeEventListener('maxora_categories_updated', handleCategoriesUpdated);
       window.removeEventListener('maxora_subcategories_updated', handleCategoriesUpdated);
@@ -1011,11 +1022,85 @@ export default function App() {
     wishlistIds,
   ]);
 
+  // Real sales count per product calculated from orders in storeService + product.sold_count
+  const productSalesMap = useMemo<Record<string, number>>(() => {
+    const salesMap: Record<string, number> = {};
+    try {
+      const orders = storeService.getCachedOrders();
+      if (Array.isArray(orders)) {
+        for (const order of orders) {
+          if (order.status === 'Cancelled' || order.status === 'Returned') continue;
+          if (Array.isArray(order.items)) {
+            for (const item of order.items) {
+              if (item.product_id) {
+                const pid = String(item.product_id);
+                salesMap[pid] = (salesMap[pid] || 0) + Number(item.quantity || 1);
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Graceful fallback
+    }
+    for (const p of products) {
+      if (p.sold_count && Number(p.sold_count) > 0) {
+        salesMap[p.id] = (salesMap[p.id] || 0) + Number(p.sold_count);
+      }
+    }
+    return salesMap;
+  }, [products, ordersVersion]);
+
+  // Sorted products based on selected sort option before pagination
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    switch (sortBy) {
+      case 'price_asc':
+        return list.sort((a, b) => {
+          const priceA = Math.max(0, Number(a.selling_price || 0) - Number(a.discount || 0));
+          const priceB = Math.max(0, Number(b.selling_price || 0) - Number(b.discount || 0));
+          if (priceA !== priceB) return priceA - priceB;
+          const timeA = a.created_at ? new Date(a.created_at).getTime() || 0 : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() || 0 : 0;
+          return timeB - timeA;
+        });
+      case 'price_desc':
+        return list.sort((a, b) => {
+          const priceA = Math.max(0, Number(a.selling_price || 0) - Number(a.discount || 0));
+          const priceB = Math.max(0, Number(b.selling_price || 0) - Number(b.discount || 0));
+          if (priceB !== priceA) return priceB - priceA;
+          const timeA = a.created_at ? new Date(a.created_at).getTime() || 0 : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() || 0 : 0;
+          return timeB - timeA;
+        });
+      case 'best_selling':
+        return list.sort((a, b) => {
+          const salesA = productSalesMap[a.id] || 0;
+          const salesB = productSalesMap[b.id] || 0;
+          if (salesB !== salesA) return salesB - salesA;
+          const bestA = (a.is_best_seller === true || a.is_best_seller === 1 || String(a.is_best_seller) === '1') ? 1 : 0;
+          const bestB = (b.is_best_seller === true || b.is_best_seller === 1 || String(b.is_best_seller) === '1') ? 1 : 0;
+          if (bestB !== bestA) return bestB - bestA;
+          const timeA = a.created_at ? new Date(a.created_at).getTime() || 0 : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() || 0 : 0;
+          return timeB - timeA;
+        });
+      case 'newest':
+      default:
+        return list.sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() || 0 : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() || 0 : 0;
+          if (timeB !== timeA) return timeB - timeA;
+          return String(b.id).localeCompare(String(a.id));
+        });
+    }
+  }, [filteredProducts, sortBy, productSalesMap]);
+
   // Product Pagination State (Exactly 20 products per page by default)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const PRODUCTS_PER_PAGE = 20;
 
-  // Automatically reset to Page 1 whenever any filter or search changes
+  // Automatically reset to Page 1 whenever any filter, sort, or search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -1031,9 +1116,10 @@ export default function App() {
     availabilityFilter,
     minRatingFilter,
     showSavedOnly,
+    sortBy,
   ]);
 
-  const totalFilteredCount = filteredProducts.length;
+  const totalFilteredCount = sortedProducts.length;
   const totalPages = Math.max(1, Math.ceil(totalFilteredCount / PRODUCTS_PER_PAGE));
 
   // If page index exceeds totalPages after filtering or deleting products, clamp smoothly
@@ -1046,8 +1132,8 @@ export default function App() {
   // Paginated product slice for the active page
   const paginatedProducts = useMemo(() => {
     const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    return filteredProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
-  }, [filteredProducts, currentPage, PRODUCTS_PER_PAGE]);
+    return sortedProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  }, [sortedProducts, currentPage, PRODUCTS_PER_PAGE]);
 
   // Page change handler with smooth scrolling to the catalog view
   const handlePageChange = (page: number) => {
@@ -1283,54 +1369,61 @@ export default function App() {
             </nav>
           )}
 
-          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3 mb-6">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight flex items-center flex-wrap gap-2">
-                {showSavedOnly ? (
-                  <span className="flex items-center gap-2 text-rose-600">
-                    <Heart className="w-6 h-6 fill-rose-500 text-rose-500 inline" />
-                    Saved Items / Wishlist
-                  </span>
-                ) : (selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) ? (
-                  <>
-                    {displayCategoryName && <span>{displayCategoryName}</span>}
-                    {displaySubCategoryName && (
-                      <>
-                        <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-emerald-600">{displaySubCategoryName}</span>
-                      </>
-                    )}
-                    {displayProductTypeName && (
-                      <>
-                        <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-zinc-700">{displayProductTypeName}</span>
-                      </>
-                    )}
-                    {displayChildCategoryName && (
-                      <>
-                        <span className="text-zinc-400 font-light">/</span>
-                        <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg text-lg sm:text-xl font-black">
-                          {displayChildCategoryName}
-                        </span>
-                      </>
-                    )}
-                  </>
-                ) : searchQuery ? (
-                  `Search Results for "${searchQuery}"`
-                ) : (
-                  "Featured Collections"
-                )}
-              </h2>
-              <p className="text-xs sm:text-sm text-zinc-500 font-medium">
-                {showSavedOnly
-                  ? `Showing ${filteredProducts.length} saved item${filteredProducts.length === 1 ? '' : 's'}`
-                  : `Showing ${filteredProducts.length} ${filteredProducts.length === 1 ? 'product' : 'products'} matching your criteria`}
-              </p>
+          <div className="mb-6 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-zinc-900 tracking-tight flex items-center flex-wrap gap-2">
+                  {showSavedOnly ? (
+                    <span className="flex items-center gap-2 text-rose-600">
+                      <Heart className="w-6 h-6 fill-rose-500 text-rose-500 inline" />
+                      Saved Items / Wishlist
+                    </span>
+                  ) : (selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) ? (
+                    <>
+                      {displayCategoryName && <span>{displayCategoryName}</span>}
+                      {displaySubCategoryName && (
+                        <>
+                          <span className="text-zinc-400 font-light">/</span>
+                          <span className="text-emerald-600">{displaySubCategoryName}</span>
+                        </>
+                      )}
+                      {displayProductTypeName && (
+                        <>
+                          <span className="text-zinc-400 font-light">/</span>
+                          <span className="text-zinc-700">{displayProductTypeName}</span>
+                        </>
+                      )}
+                      {displayChildCategoryName && (
+                        <>
+                          <span className="text-zinc-400 font-light">/</span>
+                          <span className="text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg text-lg sm:text-xl font-black">
+                            {displayChildCategoryName}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  ) : searchQuery ? (
+                    `Search Results for "${searchQuery}"`
+                  ) : (
+                    "Featured Collections"
+                  )}
+                </h2>
+                <p className="text-xs sm:text-sm text-zinc-500 font-medium">
+                  {showSavedOnly
+                    ? `Showing ${totalFilteredCount} saved item${totalFilteredCount === 1 ? '' : 's'}`
+                    : `Showing ${totalFilteredCount} ${totalFilteredCount === 1 ? 'product' : 'products'} matching your criteria`}
+                </p>
+              </div>
+
+              {/* Sort by Dropdown */}
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <ProductSortDropdown value={sortBy} onChange={setSortBy} />
+              </div>
             </div>
 
             {/* Active Filters Badges & Clear Controls */}
             {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000 || availabilityFilter !== 'all' || minRatingFilter > 0) && (
-              <div className="flex items-center flex-wrap gap-2">
+              <div className="flex items-center flex-wrap gap-2 pt-1">
                 {selectedBrand && (
                   <button
                     onClick={() => setSelectedBrand('')}
