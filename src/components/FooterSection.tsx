@@ -343,18 +343,59 @@ Maxora Shop BD respects your personal privacy:
           </div>
 
           {/* Bottom Copyright & Security */}
-          <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
-            <p className="font-medium text-center sm:text-left">
+          <div className="pt-8 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+            <p className="font-medium text-center lg:text-left order-2 lg:order-1">
               {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
             </p>
-            <div className="flex items-center flex-wrap justify-center sm:justify-end gap-3">
-              <span className="flex items-center gap-1 text-zinc-400 font-semibold">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <div className="order-1 lg:order-2 flex items-center flex-wrap justify-center lg:justify-end gap-x-2.5 sm:gap-x-3 gap-y-2 text-xs">
+              {/* We Accept label */}
+              <span className="text-zinc-400 font-semibold text-xs tracking-tight">
+                We Accept
+              </span>
+
+              {/* Nagad Official Logo Badge */}
+              <div
+                className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#EC1C24]/60 transition-colors select-none"
+                title="Nagad (নগদ)"
+                aria-label="Nagad"
+              >
+                <img
+                  src="/images/payments/nagad.svg"
+                  alt="Nagad"
+                  className="h-5 sm:h-5.5 w-auto object-contain max-w-[68px]"
+                  loading="lazy"
+                />
+              </div>
+
+              <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+
+              {/* bKash Official Logo Badge */}
+              <div
+                className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#E2136E]/60 transition-colors select-none"
+                title="bKash"
+                aria-label="bKash"
+              >
+                <img
+                  src="/images/payments/bkash.svg"
+                  alt="bKash"
+                  className="h-5 sm:h-5.5 w-auto object-contain max-w-[72px]"
+                  loading="lazy"
+                />
+              </div>
+
+              <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+
+              {/* SSL Encrypted Checkout */}
+              <span className="flex items-center gap-1.5 text-zinc-400 font-semibold whitespace-nowrap">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>SSL Encrypted Checkout</span>
               </span>
-              <span>•</span>
-              <span className="flex items-center gap-1 text-zinc-400 font-semibold">
-                <CreditCard className="w-4 h-4 text-amber-400" />
+
+              <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+
+              {/* Cash on Delivery */}
+              <span className="flex items-center gap-1.5 text-zinc-400 font-semibold whitespace-nowrap">
+                <CreditCard className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Cash on Delivery</span>
               </span>
             </div>
