@@ -5,6 +5,7 @@ export const STORE_NAME = 'Maxora Shop';
 
 /**
  * Safely generates a URL-friendly, clean slug from a string.
+ * Supports alphanumeric, Latin diacritics normalization, Bengali script (\u0980-\u09FF), and hyphens.
  */
 export function generateSlug(text: string): string {
   if (!text) return '';
@@ -13,8 +14,8 @@ export function generateSlug(text: string): string {
     .toLowerCase()
     .trim()
     .normalize('NFD') // separate diacritics
-    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
-    .replace(/[^a-z0-9\s-]/g, '') // remove invalid characters
+    .replace(/[\u0300-\u036f]/g, '') // remove Latin diacritics
+    .replace(/[^a-z0-9\u0980-\u09ff\s-]/g, '') // preserve a-z, 0-9, Bengali Unicode, hyphens, and spaces
     .replace(/[\s_]+/g, '-') // collapse spaces and underscores to a single dash
     .replace(/-+/g, '-') // collapse multiple dashes
     .replace(/^-+|-+$/g, ''); // trim leading and trailing dashes
@@ -104,28 +105,56 @@ export function findProductBySlugOrId(
   slugOrId: string
 ): Product | null {
   if (!slugOrId || !products || products.length === 0) return null;
-  const target = slugOrId.toLowerCase().trim();
+  let decoded = slugOrId.trim();
+  try {
+    decoded = decodeURIComponent(slugOrId).trim();
+  } catch {
+    // keep original
+  }
+  const target = decoded.toLowerCase();
+  const rawTarget = slugOrId.toLowerCase().trim();
 
-  // 1. Direct slug match
-  const exactSlug = products.find((p) => p.slug && p.slug.toLowerCase().trim() === target);
+  // 1. Direct slug match (decoded and raw)
+  const exactSlug = products.find(
+    (p) =>
+      p.slug &&
+      (p.slug.toLowerCase().trim() === target || p.slug.toLowerCase().trim() === rawTarget)
+  );
   if (exactSlug) return exactSlug;
 
   // 2. Computed slug match
-  const computedSlug = products.find((p) => getProductSlug(p) === target);
+  const computedSlug = products.find((p) => {
+    const s = getProductSlug(p).toLowerCase();
+    return s === target || s === rawTarget;
+  });
   if (computedSlug) return computedSlug;
 
   // 3. SKU match (raw or slugified, e.g. MX-SW-09 or mx-sw-09)
   const skuMatch = products.find(
-    (p) => p.sku && (p.sku.toLowerCase().trim() === target || generateSlug(p.sku) === target)
+    (p) =>
+      p.sku &&
+      (p.sku.toLowerCase().trim() === target ||
+        p.sku.toLowerCase().trim() === rawTarget ||
+        generateSlug(p.sku) === target)
   );
   if (skuMatch) return skuMatch;
 
-  // 4. Name slug match
-  const nameMatch = products.find((p) => p.name && generateSlug(p.name) === target);
+  // 4. Name slug or direct name match
+  const nameMatch = products.find(
+    (p) =>
+      p.name &&
+      (p.name.toLowerCase().trim() === target ||
+        p.name.toLowerCase().trim() === rawTarget ||
+        generateSlug(p.name) === target)
+  );
   if (nameMatch) return nameMatch;
 
   // 5. ID match
-  const idMatch = products.find((p) => String(p.id).toLowerCase() === target);
+  const idMatch = products.find(
+    (p) =>
+      String(p.id).toLowerCase() === target ||
+      String(p.id).toLowerCase() === rawTarget
+  );
   if (idMatch) return idMatch;
 
   return null;

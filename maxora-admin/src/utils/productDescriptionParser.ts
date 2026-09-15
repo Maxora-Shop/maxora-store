@@ -58,13 +58,65 @@ const SPEC_KEYWORD_MAP: Array<{ regex: RegExp; label: string }> = [
 ];
 
 /**
- * Strips leading bullet symbols, asterisks, checkmarks, dashes, numbers, etc.
+ * Patterns for SEO keyword lines that must be stripped from customer-facing view
  */
-function cleanBulletText(text: string): string {
-  return text
-    .replace(/^[\s•\-\*\✓\✔\▪\▫\+►\–\—]+/, '')
+const SEO_KEYWORD_LINE_PATTERN = /^(?:seo\s*keywords?|meta\s*keywords?|keywords?|search\s*tags?|tags?|product\s*tags?|সার্চ\s*কি-ওয়ার্ড|কি-ওয়ার্ড|ট্যাগ)[:\s]/i;
+
+/**
+ * Checks if a text line is purely a comma-delimited keyword dump
+ */
+function isKeywordDumpLine(line: string): boolean {
+  if (SEO_KEYWORD_LINE_PATTERN.test(line)) return true;
+  const lower = line.toLowerCase();
+  if (lower.startsWith('keywords:') || lower.startsWith('tags:') || lower.startsWith('seo:')) return true;
+  // If line has many commas and short fragments without proper sentences or verbs
+  const commaParts = line.split(',');
+  if (commaParts.length >= 4 && !line.includes('.') && commaParts.every(p => p.trim().split(/\s+/).length <= 4)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Strips raw HTML, Markdown syntax, JSON blocks, leading bullets, asterisks, checkmarks, dashes, numbers, etc.
+ */
+export function sanitizeText(text: string): string {
+  if (!text) return '';
+  let s = text;
+  // 1. Strip script or style blocks
+  s = s.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  s = s.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  // 2. Strip HTML tags
+  s = s.replace(/<[^>]+>/g, ' ');
+  // 3. Decode HTML entities
+  s = s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+  // 4. Strip markdown headings
+  s = s.replace(/^#{1,6}\s+/, '');
+  // 5. Strip markdown bold / italic / strikethrough / code
+  s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
+  s = s.replace(/\*([^*]+)\*/g, '$1');
+  s = s.replace(/__([^_]+)__/g, '$1');
+  s = s.replace(/_([^_]+)_/g, '$1');
+  s = s.replace(/~~([^~]+)~~/g, '$1');
+  s = s.replace(/`{1,3}([^`]+)`{1,3}/g, '$1');
+  // 6. Strip leading bullets and numbering
+  s = s
+    .replace(/^[\s•\-\*\✓\✔\▪\▫\+►\–\—\>]+/, '')
     .replace(/^\d+[\.\)\-]\s*/, '')
     .trim();
+  // 7. Normalize multiple spaces
+  s = s.replace(/\s{2,}/g, ' ');
+  return s.trim();
+}
+
+function cleanBulletText(text: string): string {
+  return sanitizeText(text);
 }
 
 /**
@@ -205,7 +257,21 @@ export function parseProductDescription(
   let hasExplicitHeaders = false;
 
   // Pass 1: Scan for explicit section headings and categorize lines
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    // 1. Completely ignore keyword dumps and SEO tags on customer-facing view
+    if (isKeywordDumpLine(rawLine)) {
+      continue;
+    }
+
+    // 2. Ignore raw JSON code or object representations
+    const trimmed = rawLine.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      continue;
+    }
+
+    const line = sanitizeText(rawLine);
+    if (!line) continue;
+
     // Check for section headings
     if (SECTION_PATTERNS.overview.test(line)) {
       currentSection = 'overview';

@@ -31,6 +31,30 @@ const CHILD_CATEGORIES_KEY = 'maxora_child_categories_v1';
 const REVIEWS_KEY = 'maxora_reviews_v1';
 const BRANDS_KEY = 'maxora_brands_v1';
 
+// Cross-tab broadcast channel for instant real-time synchronization between Admin and Storefront
+const syncChannel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('maxora_sync_bus_v1')
+  : null;
+
+if (syncChannel && typeof window !== 'undefined') {
+  syncChannel.onmessage = (event) => {
+    const type = event.data?.type;
+    if (type === 'products') {
+      window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+    } else if (type === 'settings') {
+      window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    } else if (type === 'categories') {
+      window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    } else if (type === 'orders') {
+      window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+    } else if (type === 'reviews') {
+      window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
+    } else if (type === 'brands') {
+      window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
+    }
+  };
+}
+
 function notifyCustomerAuthChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_customer_auth_changed'));
@@ -40,54 +64,113 @@ function notifyCustomerAuthChanged(): void {
 function notifyProductsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+    try {
+      localStorage.setItem('maxora_products_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'products' });
+    } catch {}
   }
 }
 
 function notifySettingsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    try {
+      localStorage.setItem('maxora_settings_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'settings' });
+    } catch {}
   }
 }
 
 function notifyOrdersChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_orders_updated'));
+    try {
+      localStorage.setItem('maxora_orders_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'orders' });
+    } catch {}
   }
 }
 
 function notifyCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifySubCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_subcategories_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyProductTypesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_product_types_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyChildCategoriesChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_child_categories_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+    } catch {}
   }
 }
 
 function notifyReviewsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_reviews_updated'));
+    try {
+      localStorage.setItem('maxora_reviews_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'reviews' });
+    } catch {}
   }
 }
 
 function notifyBrandsChanged(): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('maxora_brands_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+    try {
+      localStorage.setItem('maxora_categories_sync', Date.now().toString());
+    } catch {}
+    try {
+      syncChannel?.postMessage({ type: 'categories' });
+      syncChannel?.postMessage({ type: 'brands' });
+    } catch {}
   }
 }
 
@@ -104,8 +187,6 @@ export function cleanForFirestore<T>(data: T): T {
     for (const [key, value] of Object.entries(data as Record<string, any>)) {
       if (value !== undefined) {
         cleaned[key] = cleanForFirestore(value);
-      } else {
-        cleaned[key] = '';
       }
     }
     return cleaned as T;
@@ -247,6 +328,42 @@ export function initLocalStorage(): void {
 // Initialize immediately
 initLocalStorage();
 
+export function isQuotaExceededError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || String(err)).toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    msg.includes('quota limit exceeded') ||
+    msg.includes('quota exceeded') ||
+    msg.includes('free daily read units') ||
+    msg.includes('rate-limit') ||
+    msg.includes('disconnecting idle stream')
+  );
+}
+
+let clientQuotaCooldownUntil = 0;
+let clientQuotaNoticeLogged = false;
+
+export function isClientQuotaCooldownActive(): boolean {
+  return Date.now() < clientQuotaCooldownUntil;
+}
+
+export function handleStoreFirestoreError(context: string, err: any) {
+  if (isQuotaExceededError(err)) {
+    clientQuotaCooldownUntil = Date.now() + 15 * 60 * 1000;
+    if (!clientQuotaNoticeLogged) {
+      clientQuotaNoticeLogged = true;
+      console.info(`[StoreService] Firestore daily read quota reached for free tier (${context}). Operating smoothly with cached local storage & data.`);
+    }
+    return;
+  }
+  const msg = err?.message || String(err);
+  if (!msg.includes('idle stream') && !msg.includes('CANCELLED')) {
+    console.warn(`${context} notice:`, msg);
+  }
+}
+
 // Firestore Realtime Listeners
 let isListening = false;
 export function initRealtimeFirestoreListeners() {
@@ -278,7 +395,7 @@ export function initRealtimeFirestoreListeners() {
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setLocal(PRODUCTS_KEY, prods);
       notifyProductsChanged();
-    }, (err) => console.warn('Products Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Products snapshot', err));
 
     // 2. Listen for settings changes
     onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
@@ -287,7 +404,7 @@ export function initRealtimeFirestoreListeners() {
         setLocal(SETTINGS_KEY, settings);
         notifySettingsChanged();
       }
-    }, (err) => console.warn('Settings Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Settings snapshot', err));
 
     // 3. Listen for orders changes (realtime cloud sync)
     onSnapshot(collection(db, 'orders'), (snapshot) => {
@@ -319,7 +436,7 @@ export function initRealtimeFirestoreListeners() {
       orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setLocal(ORDERS_KEY, orders);
       notifyOrdersChanged();
-    }, (err) => console.warn('Orders Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Orders snapshot', err));
 
     // 4. Listen for categories changes
     onSnapshot(collection(db, 'categories'), (snapshot) => {
@@ -333,7 +450,7 @@ export function initRealtimeFirestoreListeners() {
         setLocal(CATEGORIES_KEY, cats);
         notifyCategoriesChanged();
       }
-    }, (err) => console.warn('Categories Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Categories snapshot', err));
 
     // 5. Listen for subcategories changes
     onSnapshot(collection(db, 'subcategories'), (snapshot) => {
@@ -347,7 +464,7 @@ export function initRealtimeFirestoreListeners() {
         setLocal(SUBCATEGORIES_KEY, subcats);
         notifySubCategoriesChanged();
       }
-    }, (err) => console.warn('Subcategories Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Subcategories snapshot', err));
 
     // 6. Listen for product_types changes
     onSnapshot(collection(db, 'product_types'), (snapshot) => {
@@ -361,7 +478,7 @@ export function initRealtimeFirestoreListeners() {
         setLocal(PRODUCT_TYPES_KEY, types);
         notifyProductTypesChanged();
       }
-    }, (err) => console.warn('ProductTypes Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('ProductTypes snapshot', err));
 
     // 7. Listen for child_categories changes
     onSnapshot(collection(db, 'child_categories'), (snapshot) => {
@@ -375,7 +492,7 @@ export function initRealtimeFirestoreListeners() {
         setLocal(CHILD_CATEGORIES_KEY, children);
         notifyChildCategoriesChanged();
       }
-    }, (err) => console.warn('ChildCategories Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('ChildCategories snapshot', err));
 
     // 8. Listen for reviews changes
     onSnapshot(collection(db, 'reviews'), (snapshot) => {
@@ -389,9 +506,23 @@ export function initRealtimeFirestoreListeners() {
         setLocal(REVIEWS_KEY, revs);
         notifyReviewsChanged();
       }
-    }, (err) => console.warn('Reviews Firestore snapshot warning:', err));
+    }, (err) => handleStoreFirestoreError('Reviews snapshot', err));
+
+    // 9. Listen for brands changes
+    onSnapshot(collection(db, 'brands'), (snapshot) => {
+      if (!snapshot.empty) {
+        const brandsList: Brand[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data() as Brand;
+          brandsList.push({ ...d, id: String(d.id || docSnap.id) });
+        });
+        brandsList.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+        setLocal(BRANDS_KEY, brandsList);
+        notifyBrandsChanged();
+      }
+    }, (err) => handleStoreFirestoreError('Brands snapshot', err));
   } catch (err) {
-    console.warn('Realtime listener error:', err);
+    handleStoreFirestoreError('Realtime listener registration', err);
   }
 }
 
@@ -457,7 +588,7 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
 // Seed initial products and multi-tier taxonomy to Firestore if empty
 let isSeeding = false;
 export async function seedInitialDataIfNeeded() {
-  if (isSeeding) return;
+  if (isSeeding || isClientQuotaCooldownActive()) return;
   isSeeding = true;
   try {
     // 1. Seed Products if empty
@@ -567,7 +698,7 @@ export async function seedInitialDataIfNeeded() {
       await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
     }
   } catch (e) {
-    console.warn('Firestore seeding check error:', e);
+    handleStoreFirestoreError('Firestore seeding check', e);
   } finally {
     isSeeding = false;
   }
@@ -604,22 +735,33 @@ export const storeService = {
   getCachedBrands(): Brand[] {
     return getLocal<Brand[]>(BRANDS_KEY, INITIAL_BRANDS);
   },
+  getCachedOrders(): Order[] {
+    const deletedOrderIds = getDeletedOrderIds();
+    const raw = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
+    return raw.filter(
+      (o) =>
+        !deletedOrderIds.has(String(o.id)) &&
+        (!o.order_number || !deletedOrderIds.has(String(o.order_number)))
+    );
+  },
 
   // 1. SETTINGS
   async getSettings(): Promise<StoreSettings> {
     const local = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     
-    // 1. Try Firestore
-    try {
-      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-      if (docSnap.exists()) {
-        const firestoreSettings = docSnap.data() as StoreSettings;
-        const merged = { ...local, ...firestoreSettings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
+    // 1. Try Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (docSnap.exists()) {
+          const firestoreSettings = docSnap.data() as StoreSettings;
+          const merged = { ...local, ...firestoreSettings };
+          setLocal(SETTINGS_KEY, merged);
+          return merged;
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getSettings', e);
       }
-    } catch (e) {
-      console.warn('Firestore getSettings error:', e);
     }
 
     // 2. Try REST API
@@ -639,7 +781,7 @@ export const storeService = {
 
     // 1. Update Firestore
     try {
-      await setDoc(doc(db, 'settings', 'store_settings'), updated, { merge: true });
+      await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
     } catch (e) {
       console.warn('Firestore updateSettings error:', e);
     }
@@ -670,30 +812,32 @@ export const storeService = {
     const deletedProductIds = getDeletedProductIds();
     let prods: Product[] = [];
 
-    // 1. Try Firestore directly
-    try {
-      const snap = await getDocs(collection(db, 'products'));
-      if (!snap.empty) {
-        snap.forEach((d) => {
-          const item = d.data() as Product;
-          const pId = String(item.id || d.id);
-          const pSku = String(item.sku || '');
-          const pSlug = String(item.slug || '');
-          const pName = String(item.name || '').trim();
-          if (!pName) {
-            return;
+    // 1. Try Firestore directly if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'products'));
+        if (!snap.empty) {
+          snap.forEach((d) => {
+            const item = d.data() as Product;
+            const pId = String(item.id || d.id);
+            const pSku = String(item.sku || '');
+            const pSlug = String(item.slug || '');
+            const pName = String(item.name || '').trim();
+            if (!pName) {
+              return;
+            }
+            if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+              return;
+            }
+            prods.push({ ...item, id: pId });
+          });
+          if (prods.length > 0) {
+            setLocal(PRODUCTS_KEY, prods);
           }
-          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-            return;
-          }
-          prods.push({ ...item, id: pId });
-        });
-        if (prods.length > 0) {
-          setLocal(PRODUCTS_KEY, prods);
         }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getProducts', e);
       }
-    } catch (e) {
-      console.warn('Firestore getProducts error, falling back to cache:', e);
     }
 
     // 2. Fallback to cached local storage
@@ -841,13 +985,15 @@ export const storeService = {
     }
 
     // 2. Try Firestore (quota-safe)
-    try {
-      const snap = await getDocs(collection(db, 'products'));
-      if (!snap.empty) {
-        snap.forEach((d) => registerProduct(d.data(), d.id));
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'products'));
+        if (!snap.empty) {
+          snap.forEach((d) => registerProduct(d.data(), d.id));
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getAllAdminProducts', e);
       }
-    } catch (e) {
-      console.warn('Firestore getAllAdminProducts warning:', e);
     }
 
     // 3. Merge local cache
@@ -884,9 +1030,17 @@ export const storeService = {
       name: productData.name || 'New Product',
       description: productData.description || '',
       category: productData.category || 'Smart Gadgets',
+      category_id: productData.category_id || '',
+      category_slug: productData.category_slug || (productData.category ? generateSlug(productData.category) : ''),
       sub_category: productData.sub_category || '',
+      subcategory_id: productData.subcategory_id || '',
+      subcategory_slug: productData.subcategory_slug || (productData.sub_category ? generateSlug(productData.sub_category) : ''),
       child_category: productData.child_category || '',
+      child_category_id: productData.child_category_id || '',
+      child_category_slug: productData.child_category_slug || (productData.child_category ? generateSlug(productData.child_category) : ''),
       product_type: productData.product_type || 'Standard Product',
+      product_type_id: productData.product_type_id || '',
+      product_type_slug: productData.product_type_slug || (productData.product_type ? generateSlug(productData.product_type) : ''),
       colors: productData.colors || [],
       product_link: productData.product_link || '',
       sku: productData.sku || `MX-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
@@ -905,6 +1059,8 @@ export const storeService = {
       meta_keywords: productData.meta_keywords || '',
       slug: finalSlug,
       brand: productData.brand || 'Maxora',
+      brand_id: productData.brand_id || '',
+      brand_slug: productData.brand_slug || '',
       og_image: productData.og_image || productData.image_url || images[0],
       created_at: productData.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -912,7 +1068,7 @@ export const storeService = {
 
     // 1. Save directly to Cloud Firestore
     try {
-      await setDoc(doc(db, 'products', String(newProd.id)), newProd);
+      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd));
     } catch (e) {
       console.warn('Firestore save product error:', e);
     }
@@ -969,7 +1125,7 @@ export const storeService = {
 
     // 1. Update Firestore
     try {
-      await setDoc(doc(db, 'products', idStr), updated, { merge: true });
+      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
     } catch (e) {
       console.warn('Firestore update product error:', e);
     }
@@ -1368,16 +1524,18 @@ export const storeService = {
       console.warn('API getAllAdminOrders notice:', e);
     }
 
-    // 2. Fetch from Firestore (quota-tolerant cloud DB)
-    try {
-      const snap = await getDocs(collection(db, 'orders'));
-      if (!snap.empty) {
-        snap.forEach((d) => {
-          registerOrder(d.data(), d.id);
-        });
+    // 2. Fetch from Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'orders'));
+        if (!snap.empty) {
+          snap.forEach((d) => {
+            registerOrder(d.data(), d.id);
+          });
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getAllAdminOrders', e);
       }
-    } catch (e) {
-      console.warn('Firestore getAllAdminOrders notice (quota or offline):', e);
     }
 
     // 3. Merge local cached orders
@@ -1596,17 +1754,19 @@ export const storeService = {
   async getAllCustomers(adminPassword?: string): Promise<Customer[]> {
     let customers: Customer[] = [];
 
-    // 1. Firestore
-    try {
-      const snap = await getDocs(collection(db, 'customers'));
-      if (!snap.empty) {
-        snap.forEach((d) => customers.push(d.data() as Customer));
-        if (customers.length > 0) {
-          setLocal(CUSTOMERS_KEY, customers);
+    // 1. Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'customers'));
+        if (!snap.empty) {
+          snap.forEach((d) => customers.push(d.data() as Customer));
+          if (customers.length > 0) {
+            setLocal(CUSTOMERS_KEY, customers);
+          }
         }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getAllCustomers', e);
       }
-    } catch (e) {
-      console.warn('Firestore getAllCustomers error:', e);
     }
 
     if (customers.length === 0) {
@@ -1926,18 +2086,21 @@ export const storeService = {
   async getCategories(): Promise<Category[]> {
     let cats: Category[] = [];
     let firestoreSuccess = false;
-    try {
-      const snap = await getDocs(collection(db, 'categories'));
-      if (!snap.empty) {
-        firestoreSuccess = true;
-        snap.forEach((d) => {
-          const item = d.data() as Category;
-          cats.push({ ...item, id: String(item.id || d.id) });
-        });
-        setLocal(CATEGORIES_KEY, cats);
+    // 1. Try Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'categories'));
+        if (!snap.empty) {
+          firestoreSuccess = true;
+          snap.forEach((d) => {
+            const item = d.data() as Category;
+            cats.push({ ...item, id: String(item.id || d.id) });
+          });
+          setLocal(CATEGORIES_KEY, cats);
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getCategories', e);
       }
-    } catch (e) {
-      console.warn('Firestore getCategories error:', e);
     }
 
     if (!firestoreSuccess) {
@@ -1970,7 +2133,7 @@ export const storeService = {
 
     // Save to Firestore
     try {
-      await setDoc(doc(db, 'categories', id), newCategory, { merge: true });
+      await setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true });
     } catch (e) {
       console.warn('Firestore saveCategory error:', e);
     }
@@ -2091,18 +2254,21 @@ export const storeService = {
   async getSubCategories(categorySlug?: string): Promise<SubCategory[]> {
     let subcats: SubCategory[] = [];
     let firestoreSuccess = false;
-    try {
-      const snap = await getDocs(collection(db, 'subcategories'));
-      if (!snap.empty) {
-        firestoreSuccess = true;
-        snap.forEach((d) => {
-          const item = d.data() as SubCategory;
-          subcats.push({ ...item, id: String(item.id || d.id) });
-        });
-        setLocal(SUBCATEGORIES_KEY, subcats);
+    // 1. Try Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'subcategories'));
+        if (!snap.empty) {
+          firestoreSuccess = true;
+          snap.forEach((d) => {
+            const item = d.data() as SubCategory;
+            subcats.push({ ...item, id: String(item.id || d.id) });
+          });
+          setLocal(SUBCATEGORIES_KEY, subcats);
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getSubCategories', e);
       }
-    } catch (e) {
-      console.warn('Firestore getSubCategories error:', e);
     }
 
     if (!firestoreSuccess) {
@@ -2143,7 +2309,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'subcategories', id), newSubCategory, { merge: true });
+      await setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true });
     } catch (e) {
       console.warn('Firestore saveSubCategory error:', e);
     }
@@ -2255,42 +2421,44 @@ export const storeService = {
   async getProductTypes(subcategorySlugOrId?: string, activeOnly: boolean = false): Promise<ProductType[]> {
     const local = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
 
-    try {
-      const snapshot = await getDocs(collection(db, 'product_types'));
-      if (!snapshot.empty) {
-        const firestoreTypes: ProductType[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as ProductType;
-          firestoreTypes.push({
-            ...d,
-            id: String(d.id || docSnap.id),
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snapshot = await getDocs(collection(db, 'product_types'));
+        if (!snapshot.empty) {
+          const firestoreTypes: ProductType[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data() as ProductType;
+            firestoreTypes.push({
+              ...d,
+              id: String(d.id || docSnap.id),
+            });
           });
-        });
 
-        // Merge with local/initial
-        const existingIds = new Set(firestoreTypes.map((t) => t.id));
-        const merged = [
-          ...firestoreTypes,
-          ...local.filter((l) => !existingIds.has(l.id)),
-        ];
-        merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(PRODUCT_TYPES_KEY, merged);
+          // Merge with local/initial
+          const existingIds = new Set(firestoreTypes.map((t) => t.id));
+          const merged = [
+            ...firestoreTypes,
+            ...local.filter((l) => !existingIds.has(l.id)),
+          ];
+          merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+          setLocal(PRODUCT_TYPES_KEY, merged);
 
-        let result = merged;
-        if (activeOnly) {
-          result = result.filter((t) => t.active !== 0 && t.active !== false && String(t.active) !== '0');
+          let result = merged;
+          if (activeOnly) {
+            result = result.filter((t) => t.active !== 0 && t.active !== false && String(t.active) !== '0');
+          }
+          if (subcategorySlugOrId) {
+            const target = subcategorySlugOrId.toLowerCase().trim();
+            result = result.filter((t) =>
+              (t.subcategory_id && t.subcategory_id.toLowerCase() === target) ||
+              (t.subcategory_slug && t.subcategory_slug.toLowerCase() === target)
+            );
+          }
+          return result;
         }
-        if (subcategorySlugOrId) {
-          const target = subcategorySlugOrId.toLowerCase().trim();
-          result = result.filter((t) =>
-            (t.subcategory_id && t.subcategory_id.toLowerCase() === target) ||
-            (t.subcategory_slug && t.subcategory_slug.toLowerCase() === target)
-          );
-        }
-        return result;
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getProductTypes', e);
       }
-    } catch (e) {
-      console.warn('Firestore getProductTypes error:', e);
     }
 
     let result = local;
@@ -2329,7 +2497,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'product_types', id), newType, { merge: true });
+      await setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true });
     } catch (e) {
       console.warn('Firestore saveProductType error:', e);
     }
@@ -2467,42 +2635,44 @@ export const storeService = {
   async getChildCategories(productTypeSlugOrId?: string, activeOnly: boolean = false): Promise<ChildCategory[]> {
     const local = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
 
-    try {
-      const snapshot = await getDocs(collection(db, 'child_categories'));
-      if (!snapshot.empty) {
-        const firestoreChildren: ChildCategory[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as ChildCategory;
-          firestoreChildren.push({
-            ...d,
-            id: String(d.id || docSnap.id),
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snapshot = await getDocs(collection(db, 'child_categories'));
+        if (!snapshot.empty) {
+          const firestoreChildren: ChildCategory[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data() as ChildCategory;
+            firestoreChildren.push({
+              ...d,
+              id: String(d.id || docSnap.id),
+            });
           });
-        });
 
-        // Merge with local/initial
-        const existingIds = new Set(firestoreChildren.map((c) => c.id));
-        const merged = [
-          ...firestoreChildren,
-          ...local.filter((l) => !existingIds.has(l.id)),
-        ];
-        merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(CHILD_CATEGORIES_KEY, merged);
+          // Merge with local/initial
+          const existingIds = new Set(firestoreChildren.map((c) => c.id));
+          const merged = [
+            ...firestoreChildren,
+            ...local.filter((l) => !existingIds.has(l.id)),
+          ];
+          merged.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
+          setLocal(CHILD_CATEGORIES_KEY, merged);
 
-        let result = merged;
-        if (activeOnly) {
-          result = result.filter((c) => c.active !== 0 && c.active !== false && String(c.active) !== '0');
+          let result = merged;
+          if (activeOnly) {
+            result = result.filter((c) => c.active !== 0 && c.active !== false && String(c.active) !== '0');
+          }
+          if (productTypeSlugOrId) {
+            const target = productTypeSlugOrId.toLowerCase().trim();
+            result = result.filter((c) =>
+              (c.product_type_id && c.product_type_id.toLowerCase() === target) ||
+              (c.product_type_slug && c.product_type_slug.toLowerCase() === target)
+            );
+          }
+          return result;
         }
-        if (productTypeSlugOrId) {
-          const target = productTypeSlugOrId.toLowerCase().trim();
-          result = result.filter((c) =>
-            (c.product_type_id && c.product_type_id.toLowerCase() === target) ||
-            (c.product_type_slug && c.product_type_slug.toLowerCase() === target)
-          );
-        }
-        return result;
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getChildCategories', e);
       }
-    } catch (e) {
-      console.warn('Firestore getChildCategories error:', e);
     }
 
     let result = local;
@@ -2544,7 +2714,7 @@ export const storeService = {
     };
 
     try {
-      await setDoc(doc(db, 'child_categories', id), newChild, { merge: true });
+      await setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true });
     } catch (e) {
       console.warn('Firestore saveChildCategory error:', e);
     }
@@ -2638,32 +2808,34 @@ export const storeService = {
   async getReviews(productId?: string): Promise<Review[]> {
     const local = getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
 
-    try {
-      let q = query(collection(db, 'reviews'));
-      if (productId) {
-        q = query(collection(db, 'reviews'), where('product_id', '==', productId));
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        let q = query(collection(db, 'reviews'));
+        if (productId) {
+          q = query(collection(db, 'reviews'), where('product_id', '==', productId));
+        }
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const firestoreRevs: Review[] = [];
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data() as Review;
+            firestoreRevs.push({ ...d, id: String(d.id || docSnap.id) });
+          });
+          firestoreRevs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          
+          // Merge with local to preserve immediate writes
+          const map = new Map<string, Review>();
+          local.forEach((r) => map.set(r.id, r));
+          firestoreRevs.forEach((r) => map.set(r.id, r));
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          );
+          setLocal(REVIEWS_KEY, merged);
+          return productId ? merged.filter((r) => r.product_id === productId) : merged;
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getReviews', e);
       }
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        const firestoreRevs: Review[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as Review;
-          firestoreRevs.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        firestoreRevs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        
-        // Merge with local to preserve immediate writes
-        const map = new Map<string, Review>();
-        local.forEach((r) => map.set(r.id, r));
-        firestoreRevs.forEach((r) => map.set(r.id, r));
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-        );
-        setLocal(REVIEWS_KEY, merged);
-        return productId ? merged.filter((r) => r.product_id === productId) : merged;
-      }
-    } catch (e) {
-      console.warn('Firestore getReviews error, falling back to local:', e);
     }
 
     // Try REST API fallback if available
@@ -2778,21 +2950,23 @@ export const storeService = {
     let brands: Brand[] = [];
     let firestoreSuccess = false;
 
-    // 1. Firestore
-    try {
-      const snap = await getDocs(collection(db, 'brands'));
-      if (!snap.empty) {
-        firestoreSuccess = true;
-        snap.forEach((d) => {
-          const item = d.data() as Brand;
-          brands.push({ ...item, id: String(item.id || d.id) });
-        });
-        if (brands.length > 0) {
-          setLocal(BRANDS_KEY, brands);
+    // 1. Firestore if quota cooldown is not active
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const snap = await getDocs(collection(db, 'brands'));
+        if (!snap.empty) {
+          firestoreSuccess = true;
+          snap.forEach((d) => {
+            const item = d.data() as Brand;
+            brands.push({ ...item, id: String(item.id || d.id) });
+          });
+          if (brands.length > 0) {
+            setLocal(BRANDS_KEY, brands);
+          }
         }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getBrands', e);
       }
-    } catch (e) {
-      console.warn('Firestore getBrands error:', e);
     }
 
     // 2. REST API fallback
@@ -2874,7 +3048,7 @@ export const storeService = {
 
     // 1. Persist to Firestore
     try {
-      await setDoc(doc(db, 'brands', id), newBrand, { merge: true });
+      await setDoc(doc(db, 'brands', id), cleanForFirestore(newBrand), { merge: true });
     } catch (e) {
       console.warn('Firestore saveBrand error:', e);
     }

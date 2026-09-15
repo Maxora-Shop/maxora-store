@@ -23,6 +23,8 @@ import { storeService } from '../services/storeService';
 import { generateSlug } from '../utils/seo';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
+import { useTaxonomy } from '../context/TaxonomyContext';
+import { CategoryImageUploader } from './CategoryImageUploader';
 
 interface AdminCategoriesProps {
   password?: string;
@@ -48,10 +50,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   onSelectProduct,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
-  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
-  const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
+
+  // Unified 4-tier taxonomy state from TaxonomyContext
+  const {
+    categories,
+    subCategories,
+    productTypes,
+    childCategories,
+    taxonomyTree: taxonomy,
+    refreshTaxonomy,
+  } = useTaxonomy();
+
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
@@ -65,16 +74,6 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     productTypeId?: string;
     childCategoryId?: string;
   }>({});
-
-  const taxonomy = React.useMemo(() => {
-    return buildTaxonomyTree(
-      products,
-      categories,
-      subCategories,
-      productTypes,
-      childCategories
-    );
-  }, [products, categories, subCategories, productTypes, childCategories]);
 
   // Hierarchy Tree expand/collapse state
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
@@ -113,29 +112,24 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     loadAllTaxonomy();
   }, []);
 
-  const loadAllTaxonomy = async () => {
-    setLoading(true);
-    try {
-      const [cats, subs, types, childs] = await Promise.all([
-        storeService.getCategories(),
-        storeService.getSubCategories(),
-        storeService.getProductTypes(),
-        storeService.getChildCategories(),
-      ]);
-      setCategories(cats);
-      setSubCategories(subs);
-      setProductTypes(types);
-      setChildCategories(childs);
-
-      // Auto-expand all top-level categories by default
+  // Auto-expand all top-level categories by default when categories load
+  useEffect(() => {
+    if (categories.length > 0) {
       const defaultExpanded: Record<string, boolean> = {};
-      cats.forEach((c) => {
+      categories.forEach((c) => {
         defaultExpanded[`cat-${c.id}`] = true;
       });
-      subs.forEach((s) => {
+      subCategories.forEach((s) => {
         defaultExpanded[`sub-${s.id}`] = true;
       });
       setExpandedNodes((prev) => ({ ...defaultExpanded, ...prev }));
+    }
+  }, [categories, subCategories]);
+
+  const loadAllTaxonomy = async () => {
+    setLoading(true);
+    try {
+      await refreshTaxonomy();
     } catch (err: any) {
       console.error('Failed to load taxonomy:', err);
       showToast('Failed to load categories', 'error');
@@ -286,6 +280,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         slug,
         display_order: Number(editingCategory.display_order) || 1,
         active: editingCategory.active !== 0 && editingCategory.active !== false ? 1 : 0,
+        image_url: editingCategory.image_url?.trim() || '',
       };
 
       await storeService.saveCategory(catToSave, password);
@@ -927,9 +922,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                         )}
                       </button>
 
-                      <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shrink-0">
-                        1
-                      </span>
+                      {cat.image_url ? (
+                        <img
+                          src={cat.image_url}
+                          alt={cat.name}
+                          className="w-6 h-6 rounded-full object-cover border border-emerald-300 shrink-0 shadow-2xs"
+                        />
+                      ) : (
+                        <span className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shrink-0">
+                          1
+                        </span>
+                      )}
 
                       <div className="truncate">
                         <span className="font-black text-sm text-zinc-950">{cat.name}</span>
@@ -1291,7 +1294,20 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                     <tr key={cat.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="p-3.5 font-bold text-zinc-500">{cat.display_order ?? 1}</td>
                       <td className="p-3.5">
-                        <div className="font-black text-zinc-900 text-sm">{cat.name}</div>
+                        <div className="flex items-center gap-2.5">
+                          {cat.image_url ? (
+                            <img
+                              src={cat.image_url}
+                              alt={cat.name}
+                              className="w-8 h-8 rounded-full object-cover border border-emerald-300 shrink-0 shadow-2xs"
+                            />
+                          ) : (
+                            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-500 shrink-0">
+                              {cat.name.charAt(0)}
+                            </span>
+                          )}
+                          <div className="font-black text-zinc-900 text-sm">{cat.name}</div>
+                        </div>
                       </td>
                       <td className="p-3.5 font-mono text-zinc-500">{cat.slug}</td>
                       <td className="p-3.5 font-bold text-emerald-700">{subsCount} subs</td>
@@ -1790,20 +1806,14 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-700 mb-1">
-                  Image URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={editingCategory.image_url || ''}
-                  onChange={(e) =>
-                    setEditingCategory({ ...editingCategory, image_url: e.target.value })
-                  }
-                  className="w-full text-xs p-3 rounded-xl border border-zinc-300"
-                />
-              </div>
+              {/* Direct File Upload for Category Image */}
+              <CategoryImageUploader
+                imageUrl={editingCategory.image_url || ''}
+                categoryId={editingCategory.id || editingCategory.slug || 'category'}
+                onChange={(url) =>
+                  setEditingCategory({ ...editingCategory, image_url: url })
+                }
+              />
 
               <div className="flex items-center gap-2 pt-1">
                 <input

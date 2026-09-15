@@ -48,11 +48,13 @@ import {
   Tag,
   Hash,
   Palette,
+  Sliders,
   FolderTree,
   Facebook,
   Instagram,
   Youtube,
   Music2,
+  Loader2,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -63,12 +65,15 @@ import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
+import { AdminBanners } from './AdminBanners';
 import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
 import { generateSlug, getProductSlug } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
+import { CategoryImageUploader } from './CategoryImageUploader';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -146,7 +151,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -154,10 +159,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [bestProducts, setBestProducts] = useState<any[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [dbCategories, setDbCategories] = useState<Category[]>([]);
-  const [dbSubCategories, setDbSubCategories] = useState<SubCategory[]>([]);
-  const [dbProductTypes, setDbProductTypes] = useState<ProductType[]>([]);
-  const [dbChildCategories, setDbChildCategories] = useState<ChildCategory[]>([]);
+
+  // Unified 4-tier taxonomy hierarchy from TaxonomyContext
+  const {
+    categories: contextCategories,
+    subCategories: contextSubCategories,
+    productTypes: contextProductTypes,
+    childCategories: contextChildCategories,
+    taxonomyTree: contextTaxonomyTree,
+    refreshTaxonomy,
+    saveCategory: taxonomySaveCategory,
+    saveSubCategory: taxonomySaveSubCategory,
+    saveChildCategory: taxonomySaveChildCategory,
+  } = useTaxonomy();
+
+  const dbCategories = contextCategories;
+  const dbSubCategories = contextSubCategories;
+  const dbProductTypes = contextProductTypes;
+  const dbChildCategories = contextChildCategories;
+  const taxonomy = contextTaxonomyTree;
+
   const [dbBrands, setDbBrands] = useState<Brand[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -233,6 +254,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProductTypeInput, setNewProductTypeInput] = useState('');
   const [isManageTypesModalOpen, setIsManageTypesModalOpen] = useState(false);
 
+  // Quick Category, Subcategory, Child Category inline creation states in Product Modal
+  const [showAddCategoryInput, setShowAddCategoryInput] = useState(false);
+  const [newCategoryNameInput, setNewCategoryNameInput] = useState('');
+  const [isSavingNewCategory, setIsSavingNewCategory] = useState(false);
+
+  const [showAddSubCategoryInput, setShowAddSubCategoryInput] = useState(false);
+  const [newSubCategoryNameInput, setNewSubCategoryNameInput] = useState('');
+  const [isSavingNewSubCategory, setIsSavingNewSubCategory] = useState(false);
+
+  const [showAddChildCategoryInput, setShowAddChildCategoryInput] = useState(false);
+  const [newChildCategoryNameInput, setNewChildCategoryNameInput] = useState('');
+  const [isSavingNewChildCategory, setIsSavingNewChildCategory] = useState(false);
+
   // Sync settings custom_product_types & global settings
   useEffect(() => {
     if (globalSettings) {
@@ -293,6 +327,182 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       current.splice(index, 1);
       return { ...prev, images: current };
     });
+  };
+
+  // Quick creation handlers for Category, Subcategory, and Child Category in Product Modal
+  const handleQuickCreateCategory = async (catName?: string) => {
+    const rawName = (catName || newCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a category name (ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    try {
+      setIsSavingNewCategory(true);
+      const res = await taxonomySaveCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          display_order: dbCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.category) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                category: res.category.name,
+                category_id: res.category.id,
+                category_slug: res.category.slug,
+              }
+            : prev
+        );
+        setNewCategoryNameInput('');
+        setShowAddCategoryInput(false);
+        showToast(`Category "${res.category.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save category', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving category: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewCategory(false);
+    }
+  };
+
+  const handleQuickCreateSubCategory = async (subName?: string) => {
+    const rawName = (subName || newSubCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a subcategory name (সাব-ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    // Determine parent category from editingProduct
+    let parentCat = dbCategories.find(
+      (c) =>
+        c.id === editingProduct?.category_id ||
+        (editingProduct?.category && c.name.toLowerCase() === editingProduct.category.toLowerCase())
+    );
+
+    let categoryId = parentCat?.id || editingProduct?.category_id || '';
+    let categorySlug = parentCat?.slug || editingProduct?.category_slug || '';
+
+    // If no category was selected yet, create parent category or attach
+    if (!categoryId && editingProduct?.category) {
+      try {
+        const catRes = await taxonomySaveCategory(
+          {
+            name: editingProduct.category,
+            slug: generateSlug(editingProduct.category),
+            display_order: dbCategories.length + 1,
+            active: 1,
+          },
+          password
+        );
+        if (catRes.success && catRes.category) {
+          parentCat = catRes.category;
+          categoryId = catRes.category.id;
+          categorySlug = catRes.category.slug;
+        }
+      } catch {}
+    }
+
+    try {
+      setIsSavingNewSubCategory(true);
+      const res = await taxonomySaveSubCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          category_id: categoryId,
+          category_slug: categorySlug,
+          display_order: dbSubCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.subCategory) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                sub_category: res.subCategory.name,
+                subcategory_id: res.subCategory.id,
+                subcategory_slug: res.subCategory.slug,
+                category: parentCat ? parentCat.name : prev.category,
+                category_id: categoryId || prev.category_id,
+                category_slug: categorySlug || prev.category_slug,
+              }
+            : prev
+        );
+        setNewSubCategoryNameInput('');
+        setShowAddSubCategoryInput(false);
+        showToast(`Subcategory "${res.subCategory.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save subcategory', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving subcategory: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewSubCategory(false);
+    }
+  };
+
+  const handleQuickCreateChildCategory = async (childName?: string) => {
+    const rawName = (childName || newChildCategoryNameInput || '').trim();
+    if (!rawName) {
+      showToast('Please enter a child category name (চাইল্ড ক্যাটেগরির নাম লিখুন)', 'error');
+      return;
+    }
+
+    const categoryId = editingProduct?.category_id || '';
+    const categorySlug = editingProduct?.category_slug || '';
+    const subcategoryId = editingProduct?.subcategory_id || '';
+    const subcategorySlug = editingProduct?.subcategory_slug || '';
+
+    try {
+      setIsSavingNewChildCategory(true);
+      const res = await taxonomySaveChildCategory(
+        {
+          name: rawName,
+          slug: generateSlug(rawName),
+          category_id: categoryId,
+          category_slug: categorySlug,
+          subcategory_id: subcategoryId,
+          subcategory_slug: subcategorySlug,
+          display_order: dbChildCategories.length + 1,
+          active: 1,
+        },
+        password
+      );
+
+      if (res.success && res.childCategory) {
+        setEditingProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                child_category: res.childCategory.name,
+                childcategory_id: res.childCategory.id,
+                child_category_id: res.childCategory.id,
+                childcategory_slug: res.childCategory.slug,
+                child_category_slug: res.childCategory.slug,
+              }
+            : prev
+        );
+        setNewChildCategoryNameInput('');
+        setShowAddChildCategoryInput(false);
+        showToast(`Child category "${res.childCategory.name}" created and selected!`, 'success');
+      } else {
+        showToast('Failed to save child category', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving child category: ' + (err.message || err), 'error');
+    } finally {
+      setIsSavingNewChildCategory(false);
+    }
   };
 
   // Handlers for Custom Product Types
@@ -421,6 +631,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [isAddProductToOrderOpen, setIsAddProductToOrderOpen] = useState(false);
+  const [orderProductSearchQuery, setOrderProductSearchQuery] = useState('');
 
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
@@ -549,18 +761,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadCategories = async () => {
     try {
-      const [cats, subs, types, childs, brands] = await Promise.all([
-        storeService.getCategories(),
-        storeService.getSubCategories(),
-        storeService.getProductTypes(),
-        storeService.getChildCategories(),
-        storeService.getBrands(false),
+      await Promise.all([
+        refreshTaxonomy(),
+        loadBrands(),
       ]);
-      setDbCategories(cats);
-      setDbSubCategories(subs);
-      setDbProductTypes(types);
-      setDbChildCategories(childs);
-      setDbBrands(brands);
     } catch (e) {
       console.error(e);
     }
@@ -574,17 +778,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.error(e);
     }
   };
-
-  // Real-time 4-tier taxonomy computation for Category Hierarchy panel
-  const taxonomy = React.useMemo(() => {
-    return buildTaxonomyTree(
-      products,
-      dbCategories,
-      dbSubCategories,
-      dbProductTypes,
-      dbChildCategories
-    );
-  }, [products, dbCategories, dbSubCategories, dbProductTypes, dbChildCategories]);
 
   const loadTabData = (tab: string, currentPassword = password) => {
     if (tab === 'overview') loadOverview(currentPassword);
@@ -601,6 +794,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadBrands();
       loadProducts(currentPassword);
     }
+    if (tab === 'banners') {
+      loadSettings(currentPassword);
+    }
     if (tab === 'orders') {
       loadOrders(currentPassword);
       loadProducts(currentPassword);
@@ -614,7 +810,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
     loadTabData(tab);
   };
@@ -855,6 +1051,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await storeService.updateOrderDetails(editingOrder, password);
       showToast('Order details updated successfully!', 'success');
       setIsOrderModalOpen(false);
+      setIsAddProductToOrderOpen(false);
       setEditingOrder(null);
       loadOrders();
       if (currentTab === 'overview') loadOverview();
@@ -863,6 +1060,147 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenEditOrderModal = (ord: Order) => {
+    let items = Array.isArray(ord.items) ? [...ord.items] : [];
+    // Ensure image_url is populated from catalog if missing
+    items = items.map((it) => {
+      if (!it.image_url) {
+        const prod = products.find(
+          (p) => String(p.id) === String(it.product_id) || (p.sku && p.sku === it.sku) || p.name === it.product_name
+        );
+        if (prod) {
+          const img = prod.image_url || (Array.isArray(prod.images) ? prod.images[0] : '') || '';
+          return { ...it, image_url: img };
+        }
+      }
+      return it;
+    });
+
+    const calculatedSubtotal = items.length > 0
+      ? items.reduce((sum, it) => sum + (Number(it.unit_price || 0) * (Number(it.quantity) || 1)), 0)
+      : Number(ord.subtotal || 0);
+
+    const delivery = Number(ord.delivery_charge || 0);
+
+    setEditingOrder({
+      ...ord,
+      items,
+      subtotal: calculatedSubtotal,
+      total: calculatedSubtotal + delivery,
+    });
+    setIsOrderModalOpen(true);
+    setIsAddProductToOrderOpen(false);
+    setOrderProductSearchQuery('');
+    if (products.length === 0) {
+      loadProducts(password);
+    }
+  };
+
+  const handleUpdateItemQuantity = (index: number, newQty: number) => {
+    if (!editingOrder) return;
+    const currentItems = [...(editingOrder.items || [])];
+    if (!currentItems[index]) return;
+
+    const validQty = Math.max(1, Math.floor(newQty) || 1);
+    const unitPrice = Number(currentItems[index].unit_price) || 0;
+    currentItems[index] = {
+      ...currentItems[index],
+      quantity: validQty,
+      line_total: validQty * unitPrice,
+    };
+
+    const newSubtotal = currentItems.reduce(
+      (sum, it) => sum + (Number(it.unit_price || 0) * (Number(it.quantity) || 1)),
+      0
+    );
+    const delivery = Number(editingOrder.delivery_charge || 0);
+
+    setEditingOrder({
+      ...editingOrder,
+      items: currentItems,
+      subtotal: newSubtotal,
+      total: newSubtotal + delivery,
+    });
+  };
+
+  const handleRemoveOrderItem = (index: number) => {
+    if (!editingOrder) return;
+    const currentItems = [...(editingOrder.items || [])];
+    const item = currentItems[index];
+    if (!item) return;
+
+    if (window.confirm(`Are you sure you want to remove "${item.product_name}" from this order?`)) {
+      currentItems.splice(index, 1);
+      const newSubtotal = currentItems.reduce(
+        (sum, it) => sum + (Number(it.unit_price || 0) * (Number(it.quantity) || 1)),
+        0
+      );
+      const delivery = Number(editingOrder.delivery_charge || 0);
+
+      setEditingOrder({
+        ...editingOrder,
+        items: currentItems,
+        subtotal: newSubtotal,
+        total: newSubtotal + delivery,
+      });
+      showToast(`Removed "${item.product_name}" from order`, 'success');
+    }
+  };
+
+  const handleAddProductToOrder = (prod: Product) => {
+    if (!editingOrder) return;
+    const currentItems = [...(editingOrder.items || [])];
+    const existingIndex = currentItems.findIndex(
+      (it) => String(it.product_id) === String(prod.id)
+    );
+
+    const effectivePrice = Math.max(
+      0,
+      Number(prod.discount ? prod.selling_price - prod.discount : prod.selling_price) || 0
+    );
+    const thumb = prod.image_url || (Array.isArray(prod.images) ? prod.images[0] : '') || '';
+
+    if (existingIndex !== -1) {
+      const existing = currentItems[existingIndex];
+      const newQty = (Number(existing.quantity) || 1) + 1;
+      const unitPrice = Number(existing.unit_price) || effectivePrice;
+      currentItems[existingIndex] = {
+        ...existing,
+        quantity: newQty,
+        line_total: newQty * unitPrice,
+      };
+    } else {
+      currentItems.push({
+        id: `item-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`,
+        order_id: String(editingOrder.id),
+        product_id: String(prod.id),
+        product_name: prod.name,
+        sku: prod.sku || '',
+        quantity: 1,
+        unit_price: effectivePrice,
+        buying_price: Number(prod.buying_price || 0),
+        line_total: effectivePrice,
+        image_url: thumb,
+        slug: prod.slug || '',
+      });
+    }
+
+    const newSubtotal = currentItems.reduce(
+      (sum, it) => sum + (Number(it.unit_price || 0) * (Number(it.quantity) || 1)),
+      0
+    );
+    const delivery = Number(editingOrder.delivery_charge || 0);
+
+    setEditingOrder({
+      ...editingOrder,
+      items: currentItems,
+      subtotal: newSubtotal,
+      total: newSubtotal + delivery,
+    });
+
+    showToast(`Added "${prod.name}" to order`, 'success');
   };
 
   const handleDeleteOrder = async (orderId: number | string, orderNumber: string) => {
@@ -926,6 +1264,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       active: cat.active !== undefined ? Number(cat.active) : 1,
       display_order: cat.display_order ?? 1,
       icon: cat.icon || '',
+      image_url: cat.image_url || '',
     });
     setIsCategoryEditModalOpen(true);
   };
@@ -964,6 +1303,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         active: Number(categoryToEdit.active) === 1 ? 1 : 0,
         display_order: Number(categoryToEdit.display_order) || 1,
         icon: categoryToEdit.icon?.trim() || '',
+        image_url: categoryToEdit.image_url?.trim() || '',
       };
 
       const res = await storeService.saveCategory(catData, password);
@@ -1341,6 +1681,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {dbBrands.length}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('banners')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'banners'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Sliders className="w-4 h-4 shrink-0" />
+              <span>🖼️ Banners & Slider</span>
+              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'banners' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                {settingsForm.hero_banners?.length || 3}
+              </span>
             </button>
 
             <button
@@ -1747,10 +2102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => {
-                                  setEditingOrder(ord);
-                                  setIsOrderModalOpen(true);
-                                }}
+                                onClick={() => handleOpenEditOrderModal(ord)}
                                 className="text-xs font-bold text-zinc-700 hover:text-zinc-950 px-2 py-1 hover:bg-zinc-100 rounded-md cursor-pointer"
                               >
                                 Edit
@@ -2564,10 +2916,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <Printer className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => {
-                                setEditingOrder(ord);
-                                setIsOrderModalOpen(true);
-                              }}
+                              onClick={() => handleOpenEditOrderModal(ord)}
                               className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition-colors cursor-pointer"
                             >
                               Edit
@@ -2729,6 +3078,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ====================================================
+            4c. TAB: HERO BANNERS & SLIDER MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'banners' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminBanners
+              settings={settingsForm}
+              adminPassword={password}
+              onSettingsUpdated={() => {
+                loadSettings(password);
+                onSettingsUpdated();
+              }}
+              showToast={showToast}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
             5. TAB: STORE SETTINGS
         ==================================================== */}
         {currentTab === 'settings' && (
@@ -2833,6 +3199,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           slug: '',
                           active: 1,
                           display_order: dbCategories.length + 1,
+                          image_url: '',
                         });
                         setIsCategoryEditModalOpen(true);
                       }}
@@ -2884,8 +3251,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/80 transition-colors"
                         >
                           <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs">
-                              <FolderTree className="w-5 h-5 text-emerald-600" />
+                            <div className="w-10 h-10 rounded-2xl bg-white border border-zinc-200 text-zinc-800 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                              {cat.image_url ? (
+                                <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <FolderTree className="w-5 h-5 text-emerald-600" />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -3366,6 +3737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               slug: '',
                               active: 1,
                               display_order: dbCategories.length + 1,
+                              image_url: '',
                             });
                             setIsCategoryEditModalOpen(true);
                           }}
@@ -3393,8 +3765,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-zinc-100/70 transition-colors"
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
-                                  <FolderTree className="w-4 h-4" />
+                                <div className="w-8 h-8 rounded-xl bg-white border border-zinc-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                                  {cat.image_url ? (
+                                    <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <FolderTree className="w-4 h-4" />
+                                  )}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -3628,7 +4004,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
               <button
-                onClick={() => setIsProductModalOpen(false)}
+                onClick={() => {
+                  setIsProductModalOpen(false);
+                  setShowAddCategoryInput(false);
+                  setShowAddSubCategoryInput(false);
+                  setShowAddChildCategoryInput(false);
+                  setShowAddTypeInput(false);
+                }}
                 className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
               >
                 ✕
@@ -3695,152 +4077,341 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* 1. Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Category (ক্যাটেগরি) *
-                        </label>
-                        <select
-                          required
-                          value={
-                            dbCategories.some(
-                              (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
-                            )
-                              ? dbCategories.find(
-                                  (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
-                                )?.name
-                              : editingProduct?.category || ''
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              const customName = prompt('Enter custom category name:');
-                              if (customName && customName.trim()) {
-                                setEditingProduct({
-                                  ...editingProduct,
-                                  category: customName.trim(),
-                                  category_id: '',
-                                  category_slug: customName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                                });
-                              }
-                              return;
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Category (ক্যাটেগরি) *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddCategoryInput(!showAddCategoryInput);
+                              setNewCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new category name (e.g. Smart Gadgets)..."
+                                value={newCategoryNameInput}
+                                onChange={(e) => setNewCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewCategory}
+                                onClick={() => handleQuickCreateCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this category
+                            </p>
+                          </div>
+                        ) : (
+                          <select
+                            required
+                            value={
+                              dbCategories.some(
+                                (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                              )
+                                ? dbCategories.find(
+                                    (c) => c.name.toLowerCase() === (editingProduct?.category || '').toLowerCase()
+                                  )?.name
+                                : editingProduct?.category || ''
                             }
-                            const matchedCat = dbCategories.find(
-                              (c) => c.name === val || c.id === val || c.slug === val
-                            );
-                            setEditingProduct({
-                              ...editingProduct,
-                              category: matchedCat ? matchedCat.name : val,
-                              category_id: matchedCat?.id || '',
-                              category_slug: matchedCat?.slug || '',
-                            });
-                          }}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        >
-                          <option value="">-- Select Category --</option>
-                          {dbCategories.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                setShowAddCategoryInput(true);
+                                setNewCategoryNameInput('');
+                                return;
+                              }
+                              const matchedCat = dbCategories.find(
+                                (c) => c.name === val || c.id === val || c.slug === val
+                              );
+                              setEditingProduct({
+                                ...editingProduct,
+                                category: matchedCat ? matchedCat.name : val,
+                                category_id: matchedCat?.id || '',
+                                category_slug: matchedCat?.slug || '',
+                              });
+                            }}
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                          >
+                            <option value="">-- Select Category --</option>
+                            {dbCategories.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                            {dbCategories.length === 0 && (
+                              <>
+                                <option value="Smart Gadgets">Smart Gadgets</option>
+                                <option value="Audio">Audio</option>
+                                <option value="Computer & Gaming">Computer & Gaming</option>
+                                <option value="Mobile Accessories">Mobile Accessories</option>
+                                <option value="Lifestyle & Bags">Lifestyle & Bags</option>
+                                <option value="Home & Living">Home & Living</option>
+                                <option value="Fashion & Apparel">Fashion & Apparel</option>
+                                <option value="Watches & Wearables">Watches & Wearables</option>
+                              </>
+                            )}
+                            <option value="__custom__" className="font-semibold text-emerald-700 bg-emerald-50">
+                              + Add Custom Category (নতুন ক্যাটেগরি)...
                             </option>
-                          ))}
-                          {dbCategories.length === 0 && (
-                            <>
-                              <option value="Smart Gadgets">Smart Gadgets</option>
-                              <option value="Audio">Audio</option>
-                              <option value="Computer & Gaming">Computer & Gaming</option>
-                              <option value="Mobile Accessories">Mobile Accessories</option>
-                              <option value="Lifestyle & Bags">Lifestyle & Bags</option>
-                              <option value="Home & Living">Home & Living</option>
-                              <option value="Fashion & Apparel">Fashion & Apparel</option>
-                              <option value="Watches & Wearables">Watches & Wearables</option>
-                            </>
-                          )}
-                          <option value="__custom__">+ Add Custom Category...</option>
-                        </select>
+                          </select>
+                        )}
                       </div>
 
                       {/* 2. Sub Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Sub Category (সাব ক্যাটেগরি)
-                        </label>
-                        <select
-                          value={
-                            dbSubCategories.some(
-                              (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
-                            )
-                              ? dbSubCategories.find(
-                                  (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
-                                )?.name
-                              : editingProduct?.sub_category || ''
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              const customSub = prompt('Enter custom subcategory name:');
-                              if (customSub && customSub.trim()) {
-                                setEditingProduct({
-                                  ...editingProduct,
-                                  sub_category: customSub.trim(),
-                                  subcategory_id: '',
-                                  subcategory_slug: customSub.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-                                });
-                              }
-                              return;
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Sub Category (সাব ক্যাটেগরি)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddSubCategoryInput(!showAddSubCategoryInput);
+                              setNewSubCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddSubCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddSubCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            {editingProduct?.category && (
+                              <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1">
+                                <span className="text-zinc-500">Parent:</span>
+                                <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {editingProduct.category}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new subcategory name (e.g. Smart Watch)..."
+                                value={newSubCategoryNameInput}
+                                onChange={(e) => setNewSubCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateSubCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewSubCategory}
+                                onClick={() => handleQuickCreateSubCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewSubCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this subcategory
+                            </p>
+                          </div>
+                        ) : (
+                          <select
+                            value={
+                              dbSubCategories.some(
+                                (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                              )
+                                ? dbSubCategories.find(
+                                    (s) => s.name.toLowerCase() === (editingProduct?.sub_category || '').toLowerCase()
+                                  )?.name
+                                : editingProduct?.sub_category || ''
                             }
-                            const matchedSub = dbSubCategories.find(
-                              (s) => s.name === val || s.id === val || s.slug === val
-                            );
-                            setEditingProduct({
-                              ...editingProduct,
-                              sub_category: matchedSub ? matchedSub.name : val,
-                              subcategory_id: matchedSub?.id || '',
-                              subcategory_slug: matchedSub?.slug || '',
-                            });
-                          }}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        >
-                          <option value="">-- Select Sub Category (Optional) --</option>
-                          {dbSubCategories
-                            .filter((s) => {
-                              if (!editingProduct?.category) return true;
-                              const currentCat = editingProduct.category.toLowerCase().trim();
-                              const parentCat = dbCategories.find((c) => c.id === s.category_id);
-                              return (
-                                s.category_id === editingProduct.category_id ||
-                                s.category_slug === editingProduct.category_slug ||
-                                (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                setShowAddSubCategoryInput(true);
+                                setNewSubCategoryNameInput('');
+                                return;
+                              }
+                              const matchedSub = dbSubCategories.find(
+                                (s) => s.name === val || s.id === val || s.slug === val
                               );
-                            })
-                            .map((s) => (
-                              <option key={s.id} value={s.name}>
-                                {s.name}
-                              </option>
-                            ))}
-                          <option value="__custom__">+ Add Custom Subcategory...</option>
-                        </select>
+                              setEditingProduct({
+                                ...editingProduct,
+                                sub_category: matchedSub ? matchedSub.name : val,
+                                subcategory_id: matchedSub?.id || '',
+                                subcategory_slug: matchedSub?.slug || '',
+                              });
+                            }}
+                            className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                          >
+                            <option value="">-- Select Sub Category (Optional) --</option>
+                            {dbSubCategories
+                              .filter((s) => {
+                                if (!editingProduct?.category) return true;
+                                const currentCat = editingProduct.category.toLowerCase().trim();
+                                const parentCat = dbCategories.find((c) => c.id === s.category_id);
+                                return (
+                                  s.category_id === editingProduct.category_id ||
+                                  s.category_slug === editingProduct.category_slug ||
+                                  (parentCat && parentCat.name.toLowerCase().trim() === currentCat)
+                                );
+                              })
+                              .map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            <option value="__custom__" className="font-semibold text-emerald-700 bg-emerald-50">
+                              + Add Custom Subcategory (নতুন সাব-ক্যাটেগরি)...
+                            </option>
+                          </select>
+                        )}
                       </div>
 
                       {/* 3. Child Category */}
                       <div>
-                        <label className="block text-xs font-bold text-zinc-700 mb-1">
-                          Child Category (চাইল্ড ক্যাটেগরি)
-                        </label>
-                        <input
-                          list="admin-childcategory-list-root"
-                          type="text"
-                          placeholder="e.g. AMOLED Display, ANC Earbuds"
-                          value={editingProduct?.child_category || ''}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, child_category: e.target.value })}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
-                        />
-                        <datalist id="admin-childcategory-list-root">
-                          <option value="AMOLED Calling" />
-                          <option value="Waterproof IP68" />
-                          <option value="Active Noise Cancelling (ANC)" />
-                          <option value="Deep Bass Gaming" />
-                          <option value="65W Fast GaN" />
-                          <option value="100W PD Type-C" />
-                          <option value="RGB Hot-swappable" />
-                        </datalist>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-zinc-700">
+                            Child Category (চাইল্ড ক্যাটেগরি)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddChildCategoryInput(!showAddChildCategoryInput);
+                              setNewChildCategoryNameInput('');
+                            }}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{showAddChildCategoryInput ? 'Cancel' : '+ Add New (নতুন)'}</span>
+                          </button>
+                        </div>
+
+                        {showAddChildCategoryInput ? (
+                          <div className="space-y-1.5 p-2.5 bg-emerald-50/90 rounded-xl border border-emerald-200">
+                            {(editingProduct?.category || editingProduct?.sub_category) && (
+                              <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1 flex-wrap">
+                                <span className="text-zinc-500">Under:</span>
+                                {editingProduct.category && (
+                                  <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                    {editingProduct.category}
+                                  </span>
+                                )}
+                                {editingProduct.sub_category && (
+                                  <>
+                                    <span className="text-zinc-400">/</span>
+                                    <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                      {editingProduct.sub_category}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Type new child category (e.g. AMOLED Calling, ANC)..."
+                                value={newChildCategoryNameInput}
+                                onChange={(e) => setNewChildCategoryNameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleQuickCreateChildCategory();
+                                  }
+                                }}
+                                className="flex-1 bg-white text-zinc-900 text-xs p-2.5 rounded-lg border border-emerald-300 focus:outline-none focus:border-emerald-600 font-medium"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                disabled={isSavingNewChildCategory}
+                                onClick={() => handleQuickCreateChildCategory()}
+                                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1 shrink-0"
+                              >
+                                {isSavingNewChildCategory ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <span>Add</span>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 font-medium">
+                              Press Enter or click Add to create & select this child category
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <input
+                              list="admin-childcategory-list-root"
+                              type="text"
+                              placeholder="Select or type child category (e.g. AMOLED Display, ANC Earbuds)"
+                              value={editingProduct?.child_category || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '__custom__' || val === '+ Add Custom Child Category...') {
+                                  setShowAddChildCategoryInput(true);
+                                  setNewChildCategoryNameInput('');
+                                  return;
+                                }
+                                setEditingProduct({ ...editingProduct, child_category: val });
+                              }}
+                              className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-medium"
+                            />
+                            <datalist id="admin-childcategory-list-root">
+                              {dbChildCategories
+                                .filter((c) => {
+                                  if (!editingProduct?.subcategory_id && !editingProduct?.sub_category) return true;
+                                  return (
+                                    c.subcategory_id === editingProduct.subcategory_id ||
+                                    c.subcategory_slug === editingProduct.subcategory_slug ||
+                                    c.category_id === editingProduct.category_id
+                                  );
+                                })
+                                .map((child) => (
+                                  <option key={child.id} value={child.name} />
+                                ))}
+                              <option value="+ Add Custom Child Category..." />
+                              <option value="AMOLED Calling" />
+                              <option value="Waterproof IP68" />
+                              <option value="Active Noise Cancelling (ANC)" />
+                              <option value="Deep Bass Gaming" />
+                              <option value="65W Fast GaN" />
+                              <option value="100W PD Type-C" />
+                              <option value="RGB Hot-swappable" />
+                            </datalist>
+                          </div>
+                        )}
                       </div>
 
                       {/* 4. Product Type */}
@@ -5178,8 +5749,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ==================================================== */}
       {isOrderModalOpen && editingOrder && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-sm">
-          <div className="relative bg-white w-full max-w-xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col">
-            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+          <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col">
+            <div className="p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 shrink-0">
               <div>
                 <h3 className="font-extrabold text-base text-zinc-900">
                   Edit Order #{editingOrder.order_number}
@@ -5196,8 +5767,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Invoice</span>
                 </button>
                 <button
-                  onClick={() => setIsOrderModalOpen(false)}
-                  className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  type="button"
+                  onClick={() => {
+                    setIsOrderModalOpen(false);
+                    setIsAddProductToOrderOpen(false);
+                  }}
+                  className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer"
                 >
                   ✕
                 </button>
@@ -5282,7 +5857,153 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              {/* ====================================================
+                  ORDER ITEMS MANAGEMENT SECTION
+              ==================================================== */}
+              <div className="pt-2 border-t border-zinc-200">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-700">
+                      <Package className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
+                        Order Items
+                      </h4>
+                      <p className="text-[11px] text-zinc-500">
+                        {(editingOrder.items || []).length} product{(editingOrder.items || []).length === 1 ? '' : 's'} in this order
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddProductToOrderOpen(true);
+                      setOrderProductSearchQuery('');
+                      if (products.length === 0) {
+                        loadProducts(password);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Product</span>
+                  </button>
+                </div>
+
+                {/* Items List */}
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {(!editingOrder.items || editingOrder.items.length === 0) ? (
+                    <div className="py-6 px-4 text-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/70">
+                      <Package className="w-7 h-7 text-zinc-300 mx-auto mb-1.5" />
+                      <p className="text-xs font-semibold text-zinc-600">No items in this order yet</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">Click "+ Add Product" to select products from catalog</p>
+                    </div>
+                  ) : (
+                    editingOrder.items.map((item, index) => {
+                      const itemImg = item.image_url || products.find(p => String(p.id) === String(item.product_id) || (p.sku && p.sku === item.sku) || p.name === item.product_name)?.image_url || '';
+                      const itemQty = Number(item.quantity) || 1;
+                      const itemUnitPrice = Number(item.unit_price) || 0;
+                      const itemLineTotal = itemUnitPrice * itemQty;
+
+                      return (
+                        <div
+                          key={item.id || `${item.product_id}-${index}`}
+                          className="p-2.5 sm:p-3 bg-zinc-50 hover:bg-zinc-100/80 rounded-2xl border border-zinc-200 transition-colors flex items-center gap-2.5 sm:gap-3 justify-between"
+                        >
+                          {/* Thumbnail */}
+                          <div className="w-12 h-12 rounded-xl bg-white border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            {itemImg ? (
+                              <img
+                                src={itemImg}
+                                alt={item.product_name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Package className="w-5 h-5 text-zinc-300" />
+                            )}
+                          </div>
+
+                          {/* Product details */}
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-xs font-bold text-zinc-900 truncate" title={item.product_name}>
+                              {item.product_name}
+                            </h5>
+                            <div className="flex items-center gap-2 text-[11px] text-zinc-500 mt-0.5 flex-wrap">
+                              {item.sku && (
+                                <span className="font-mono bg-zinc-200/80 text-zinc-700 px-1.5 py-0.2 rounded text-[10px]">
+                                  SKU: {item.sku}
+                                </span>
+                              )}
+                              <span>৳{itemUnitPrice.toLocaleString('en-BD')} / unit</span>
+                              {item.selected_color && (
+                                <span className="text-zinc-500 font-medium">
+                                  • {item.selected_color}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quantity stepper & Item total & Remove button */}
+                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                            {/* Stepper */}
+                            <div className="flex items-center border border-zinc-200 rounded-xl bg-white overflow-hidden shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateItemQuantity(index, itemQty - 1)}
+                                disabled={itemQty <= 1}
+                                className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:hover:bg-white cursor-pointer transition-colors"
+                                title="Decrease quantity"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={itemQty}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10);
+                                  handleUpdateItemQuantity(index, isNaN(val) ? 1 : val);
+                                }}
+                                className="w-10 h-7 text-center text-xs font-bold text-zinc-900 bg-transparent border-x border-zinc-200 focus:outline-none focus:bg-zinc-50"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateItemQuantity(index, itemQty + 1)}
+                                className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:bg-zinc-100 cursor-pointer transition-colors"
+                                title="Increase quantity"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Line total */}
+                            <div className="text-right min-w-[70px]">
+                              <span className="text-xs font-extrabold text-zinc-950 block">
+                                ৳{itemLineTotal.toLocaleString('en-BD')}
+                              </span>
+                            </div>
+
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOrderItem(index)}
+                              className="w-7 h-7 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Remove item from order"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Order Financials */}
+              <div className="grid grid-cols-3 gap-3 pt-2">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">
                     Subtotal (৳)
@@ -5298,7 +6019,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         total: sub + Number(editingOrder.delivery_charge || 0),
                       });
                     }}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-semibold"
                   />
                 </div>
 
@@ -5317,7 +6038,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         total: Number(editingOrder.subtotal || 0) + del,
                       });
                     }}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300"
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-semibold"
                   />
                 </div>
 
@@ -5329,7 +6050,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="number"
                     value={editingOrder.total}
                     onChange={(e) => setEditingOrder({ ...editingOrder, total: Number(e.target.value) })}
-                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-extrabold text-emerald-700"
                   />
                 </div>
               </div>
@@ -5382,6 +6103,159 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================
+          PRODUCT SELECTOR MODAL (FOR ADDING ITEMS TO ORDER)
+      ==================================================== */}
+      {isAddProductToOrderOpen && editingOrder && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-xs">
+          <div className="relative bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-zinc-900">Add Product to Order</h4>
+                  <p className="text-[11px] text-zinc-500">
+                    Order #{editingOrder.order_number}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddProductToOrderOpen(false)}
+                className="w-8 h-8 rounded-full border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-3 sm:p-4 border-b border-zinc-100 bg-white shrink-0">
+              <div className="relative">
+                <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Search products by name, SKU, or category..."
+                  value={orderProductSearchQuery}
+                  onChange={(e) => setOrderProductSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-9 py-2.5 rounded-xl border border-zinc-200 focus:border-zinc-900 focus:outline-none transition-colors"
+                />
+                {orderProductSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderProductSearchQuery('')}
+                    className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Product List */}
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-1.5 flex-1 divide-y divide-zinc-100">
+              {(() => {
+                const q = orderProductSearchQuery.toLowerCase().trim();
+                const filtered = products.filter((p) => {
+                  if (!q) return true;
+                  return (
+                    p.name?.toLowerCase().includes(q) ||
+                    (p.sku && p.sku.toLowerCase().includes(q)) ||
+                    (p.category && p.category.toLowerCase().includes(q)) ||
+                    (p.brand && p.brand.toLowerCase().includes(q))
+                  );
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-zinc-500">
+                      <Package className="w-8 h-8 text-zinc-300 mx-auto mb-2" />
+                      <p className="text-xs font-semibold text-zinc-700">No products found</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">Try searching with a different name or SKU</p>
+                    </div>
+                  );
+                }
+
+                return filtered.map((prod) => {
+                  const existingItem = (editingOrder.items || []).find(
+                    (it) => String(it.product_id) === String(prod.id)
+                  );
+                  const effectivePrice = Math.max(
+                    0,
+                    Number(prod.discount ? prod.selling_price - prod.discount : prod.selling_price) || 0
+                  );
+                  const thumb = prod.image_url || (Array.isArray(prod.images) ? prod.images[0] : '') || '';
+
+                  return (
+                    <div
+                      key={prod.id}
+                      className="pt-2 pb-2 first:pt-0 flex items-center justify-between gap-3 hover:bg-zinc-50/80 p-2 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-11 h-11 rounded-lg bg-zinc-100 border border-zinc-200 overflow-hidden shrink-0 flex items-center justify-center">
+                          {thumb ? (
+                            <img src={thumb} alt={prod.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package className="w-4 h-4 text-zinc-300" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h5 className="text-xs font-bold text-zinc-900 truncate" title={prod.name}>
+                            {prod.name}
+                          </h5>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500 mt-0.5 flex-wrap">
+                            {prod.sku && <span className="font-mono bg-zinc-100 px-1 rounded">SKU: {prod.sku}</span>}
+                            <span className="font-bold text-emerald-700">৳{effectivePrice.toLocaleString('en-BD')}</span>
+                            {prod.stock !== undefined && (
+                              <span className={`px-1 rounded ${prod.stock > 0 ? 'bg-zinc-100 text-zinc-600' : 'bg-rose-50 text-rose-600'}`}>
+                                Stock: {prod.stock}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {existingItem && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                            In order: ×{existingItem.quantity}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleAddProductToOrder(prod)}
+                          className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{existingItem ? '+ 1' : 'Add'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 border-t border-zinc-200 bg-zinc-50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-zinc-500">
+                {(editingOrder.items || []).length} item{(editingOrder.items || []).length === 1 ? '' : 's'} currently in order
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAddProductToOrderOpen(false)}
+                className="px-4 py-2 bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Done Adding
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5596,6 +6470,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Direct File Upload for Category Image */}
+              <CategoryImageUploader
+                imageUrl={categoryToEdit.image_url || ''}
+                categoryId={categoryToEdit.id || categoryToEdit.slug || 'cat'}
+                onChange={(url) =>
+                  setCategoryToEdit({
+                    ...categoryToEdit,
+                    image_url: url,
+                  })
+                }
+              />
+
               {/* Modal Actions */}
               <div className="pt-3 border-t border-zinc-200 flex items-center justify-end gap-3">
                 <button
@@ -5638,8 +6524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         orders={orders}
         onClose={() => setSelectedCustomerForHistory(null)}
         onSelectOrder={(ord) => {
-          setEditingOrder(ord);
-          setIsOrderModalOpen(true);
+          handleOpenEditOrderModal(ord);
         }}
       />
 
