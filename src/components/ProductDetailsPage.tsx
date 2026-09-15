@@ -32,6 +32,7 @@ import {
 import { Product, StoreSettings, Review, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 import { parseProductDescription } from '../utils/productDescriptionParser';
+import { sanitizeSafeHtml } from '../utils/sanitizeHtml';
 import { storeService } from '../services/storeService';
 import { ProductCard } from './ProductCard';
 
@@ -988,10 +989,18 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                 <FileText className="w-5 h-5 text-emerald-600" />
                 <span>Product Overview</span>
               </h3>
-              {parsedDescription.overviewParagraphs.length > 0 ? (
+              {parsedDescription.isRichHtml && parsedDescription.rawRichHtml ? (
+                <div
+                  className="product-rich-description text-zinc-800 text-xs sm:text-sm leading-[1.8] space-y-3 font-normal [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-black [&_h2]:my-3 [&_h2]:text-zinc-950 [&_h3]:text-sm sm:[&_h3]:text-base [&_h3]:font-black [&_h3]:my-2.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2.5 [&_li]:my-1 [&_p]:my-2 [&_mark]:px-1.5 [&_mark]:py-0.5 [&_mark]:rounded-md"
+                  dangerouslySetInnerHTML={{ __html: parsedDescription.rawRichHtml }}
+                />
+              ) : parsedDescription.overviewParagraphs.length > 0 ? (
                 <div className="space-y-3 text-zinc-700 text-xs sm:text-sm leading-relaxed font-normal">
                   {parsedDescription.overviewParagraphs.map((para, i) => (
-                    <p key={i}>{para}</p>
+                    <div
+                      key={i}
+                      dangerouslySetInnerHTML={{ __html: sanitizeSafeHtml(para) }}
+                    />
                   ))}
                 </div>
               ) : (
@@ -1018,7 +1027,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                     <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
                       <Check className="w-3 h-3 stroke-[3]" />
                     </span>
-                    <span>{feat}</span>
+                    <span dangerouslySetInnerHTML={{ __html: sanitizeSafeHtml(feat) }} />
                   </li>
                 ))}
               </ul>

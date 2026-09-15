@@ -74,6 +74,7 @@ import { isProductInCategory } from '../utils/categoryCompatibility';
 import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
 import { CategoryImageUploader } from './CategoryImageUploader';
+import { RichTextDescriptionEditor } from './RichTextDescriptionEditor';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -4824,15 +4825,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Product Description
-                    </label>
-                    <textarea
-                      rows={3}
+                  <div className="col-span-full">
+                    <RichTextDescriptionEditor
+                      label="Product Description (পণ্যের বিস্তারিত বিবরণ ও স্পেসিফিকেশন)"
                       value={editingProduct?.description || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 resize-none"
+                      onChange={(html) =>
+                        setEditingProduct((prev) => (prev ? { ...prev, description: html } : prev))
+                      }
                     />
                   </div>
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Product } from '../types';
 import { parseProductDescription } from '../utils/productDescriptionParser';
+import { sanitizeSafeHtml } from '../utils/sanitizeHtml';
 
 interface ProductDescriptionSectionProps {
   product: Product;
@@ -57,14 +58,20 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
             </h3>
           </div>
           <div className="p-3.5 sm:p-4 rounded-2xl bg-zinc-50/90 border border-zinc-200/80 space-y-2.5">
-            {parsed.overviewParagraphs.map((para, idx) => (
-              <p
-                key={idx}
-                className="text-xs sm:text-[13px] text-zinc-700 leading-[1.8] font-normal"
-              >
-                {para}
-              </p>
-            ))}
+            {parsed.isRichHtml && parsed.rawRichHtml ? (
+              <div
+                className="text-xs sm:text-[13px] text-zinc-800 leading-[1.8] font-normal space-y-2 [&_h2]:text-base [&_h2]:font-black [&_h2]:my-2 [&_h2]:text-zinc-950 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-1 [&_p]:my-1.5 [&_mark]:px-1 [&_mark]:py-0.5 [&_mark]:rounded-md"
+                dangerouslySetInnerHTML={{ __html: parsed.rawRichHtml }}
+              />
+            ) : (
+              parsed.overviewParagraphs.map((para, idx) => (
+                <div
+                  key={idx}
+                  className="text-xs sm:text-[13px] text-zinc-700 leading-[1.8] font-normal"
+                  dangerouslySetInnerHTML={{ __html: sanitizeSafeHtml(para) }}
+                />
+              ))
+            )}
           </div>
         </section>
       )}
@@ -90,7 +97,10 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                   <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
                     <Check className="w-2.5 h-2.5 stroke-[3]" />
                   </span>
-                  <span className="font-medium">{feature}</span>
+                  <span
+                    className="font-medium"
+                    dangerouslySetInnerHTML={{ __html: sanitizeSafeHtml(feature) }}
+                  />
                 </li>
               ))}
             </ul>
