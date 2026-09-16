@@ -11,7 +11,6 @@ import {
   Heart,
   User,
   UserCheck,
-  Headphones,
   Menu,
   Home,
   Cpu,
@@ -371,19 +370,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <PackageCheck className="w-3.5 h-3.5 text-zinc-400" />
               <span>Track Order</span>
             </button>
-            <span className="text-zinc-700 hidden sm:inline">•</span>
-            <a
-              href="#support-section"
-              onClick={(e) => {
-                e.preventDefault();
-                const el = document.getElementById('support-section') || document.getElementById('footer-section');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer hidden sm:flex"
-            >
-              <Headphones className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Help & Support</span>
-            </a>
             {settings.phone && (
               <>
                 <span className="text-zinc-700 hidden md:inline">•</span>

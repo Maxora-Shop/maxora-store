@@ -40,8 +40,17 @@ export async function sendAiChatMessage({
 
   // Prepare top candidate products from catalog for context
   const qLower = message.toLowerCase();
-  let candidateProducts = allProducts;
+  let candidateProducts = [...allProducts];
   if (qLower) {
+    const isGeneralRecommendation =
+      qLower.includes('সাজেস্ট') ||
+      qLower.includes('ভালো') ||
+      qLower.includes('গ্যাজেট') ||
+      qLower.includes('সেরা') ||
+      qLower.includes('বেস্ট') ||
+      qLower.includes('recommend') ||
+      qLower.includes('suggest');
+
     const tokens = qLower.split(/\s+/).filter((t) => t.length > 2);
     const scored = allProducts.map((p) => {
       let score = 0;
@@ -49,7 +58,9 @@ export async function sendAiChatMessage({
       tokens.forEach((t) => {
         if (text.includes(t)) score += 2;
       });
-      if (p.stock > 0) score += 1;
+      if (Number(p.stock || 0) > 0) score += 3;
+      if (p.featured) score += 2;
+      if (isGeneralRecommendation && Number(p.stock || 0) > 0) score += 5;
       return { product: p, score };
     });
     scored.sort((a, b) => b.score - a.score);
@@ -110,7 +121,7 @@ export async function sendAiChatMessage({
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
 
   try {
     // Try /api/ai/chat first
@@ -225,6 +236,38 @@ function clientFallbackAnswer(
       recommendedProducts: [],
       needsWhatsApp: false,
     };
+  }
+
+  // Suggestion / Recommendation query
+  if (
+    q.includes('সাজেস্ট') ||
+    q.includes('ভালো') ||
+    q.includes('গ্যাজেট') ||
+    q.includes('সেরা') ||
+    q.includes('বেস্ট') ||
+    q.includes('পণ্য') ||
+    q.includes('প্রোডাক্ট') ||
+    q.includes('recommend') ||
+    q.includes('suggest')
+  ) {
+    const inStock = allProducts.filter((p) => Number(p.stock || 0) > 0);
+    const suggested = (inStock.length > 0 ? inStock : allProducts).slice(0, 3);
+    if (suggested.length > 0) {
+      const listText = suggested
+        .map(
+          (p, i) =>
+            `${i + 1}. **${p.name}** - অফার মূল্য: ৳${Math.max(
+              0,
+              Number(p.selling_price || 0) - Number(p.discount || 0)
+            ).toLocaleString('en-BD')}`
+        )
+        .join('\n');
+      return {
+        reply: `আপনার সুবিধার জন্য আমাদের শপের সেরা ও সবচেয়ে জনপ্রিয় আসল গ্যাজেটগুলো নিচে সাজেস্ট করা হলো:\n\n${listText}\n\nআমাদের সকল পণ্যে পাচ্ছেন সারা বাংলাদেশে **১০০% ক্যাশ অন ডেলিভারি** এবং **৭ দিনের রিপ্লেসমেন্ট ওয়ারেন্টি**। যেকোনো পণ্য কিনতে নিচে দেওয়া কার্ডের **"Buy Now"** বাটনে ক্লিক করুন!`,
+        recommendedProducts: suggested,
+        needsWhatsApp: false,
+      };
+    }
   }
 
   // Check active FAQs from settings

@@ -47,6 +47,19 @@ function getAiClient(): GoogleGenAI | null {
   return geminiClient;
 }
 
+// In-memory high-speed cache for concurrent customers
+interface CacheEntry {
+  response: AiChatResponse;
+  timestamp: number;
+}
+const aiQueryCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CACHE_SIZE = 500;
+
+function getCacheKey(userQuery: string, currentProductId?: string): string {
+  return `${currentProductId || 'catalog'}:${userQuery.toLowerCase().trim()}`;
+}
+
 /**
  * Intelligent local intent matcher as safety fallback or fast responder for standard queries
  */
@@ -340,6 +353,16 @@ export async function processAiChatMessage(
     return localMatch;
   }
 
+  // Fast In-Memory Cache Lookup (Sub-5ms response for recurring customer questions)
+  const cacheKey = getCacheKey(userMessage, req.currentProduct?.id);
+  const cached = aiQueryCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return {
+      ...cached.response,
+      source: 'gemini',
+    };
+  }
+
   const ai = getAiClient();
   if (!ai) {
     // If Gemini API is not configured or key is absent, use intelligent local responder
@@ -441,9 +464,14 @@ ${adminCustomNote ? `\nAdditional Admin Note: ${adminCustomNote}` : ''}
    - Return concise, beautifully formatted markdown.
    - If you recommend specific products from the candidate list, list their exact IDs in a JSON block at the end of your response like this:
    <!--RECOMMENDED_IDS: ["id1", "id2"]-->
-   - If WhatsApp contact is required, include:
-   <!--NEEDS_WHATSAPP: true-->
-   <!--WHATSAPP_TEXT: prefilled text here-->
+8. **PRODUCT RECOMMENDATION / SUGGESTION REQUESTS (বাধ্যতামূলক নিয়ম)**:
+   - When the customer asks for a recommendation or suggestion (e.g. "আমার জন্য একটা ভালো গ্যাজেট সাজেস্ট করুন", "ভালো গ্যাজেট দেখান", "কোনটা কিনব", "সাজেস্ট করুন", "সেরা পণ্য", "suggest", "recommend"):
+     1. YOU MUST RECOMMEND 2 TO 3 REAL PRODUCTS from the CANDIDATE PRODUCTS LIST below.
+     2. For each recommended product, clearly write its exact Name in bold, its offer price in ৳, and 1 key highlight.
+     3. You MUST append their exact IDs from the candidate list:
+        <!--RECOMMENDED_IDS: ["id1", "id2"]-->
+        so that interactive product cards with Buy Now buttons appear directly in the chat!
+     4. Mention that they can order with 100% Cash on Delivery across Bangladesh.
 `;
 
     // Format chat history
@@ -486,7 +514,7 @@ CUSTOMER'S NEW QUESTION:
         config: {
           systemInstruction,
           temperature: 0.4,
-          maxOutputTokens: 800,
+          maxOutputTokens: 2048,
         },
       });
     } catch (primaryErr: any) {
@@ -501,7 +529,7 @@ CUSTOMER'S NEW QUESTION:
         config: {
           systemInstruction,
           temperature: 0.4,
-          maxOutputTokens: 800,
+          maxOutputTokens: 2048,
         },
       });
     }
@@ -549,13 +577,49 @@ CUSTOMER'S NEW QUESTION:
       recommendedProductIds = [req.currentProduct.id];
     }
 
-    return {
+    // Auto-detect recommended products mentioned in text or from recommendation query
+    if (recommendedProductIds.length === 0 && Array.isArray(req.candidateProducts)) {
+      for (const prod of req.candidateProducts) {
+        if (prod.name && cleanReply.toLowerCase().includes(prod.name.toLowerCase().trim())) {
+          if (!recommendedProductIds.includes(prod.id)) {
+            recommendedProductIds.push(prod.id);
+          }
+        }
+      }
+      const isRecQuery =
+        userMessage.includes('সাজেস্ট') ||
+        userMessage.includes('গ্যাজেট') ||
+        userMessage.includes('ভালো') ||
+        userMessage.includes('সেরা') ||
+        userMessage.includes('recommend') ||
+        userMessage.includes('suggest');
+      if (isRecQuery && recommendedProductIds.length === 0) {
+        recommendedProductIds = req.candidateProducts
+          .filter((p) => Number(p.stock || 0) > 0)
+          .slice(0, 3)
+          .map((p) => p.id);
+      }
+    }
+
+    const finalResponse: AiChatResponse = {
       reply: cleanReply,
       recommendedProductIds: recommendedProductIds.slice(0, 4),
       needsWhatsApp,
       whatsappPrefilledText,
       source: 'gemini',
     };
+
+    // Cache successful answer for subsequent customers asking the same/similar query
+    if (aiQueryCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = aiQueryCache.keys().next().value;
+      if (oldestKey) aiQueryCache.delete(oldestKey);
+    }
+    aiQueryCache.set(cacheKey, {
+      response: finalResponse,
+      timestamp: Date.now(),
+    });
+
+    return finalResponse;
   } catch (err: any) {
     console.error('Gemini AI Chat Error:', err);
     // Fall back smoothly to local matcher or intelligent fallback so customer is always answered

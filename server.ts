@@ -520,6 +520,46 @@ const handleAiChatRequest = async (req: express.Request, res: express.Response) 
     if (!payload.message || typeof payload.message !== 'string') {
       return res.status(400).json({ success: false, error: 'message is required' });
     }
+
+    // Always ensure candidate products are available from store database
+    if (!Array.isArray(payload.candidateProducts) || payload.candidateProducts.length < 4) {
+      const activeProducts = (db.products || [])
+        .filter((p: any) => p.active !== 0 && p.active !== false && String(p.active) !== '0')
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          selling_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
+          discount: Number(p.discount || 0),
+          stock: Number(p.stock || 0),
+          brand: p.brand,
+          category: p.category,
+          image_url: p.image_url,
+          description: (p.description || '').slice(0, 120),
+        }));
+
+      // If user passed some candidates, merge and deduplicate
+      const existingIds = new Set((payload.candidateProducts || []).map((c: any) => c.id));
+      const merged = [...(payload.candidateProducts || [])];
+      for (const p of activeProducts) {
+        if (!existingIds.has(p.id) && merged.length < 15) {
+          merged.push(p);
+          existingIds.add(p.id);
+        }
+      }
+      payload.candidateProducts = merged;
+    }
+
+    if (!payload.settings) {
+      payload.settings = db.settings;
+    }
+
+    if (!payload.activeFaqs) {
+      payload.activeFaqs = Array.isArray(db.settings?.ai_faqs)
+        ? (db.settings.ai_faqs as any[]).filter((f: any) => f.active !== false)
+        : [];
+    }
+
     const result = await processAiChatMessage(payload);
     return res.json({ success: true, ...result });
   } catch (err: any) {
