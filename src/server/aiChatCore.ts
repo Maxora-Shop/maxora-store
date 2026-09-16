@@ -208,7 +208,120 @@ function matchLocalIntent(
     };
   }
 
+  // 9. How to Order / Ordering Steps
+  if (
+    q.includes('কীভাবে অর্ডার') ||
+    q.includes('কিভাবে অর্ডার') ||
+    q.includes('অর্ডার করব') ||
+    q.includes('অর্ডার করবো') ||
+    q.includes('অর্ডার দেওয়ার নিয়ম') ||
+    q.includes('অর্ডার দেওয়ার নিয়ম') ||
+    q.includes('অর্ডার করতে চাই') ||
+    q.includes('কিনতে চাই') ||
+    q.includes('order korbo') ||
+    q.includes('how to order') ||
+    q.includes('kivabe order')
+  ) {
+    const prodNote = currentProd
+      ? `\n\nআপনি বর্তমানে দেখছেন: **${currentProd.name}** (মূল্য: ৳${Math.max(0, Number(currentProd.selling_price || 0) - Number(currentProd.discount || 0)).toLocaleString('en-BD')})। নিচে দেওয়া পণ্য কার্ডে বা পেজের **"Buy Now"** বাটনে ট্যাপ করুন।`
+      : '';
+    return {
+      reply: `Maxora-তে অর্ডার করার নিয়ম খুবই সহজ:\n\n1. পছন্দের পণ্যটির পেজে গিয়ে **"Buy Now"** অথবা **"অর্ডার করুন"** বাটনে ক্লিক করুন।\n2. আপনার নাম, সচল মোবাইল নম্বর ও পূর্ণাঙ্গ ডেলিভারি ঠিকানা লিখুন।\n3. ডেলিভারি এলাকা (ঢাকা সিটি ৳${insideDhaka} / সাব-ঢাকা ৳${subDhaka} / ঢাকার বাইরে ৳${outsideDhaka}) সিলেক্ট করুন।\n4. **"অর্ডার কনফার্ম করুন"** বাটনে ক্লিক করলেই আপনার অর্ডারটি কনফার্ম হয়ে যাবে!${prodNote}\n\nসারা বাংলাদেশে **১০০% ক্যাশ অন ডেলিভারি** রয়েছে—ডেলিভারিম্যানের কাছ থেকে পণ্য বুঝে পেয়ে মূল্য পরিশোধ করুন।`,
+      recommendedProductIds: currentProd?.id ? [currentProd.id] : [],
+      source: 'catalog',
+    };
+  }
+
+  // 10. Warranty / Guarantee / Return Policy
+  if (
+    q.includes('warranty') ||
+    q.includes('guarantee') ||
+    q.includes('ওয়ারেন্টি') ||
+    q.includes('গ্যারান্টি') ||
+    q.includes('রিটার্ন') ||
+    q.includes('ফেরত') ||
+    q.includes('নষ্ট বের হলে') ||
+    q.includes('সমস্যা হলে')
+  ) {
+    return {
+      reply: `Maxora-তে আপনি পাবেন **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি (7 Days Replacement Warranty)**।\n\nপণ্য ডেলিভারি পাওয়ার পর কোনো ম্যানুফ্যাকচারিং ত্রুটি বা সমস্যা থাকলে আমাদের হেল্পলাইন বা WhatsApp-এ জানালে সাথে সাথে সমাধান বা রিপ্লেসমেন্ট প্রদান করা হবে।`,
+      source: 'catalog',
+    };
+  }
+
+  // 11. Shop / Office Location
+  if (
+    q.includes('দোকান কোথায়') ||
+    q.includes('শোরুম') ||
+    q.includes('ঠিকানা') ||
+    q.includes('showroom') ||
+    q.includes('location') ||
+    q.includes('office')
+  ) {
+    return {
+      reply: `Maxora হলো একটি প্রিমিয়াম অনলাইন লাইফস্টাইল ও গ্যাজেট শপ। আমাদের সেন্ট্রাল ওয়্যারহাউস ও কাস্টমার সার্ভিস হাব ঢাকাতে অবস্থিত। সারা বাংলাদেশে ঘরে বসেই ক্যাশ অন ডেলিভারিতে দ্রুততম সময়ে আপনি আমাদের আসল পণ্য হাতে পাবেন।`,
+      source: 'catalog',
+    };
+  }
+
   return null;
+}
+
+/**
+ * Intelligent context-based fallback response if Gemini is unreachable
+ */
+function generateSmartFallbackResponse(
+  userQuery: string,
+  req: AiChatRequest
+): AiChatResponse {
+  const currentProd = req.currentProduct;
+  const settings = req.settings || {};
+  const insideDhaka = settings.delivery_inside_dhaka ?? 70;
+  const subDhaka = settings.delivery_sub_dhaka ?? 100;
+  const outsideDhaka = settings.delivery_outside_dhaka ?? 130;
+  const faqs = (req.activeFaqs || []).filter((f) => f.active !== false);
+
+  // Check if query matches any FAQ partially
+  const words = userQuery.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  for (const faq of faqs) {
+    const faqQ = faq.question.toLowerCase();
+    const matched = words.some((w) => faqQ.includes(w));
+    if (matched) {
+      return {
+        reply: faq.answer,
+        source: 'faq',
+      };
+    }
+  }
+
+  // Check custom commands
+  const customCommands = (settings.ai_custom_commands || []).filter((c: any) => c.active !== false);
+  for (const cmd of customCommands) {
+    const title = (cmd.title || '').toLowerCase();
+    if (words.some((w) => title.includes(w))) {
+      return {
+        reply: cmd.command,
+        source: 'catalog',
+      };
+    }
+  }
+
+  if (currentProd) {
+    const price = Math.max(0, Number(currentProd.selling_price || 0) - Number(currentProd.discount || 0));
+    return {
+      reply: `ধন্যবাদ আপনার অনুসন্ধানের জন্য। **${currentProd.name}** বর্তমানে আমাদের স্টকে রয়েছে (মূল্য: ৳${price.toLocaleString('en-BD')})। আপনি সরাসরি "Buy Now" বাটনে ক্লিক করে ক্যাশ অন ডেলিভারিতে অর্ডার করতে পারেন। ডেলিভারি চার্জ: ঢাকা সিটিতে ৳${insideDhaka}, ঢাকার বাইরে ৳${outsideDhaka}। যেকোনো অতিরিক্ত তথ্যের জন্য নিচে WhatsApp বাটনে ট্যাপ করতে পারেন।`,
+      recommendedProductIds: [currentProd.id || ''],
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
+  return {
+    reply: `Maxora-তে আপনাকে স্বাগতম! আমাদের সকল পণ্যে পাচ্ছেন ১০০% ক্যাশ অন ডেলিভারি এবং দ্রুততম হোম ডেলিভারি সুবিধা (ঢাকা: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। আপনার পছন্দের পণ্যটি সহজে অর্ডার করতে পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো অনুসন্ধানে আমাদের প্রতিনিধি সদা প্রস্তুত।`,
+    needsWhatsApp: true,
+    whatsappPrefilledText: `হ্যালো Maxora, আমি এই বিষয়ে জানতে চাই: ${userQuery}`,
+    source: 'fallback',
+  };
 }
 
 export async function processAiChatMessage(
@@ -364,15 +477,34 @@ CUSTOMER'S NEW QUESTION:
       parts: [{ text: fullUserPrompt }],
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents,
-      config: {
-        systemInstruction,
-        temperature: 0.4,
-        maxOutputTokens: 800,
-      },
-    });
+    let response: any = null;
+
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.4,
+          maxOutputTokens: 800,
+        },
+      });
+    } catch (primaryErr: any) {
+      console.warn(
+        'Primary model gemini-3.8-flash failed, attempting fallback model gemini-3.6-flash:',
+        primaryErr?.message || primaryErr
+      );
+      // Failover to secondary model
+      response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.4,
+          maxOutputTokens: 800,
+        },
+      });
+    }
 
     const rawText = response.text || '';
 
@@ -426,16 +558,10 @@ CUSTOMER'S NEW QUESTION:
     };
   } catch (err: any) {
     console.error('Gemini AI Chat Error:', err);
-    // Fall back smoothly to local matcher if available
+    // Fall back smoothly to local matcher or intelligent fallback so customer is always answered
     if (localMatch) {
       return localMatch;
     }
-    return {
-      reply:
-        'দুঃখিত, এই মুহূর্তে AI Assistant সাময়িকভাবে unavailable। আবার চেষ্টা করুন অথবা আমাদের WhatsApp support-এ যোগাযোগ করুন।',
-      needsWhatsApp: true,
-      whatsappPrefilledText: `হ্যালো Maxora, আমি এই বিষয়ে জানতে চাই: ${userMessage}`,
-      source: 'fallback',
-    };
+    return generateSmartFallbackResponse(userMessage, req);
   }
 }

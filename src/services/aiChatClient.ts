@@ -194,9 +194,58 @@ function clientFallbackAnswer(
     };
   }
 
+  // Order instruction / how to order
+  if (
+    q.includes('অর্ডার') ||
+    q.includes('order') ||
+    q.includes('কিনব') ||
+    q.includes('কিনতে চাই') ||
+    q.includes('how to buy')
+  ) {
+    const prodText = currentProduct
+      ? `\n\nআপনি বর্তমানে **${currentProduct.name}** দেখছেন (মূল্য: ৳${Math.max(0, Number(currentProduct.selling_price || 0) - Number(currentProduct.discount || 0)).toLocaleString('en-BD')})। নিচে দেওয়া কার্ডের বা পেজের **"Buy Now"** বাটনে ট্যাপ করুন।`
+      : '';
+    return {
+      reply: `Maxora-তে অর্ডার করার নিয়ম খুবই সহজ:\n\n1. পছন্দের পণ্যটির পেজে গিয়ে **"Buy Now"** অথবা **"অর্ডার করুন"** বাটনে ক্লিক করুন।\n2. আপনার নাম, মোবাইল নম্বর ও পূর্ণাঙ্গ ডেলিভারি ঠিকানা লিখুন।\n3. ডেলিভারি এলাকা (ঢাকা সিটি ৳${insideDhaka} / সাব-ঢাকা ৳${subDhaka} / ঢাকার বাইরে ৳${outsideDhaka}) সিলেক্ট করুন।\n4. **"অর্ডার কনফার্ম করুন"** বাটনে ক্লিক করলেই আপনার অর্ডার সম্পন্ন হয়ে যাবে!${prodText}\n\nসারা বাংলাদেশে **১০০% ক্যাশ অন ডেলিভারি** রয়েছে—পণ্য হাতে পেয়ে চেক করে মূল্য পরিশোধ করতে পারবেন।`,
+      recommendedProducts: currentProduct ? [currentProduct] : [],
+      needsWhatsApp: false,
+    };
+  }
+
+  // Warranty / Return
+  if (
+    q.includes('warranty') ||
+    q.includes('ওয়ারেন্টি') ||
+    q.includes('গ্যারান্টি') ||
+    q.includes('রিটার্ন') ||
+    q.includes('ফেরত')
+  ) {
+    return {
+      reply: `Maxora-তে রয়েছে **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি**। পণ্যে কোনো উৎপাদনগত ত্রুটি থাকলে আমাদের WhatsApp সাপোর্টে জানালে তাৎক্ষণিক সমাধান বা রিপ্লেসমেন্ট দেওয়া হবে।`,
+      recommendedProducts: [],
+      needsWhatsApp: false,
+    };
+  }
+
+  // Check active FAQs from settings
+  if (Array.isArray(settings?.ai_faqs)) {
+    for (const faq of settings.ai_faqs) {
+      if (faq.active !== false && faq.question) {
+        const fq = faq.question.toLowerCase();
+        if (fq.includes(q) || q.includes(fq)) {
+          return {
+            reply: faq.answer,
+            recommendedProducts: currentProduct ? [currentProduct] : [],
+            needsWhatsApp: false,
+          };
+        }
+      }
+    }
+  }
+
   // Default friendly fallback with WhatsApp button
   return {
-    reply: `দুঃখিত, এই মুহূর্তে AI Assistant সংযোগ পেতে পারছে না। তবে আপনার যেকোনো পণ্য বা অর্ডার সংক্রান্ত সহায়তার জন্য আমাদের WhatsApp সাপোর্ট টিম সদা প্রস্তুত।`,
+    reply: `Maxora-তে আপনাকে স্বাগতম! সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারিতে আসল গ্যাজেট ও লাইফস্টাইল পণ্য ডেলিভারি দেওয়া হয় (ঢাকা সিটি: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। যেকোনো পণ্য কিনতে সরাসরি পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো প্রশ্ন বা তথ্যের জন্য আমাদের WhatsApp সাপোর্ট টিম সদা প্রস্তুত।`,
     recommendedProducts: currentProduct ? [currentProduct] : [],
     needsWhatsApp: true,
     whatsappPrefilledText: `হ্যালো Maxora, আমি এই বিষয়ে জানতে চাই: ${query}`,
