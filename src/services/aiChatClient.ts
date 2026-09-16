@@ -103,6 +103,8 @@ export async function sendAiChatMessage({
       phone: settings?.phone,
       whatsapp: settings?.whatsapp,
       ai_whatsapp_number: settings?.ai_whatsapp_number,
+      ai_custom_commands: settings?.ai_custom_commands,
+      ai_system_instructions: settings?.ai_system_instructions,
     },
     candidateProducts: candidateSummary,
   };

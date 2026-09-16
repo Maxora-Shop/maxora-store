@@ -1,5 +1,43 @@
 import userProductsJson from "./userProducts.json";
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner, AiSuggestedQuestion, AiFaqItem } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner, AiSuggestedQuestion, AiFaqItem, AiCustomCommand } from '../types';
+
+export const DEFAULT_AI_CUSTOM_COMMANDS: AiCustomCommand[] = [
+  {
+    id: "cmd-1",
+    title: "নম্র ও আন্তরিক আচরণ",
+    command: "কাস্টমারদের সাথে কথা বলার সময় অত্যন্ত মার্জিত, নম্র ও আন্তরিক ভাষা ব্যবহার করবে। কথা সংক্ষিপ্ত, তথ্যবহুল ও পরিষ্কার রাখবে।",
+    active: true,
+    order: 1,
+  },
+  {
+    id: "cmd-2",
+    title: "অর্ডার করার নিয়ম ও Buy Now নির্দেশনা",
+    command: "কাস্টমার কোনো পণ্য কিনতে চাইলে তাকে ওয়েবসাইটে পণ্যটির পেজে গিয়ে 'Buy Now' অথবা 'অর্ডার করুন' বাটনে ক্লিক করে নাম, মোবাইল নম্বর ও ঠিকানা দিয়ে অর্ডার সম্পন্ন করতে বলবে।",
+    active: true,
+    order: 2,
+  },
+  {
+    id: "cmd-3",
+    title: "ক্যাশ অন ডেলিভারি নিশ্চয়তা",
+    command: "কাস্টমার পেমেন্ট নিয়ে জানতে চাইলে আশ্বস্ত করবে যে সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারি রয়েছে, ডেলিভারিম্যানের কাছ থেকে পণ্য দেখে মূল্য পরিশোধ করা যাবে।",
+    active: true,
+    order: 3,
+  },
+  {
+    id: "cmd-4",
+    title: "দাম ও ডিসকাউন্ট পলিসি",
+    command: "ওয়েবসাইটে প্রদর্শিত মূল্যের চেয়ে কম বা অতিরিক্ত ডিসকাউন্ট অফার করবে না। যদি কাস্টমার ডিসকাউন্ট চায়, তাকে বলবে ওয়েবসাইটে দেওয়া স্পেশাল অফার মূল্যই আমাদের সেরা দাম।",
+    active: true,
+    order: 4,
+  },
+  {
+    id: "cmd-5",
+    title: "WhatsApp এস্কেলেশন",
+    command: "পাইকারি বা হোলসেল কেনাকাটা, বড় অভিযোগ, অথবা কোনো পণ্যের সুনির্দিষ্ট তথ্য জানা না থাকলে কাস্টমারকে আমাদের অফিসিয়াল WhatsApp নম্বরে কথা বলার পরামর্শ দিবে।",
+    active: true,
+    order: 5,
+  },
+];
 
 export const DEFAULT_AI_SUGGESTED_QUESTIONS: AiSuggestedQuestion[] = [
   { id: "sq-1", question: "এই পণ্যের দাম কত?", active: true, order: 1 },
@@ -617,6 +655,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   ai_whatsapp_number: "+8801635451746",
   ai_suggested_questions: DEFAULT_AI_SUGGESTED_QUESTIONS,
   ai_faqs: DEFAULT_AI_FAQS,
+  ai_custom_commands: DEFAULT_AI_CUSTOM_COMMANDS,
+  ai_system_instructions: "কাস্টমারদের সাথে সর্বদা সর্বোচ্চ বিনম্র ও প্রফেশনাল আচরণ করুন। Maxora-এর সব পণ্য ১০০% আসল ও কোয়ালিটি নিশ্চিত।",
 };
 
 export const INITIAL_PRODUCTS: Product[] = (userProductsJson as Product[]);

@@ -231,6 +231,14 @@ export interface HeroBanner {
   display_order?: number;
 }
 
+export interface AiCustomCommand {
+  id: string;
+  title: string;
+  command: string;
+  active: boolean;
+  order: number;
+}
+
 export interface AiSuggestedQuestion {
   id: string;
   question: string;
@@ -253,6 +261,8 @@ export interface AiAssistantSettings {
   whatsappNumber?: string;
   suggestedQuestions: AiSuggestedQuestion[];
   faqs: AiFaqItem[];
+  customCommands?: AiCustomCommand[];
+  systemInstructions?: string;
 }
 
 export interface StoreSettings {
@@ -295,6 +305,8 @@ export interface StoreSettings {
   ai_whatsapp_number?: string;
   ai_suggested_questions?: AiSuggestedQuestion[];
   ai_faqs?: AiFaqItem[];
+  ai_custom_commands?: AiCustomCommand[];
+  ai_system_instructions?: string;
 }
 
 export interface DailySalesMetric {
