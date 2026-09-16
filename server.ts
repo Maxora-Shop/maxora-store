@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
@@ -20,6 +21,7 @@ process.on('warning', (warning) => {
 });
 
 const app = express();
+app.use(compression());
 const PORT = 3000;
 
 const DEFAULT_FIREBASE_CONFIG = {

@@ -157,6 +157,8 @@ export const Hero: React.FC<HeroProps> = ({
                   src={slide.singleBannerImage}
                   alt={slide.titlePrimary}
                   className="w-full h-full object-cover"
+                  fetchPriority={currentSlide === 0 ? "high" : "auto"}
+                  decoding="async"
                 />
               </div>
             ) : (
@@ -168,6 +170,8 @@ export const Hero: React.FC<HeroProps> = ({
                     src={slide.image1 || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 1"
                     className="w-full h-full object-contain filter drop-shadow-lg"
+                    fetchPriority={currentSlide === 0 ? "high" : "auto"}
+                    decoding="async"
                   />
                 </div>
 
@@ -177,6 +181,8 @@ export const Hero: React.FC<HeroProps> = ({
                     src={slide.image2 || 'https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 2"
                     className="w-full h-full object-contain filter drop-shadow-xl"
+                    fetchPriority={currentSlide === 0 ? "high" : "auto"}
+                    decoding="async"
                   />
                 </div>
 
@@ -186,6 +192,7 @@ export const Hero: React.FC<HeroProps> = ({
                     src={slide.image3 || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 3"
                     className="w-full h-full object-contain filter drop-shadow-lg"
+                    decoding="async"
                   />
                 </div>
 
@@ -195,6 +202,7 @@ export const Hero: React.FC<HeroProps> = ({
                     src={slide.image4 || 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 4"
                     className="w-full h-full object-contain filter drop-shadow-md"
+                    decoding="async"
                   />
                 </div>
 

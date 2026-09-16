@@ -2965,6 +2965,39 @@ export const storeService = {
   // 7. REVIEWS & RATINGS
   async getReviews(productId?: string): Promise<Review[]> {
     const local = getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+    const matchingLocal = productId ? local.filter((r) => r.product_id === productId) : local;
+
+    // Fast-path: return cached reviews instantly (0ms) so Product Details opens without network lag
+    if (matchingLocal.length > 0) {
+      // Refresh in background without blocking the UI
+      if (!isClientQuotaCooldownActive()) {
+        (async () => {
+          try {
+            const q = productId
+              ? query(collection(db, 'reviews'), where('product_id', '==', productId))
+              : query(collection(db, 'reviews'));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+              const firestoreRevs: Review[] = [];
+              snapshot.forEach((docSnap) => {
+                const d = docSnap.data() as Review;
+                firestoreRevs.push({ ...d, id: String(d.id || docSnap.id) });
+              });
+              const map = new Map<string, Review>();
+              local.forEach((r) => map.set(r.id, r));
+              firestoreRevs.forEach((r) => map.set(r.id, r));
+              const merged = Array.from(map.values()).sort(
+                (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+              );
+              setLocal(REVIEWS_KEY, merged);
+            }
+          } catch (e) {
+            handleStoreFirestoreError('Background reviews refresh', e);
+          }
+        })();
+      }
+      return matchingLocal;
+    }
 
     if (!isClientQuotaCooldownActive()) {
       try {

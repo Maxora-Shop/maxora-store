@@ -8,12 +8,23 @@ import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
 import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
-import { OrderTrackerModal } from './components/OrderTrackerModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
-import { AdminDashboard } from './components/AdminDashboard';
-import { CustomerAccountModal } from './components/CustomerAccountModal';
-import { InvoiceModal } from './components/InvoiceModal';
+
+// Code-split heavy admin suite and optional customer modals so customer homepage loads ultra-fast
+const AdminDashboard = React.lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const CustomerAccountModal = React.lazy(() =>
+  import('./components/CustomerAccountModal').then((m) => ({ default: m.CustomerAccountModal }))
+);
+const InvoiceModal = React.lazy(() =>
+  import('./components/InvoiceModal').then((m) => ({ default: m.InvoiceModal }))
+);
+const OrderTrackerModal = React.lazy(() =>
+  import('./components/OrderTrackerModal').then((m) => ({ default: m.OrderTrackerModal }))
+);
+
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
 import { ProductFilterSidebar } from './components/ProductFilterSidebar';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -487,8 +498,13 @@ export default function App() {
     };
   }, []);
 
-  // Fetch products, settings, and categories on initial mount or when returning from admin
+  // Fetch products, settings, and categories when returning from admin
+  const isInitialMountRef = useRef(true);
   useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
     fetchProducts();
     fetchSettings();
     fetchCategories();
@@ -1171,20 +1187,29 @@ export default function App() {
 
   if (isAdminView) {
     return (
-      <AdminDashboard
-        onBackToStore={() => {
-          setIsAdminView(false);
-          window.history.pushState({}, '', '/');
-          fetchProducts();
-          fetchSettings();
-        }}
-        globalSettings={settings}
-        onSettingsUpdated={() => {
-          fetchSettings();
-          fetchProducts();
-          fetchCategories();
-        }}
-      />
+      <React.Suspense
+        fallback={
+          <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 space-y-4">
+            <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-semibold text-zinc-400">Loading Secure Admin Panel...</p>
+          </div>
+        }
+      >
+        <AdminDashboard
+          onBackToStore={() => {
+            setIsAdminView(false);
+            window.history.pushState({}, '', '/');
+            fetchProducts();
+            fetchSettings();
+          }}
+          globalSettings={settings}
+          onSettingsUpdated={() => {
+            fetchSettings();
+            fetchProducts();
+            fetchCategories();
+          }}
+        />
+      </React.Suspense>
     );
   }
 
@@ -1782,35 +1807,45 @@ export default function App() {
         ratingStatsMap={ratingStatsMap}
       />
 
-      <OrderTrackerModal
-        isOpen={isTrackerOpen}
-        onClose={() => setIsTrackerOpen(false)}
-      />
+      {isTrackerOpen && (
+        <React.Suspense fallback={null}>
+          <OrderTrackerModal
+            isOpen={isTrackerOpen}
+            onClose={() => setIsTrackerOpen(false)}
+          />
+        </React.Suspense>
+      )}
 
       {/* Customer Account & Order History Modal */}
-      <CustomerAccountModal
-        isOpen={isCustomerAccountOpen}
-        onClose={() => setIsCustomerAccountOpen(false)}
-        settings={settings}
-        wishlistProducts={savedProducts}
-        onRemoveWishlist={handleToggleWishlist}
-        onAddToCart={(p) => handleAddToCart(p, 1)}
-        onOpenInvoice={(order) => setCustomerInvoiceOrder(order)}
-        onOpenProduct={(p) => handleOpenProductDetail(p)}
-      />
+      {isCustomerAccountOpen && (
+        <React.Suspense fallback={null}>
+          <CustomerAccountModal
+            isOpen={isCustomerAccountOpen}
+            onClose={() => setIsCustomerAccountOpen(false)}
+            settings={settings}
+            wishlistProducts={savedProducts}
+            onRemoveWishlist={handleToggleWishlist}
+            onAddToCart={(p) => handleAddToCart(p, 1)}
+            onOpenInvoice={(order) => setCustomerInvoiceOrder(order)}
+            onOpenProduct={(p) => handleOpenProductDetail(p)}
+          />
+        </React.Suspense>
+      )}
 
       {/* Customer Invoice Slip Modal */}
       {customerInvoiceOrder && (
-        <InvoiceModal
-          order={customerInvoiceOrder}
-          settings={settings}
-          products={products}
-          onClose={() => setCustomerInvoiceOrder(null)}
-          onOpenProduct={(p) => {
-            setCustomerInvoiceOrder(null);
-            handleOpenProductDetail(p);
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <InvoiceModal
+            order={customerInvoiceOrder}
+            settings={settings}
+            products={products}
+            onClose={() => setCustomerInvoiceOrder(null)}
+            onOpenProduct={(p) => {
+              setCustomerInvoiceOrder(null);
+              handleOpenProductDetail(p);
+            }}
+          />
+        </React.Suspense>
       )}
 
       {/* Mobile Product Filter Sidebar Drawer */}

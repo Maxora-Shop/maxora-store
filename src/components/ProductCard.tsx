@@ -49,17 +49,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     if (e.metaKey || e.ctrlKey || e.button === 1) {
       return;
     }
-    // Attempt window.open for separate tab
-    let opened: Window | null = null;
-    try {
-      opened = window.open(fullProductUrl, '_blank', 'noopener,noreferrer');
-    } catch {
-      opened = null;
-    }
-    // If popup was blocked by browser or sandboxed iframe preview, smoothly open details modal
-    if (!opened || opened.closed || typeof opened.closed === 'undefined') {
-      onQuickView(product);
-    }
+    // Instant SPA navigation in the current tab without reloading the page or downloading bundles
+    e.preventDefault();
+    onQuickView(product);
   };
 
   return (
@@ -68,12 +60,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-2.5 xs:p-3 sm:p-4 overflow-hidden group/image w-full min-w-0">
         <a
           href={fullProductUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           onClick={handleProductLinkClick}
           className="w-full h-full flex items-center justify-center cursor-pointer"
           aria-label={`View details for ${product.name}`}
-          title={`Open ${product.name} in separate tab`}
+          title={`View ${product.name}`}
         >
           {!imageFailed && rawImage ? (
             <img
@@ -81,6 +71,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               alt={imageAlt}
               className="max-w-full max-h-full w-auto h-auto object-contain group-hover/image:scale-105 transition-transform duration-300"
               loading="lazy"
+              decoding="async"
               onError={() => setImageFailed(true)}
             />
           ) : (
@@ -188,17 +179,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Mobile Quick Action Buttons */}
         <div className="sm:hidden absolute bottom-2 right-2 z-20 flex items-center gap-1">
-          <a
-            href={fullProductUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={handleProductLinkClick}
-            className="w-7 h-7 rounded-full bg-zinc-950 text-white shadow-xs flex items-center justify-center active:scale-90 transition-transform cursor-pointer"
-            title="Open in new tab"
-            aria-label="Open in new tab"
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-          </a>
           <button
             type="button"
             onClick={(e) => {
@@ -206,11 +186,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.preventDefault();
               onQuickView(product);
             }}
-            className="w-7 h-7 rounded-full bg-white/95 shadow-xs flex items-center justify-center text-zinc-800 active:scale-90 transition-transform cursor-pointer border border-zinc-200/80"
-            aria-label="Quick View in modal"
-            title="Quick View"
+            className="w-7 h-7 rounded-full bg-zinc-950 text-white shadow-xs flex items-center justify-center active:scale-90 transition-transform cursor-pointer"
+            aria-label="View Details"
+            title="View Details"
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-3.5 h-3.5 text-white" />
           </button>
         </div>
 
@@ -285,11 +265,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <h3 className="mb-1.5 leading-snug min-w-0">
             <a
               href={fullProductUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               onClick={handleProductLinkClick}
               className="font-bold text-zinc-900 text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] hover:text-emerald-700 transition-colors cursor-pointer block break-words"
-              title={`Open ${product.name} in separate tab`}
+              title={`View ${product.name}`}
             >
               {product.name}
             </a>
