@@ -37,7 +37,7 @@ export const FloatingSupportButton: React.FC<FloatingSupportButtonProps> = ({ se
   };
 
   return (
-    <div id="floating-support-container" className="fixed bottom-[68px] sm:bottom-5 right-2 xs:right-3 sm:right-5 z-40 flex flex-col items-end pointer-events-none">
+    <div id="floating-support-container" className="fixed bottom-[128px] sm:bottom-[78px] right-3 sm:right-6 z-40 flex flex-col items-end pointer-events-none">
       {/* Support Popup Card */}
       {isOpen && (
         <div

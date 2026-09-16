@@ -6,6 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
 import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
+import { processAiChatMessage } from './src/server/aiChatCore';
 
 // Set Firestore log level to error to avoid noisy internal idle-stream disconnect warnings
 try {
@@ -511,6 +512,30 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
     res.status(500).json({ success: false, error: err.message || 'Server error' });
   }
 });
+
+// POST /api/ai/chat & /api/ai-chat (AI Assistant Chat Endpoint)
+const handleAiChatRequest = async (req: express.Request, res: express.Response) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.message || typeof payload.message !== 'string') {
+      return res.status(400).json({ success: false, error: 'message is required' });
+    }
+    const result = await processAiChatMessage(payload);
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('Server /api/ai/chat error:', err);
+    return res.json({
+      success: true,
+      reply: 'দুঃখিত, এই মুহূর্তে AI Assistant সাময়িকভাবে unavailable। আবার চেষ্টা করুন অথবা আমাদের WhatsApp support-এ যোগাযোগ করুন।',
+      needsWhatsApp: true,
+      whatsappPrefilledText: 'হ্যালো Maxora, আমি কাস্টমার সাপোর্টে যোগাযোগ করতে চাই।',
+      source: 'fallback',
+    });
+  }
+};
+
+app.post('/api/ai/chat', handleAiChatRequest);
+app.post('/api/ai-chat', handleAiChatRequest);
 
 // POST /api/orders
 app.post('/api/orders', (req, res) => {

@@ -152,8 +152,18 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
   };
 
   const handleOpenEdit = (banner: HeroBanner) => {
-    setEditingBanner({ ...banner });
-    const isCustom = banner.bannerType === 'full' || Boolean(banner.singleBannerImage && banner.bannerType !== 'collage');
+    const isCustom =
+      banner.bannerType === 'full' ||
+      banner.bannerType === 'single' ||
+      Boolean(banner.singleBannerImage && banner.bannerType !== 'collage') ||
+      (!banner.image2 && !banner.image3 && !banner.image4 && Boolean(banner.image1));
+
+    const bannerToEdit = { ...banner };
+    if (isCustom && !bannerToEdit.singleBannerImage && bannerToEdit.image1) {
+      bannerToEdit.singleBannerImage = bannerToEdit.image1;
+    }
+
+    setEditingBanner(bannerToEdit);
     setBannerMode(isCustom ? 'single' : 'collage');
     setIsModalOpen(true);
   };
@@ -171,6 +181,11 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       if (!editingBanner.titlePrimary?.trim()) {
         editingBanner.titlePrimary = 'কাস্টম প্রমোশনাল ব্যানার';
       }
+      // Clear collage product images so this banner is purely a full graphic banner
+      delete editingBanner.image1;
+      delete editingBanner.image2;
+      delete editingBanner.image3;
+      delete editingBanner.image4;
     } else {
       editingBanner.bannerType = 'collage';
       if (!editingBanner.titlePrimary?.trim()) {
@@ -289,7 +304,15 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {banners.map((banner, index) => {
           const isActive = banner.active !== false && String(banner.active) !== '0';
-          const isFullBanner = banner.bannerType === 'full' || Boolean(banner.singleBannerImage && banner.bannerType !== 'collage');
+          const isFullBanner =
+            banner.bannerType === 'full' ||
+            banner.bannerType === 'single' ||
+            Boolean(banner.singleBannerImage && banner.bannerType !== 'collage') ||
+            (!banner.image2 && !banner.image3 && !banner.image4 && Boolean(banner.image1));
+          const cardBannerImg =
+            banner.singleBannerImage ||
+            banner.mobileBannerImage ||
+            (!banner.image2 && !banner.image3 && !banner.image4 ? banner.image1 : '');
           const bgClass = banner.bgGradient || 'from-[#e0f2fe] via-[#e8f4fc] to-[#f0f7fd]';
 
           return (
@@ -302,11 +325,11 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
               }`}
             >
               {/* Card Banner Preview Box */}
-              {isFullBanner ? (
+              {isFullBanner && cardBannerImg ? (
                 /* Full Graphic Banner Preview */
                 <div className="relative aspect-16/7 bg-zinc-900 border-b border-zinc-100 overflow-hidden flex items-center justify-center group">
                   <img
-                    src={banner.singleBannerImage || banner.mobileBannerImage}
+                    src={cardBannerImg}
                     alt={banner.titlePrimary || 'Banner'}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
@@ -845,6 +868,26 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Helper switch to custom banner */}
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <p className="text-[11px] text-emerald-900 font-medium">
+                        <strong>ক্যানভা বা ফটোশপে তৈরি করা ব্যানার দিতে চান?</strong> পুরো উইডথ ব্যানার দিতে <strong>কাস্টম ব্যানার ছবি</strong> চাপুন।
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBannerMode('single');
+                        setEditingBanner({ ...editingBanner, bannerType: 'full' });
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer shrink-0"
+                    >
+                      ফুল ব্যানারে যান
+                    </button>
                   </div>
 
                   {/* 4 Images Collage Inputs */}

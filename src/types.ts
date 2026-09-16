@@ -212,7 +212,7 @@ export interface Order {
 
 export interface HeroBanner {
   id: string;
-  bannerType?: 'full' | 'collage';
+  bannerType?: 'full' | 'collage' | 'single';
   singleBannerImage?: string;
   mobileBannerImage?: string;
   pill?: string;
@@ -229,6 +229,30 @@ export interface HeroBanner {
   bgGradient?: string;
   active: boolean;
   display_order?: number;
+}
+
+export interface AiSuggestedQuestion {
+  id: string;
+  question: string;
+  active: boolean;
+  order: number;
+}
+
+export interface AiFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  active: boolean;
+  order: number;
+  category?: string;
+}
+
+export interface AiAssistantSettings {
+  enabled: boolean;
+  welcomeMessage: string;
+  whatsappNumber?: string;
+  suggestedQuestions: AiSuggestedQuestion[];
+  faqs: AiFaqItem[];
 }
 
 export interface StoreSettings {
@@ -265,6 +289,12 @@ export interface StoreSettings {
   custom_head_code?: string;
   custom_body_code?: string;
   custom_product_types?: string[];
+  // AI Shopping Assistant Configuration
+  ai_assistant_enabled?: boolean;
+  ai_welcome_message?: string;
+  ai_whatsapp_number?: string;
+  ai_suggested_questions?: AiSuggestedQuestion[];
+  ai_faqs?: AiFaqItem[];
 }
 
 export interface DailySalesMetric {

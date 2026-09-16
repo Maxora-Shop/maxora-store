@@ -89,7 +89,14 @@ export const Hero: React.FC<HeroProps> = ({
   // Check if current slide is a full graphic banner uploaded by the user
   const isFullGraphicBanner =
     slide.bannerType === 'full' ||
-    Boolean(slide.singleBannerImage && (!slide.image1 || slide.bannerType !== 'collage'));
+    slide.bannerType === 'single' ||
+    Boolean(slide.singleBannerImage) ||
+    (!slide.image2 && !slide.image3 && !slide.image4 && Boolean(slide.image1));
+
+  const bannerImgSrc =
+    slide.singleBannerImage ||
+    slide.mobileBannerImage ||
+    (!slide.image2 && !slide.image3 && !slide.image4 ? slide.image1 : '');
 
   return (
     <section className="my-3 sm:my-5 w-full">
@@ -118,7 +125,7 @@ export const Hero: React.FC<HeroProps> = ({
               <source media="(max-width: 640px)" srcSet={slide.mobileBannerImage} />
             )}
             <img
-              src={slide.singleBannerImage || slide.mobileBannerImage}
+              src={bannerImgSrc}
               alt={slide.titlePrimary || 'Maxora Promotional Banner'}
               className="w-full h-auto max-h-[550px] min-h-[160px] sm:min-h-[260px] md:min-h-[340px] lg:min-h-[400px] object-cover transition-transform duration-700 group-hover:scale-[1.01]"
               fetchPriority={currentSlide === 0 ? "high" : "auto"}

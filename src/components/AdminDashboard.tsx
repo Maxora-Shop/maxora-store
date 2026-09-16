@@ -55,6 +55,7 @@ import {
   Youtube,
   Music2,
   Loader2,
+  Bot,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -66,6 +67,7 @@ import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
 import { AdminBanners } from './AdminBanners';
+import { AdminAiAssistant } from './AdminAiAssistant';
 import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
@@ -152,7 +154,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authLoading, setAuthLoading] = useState(false);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings'>('overview');
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -844,9 +846,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings') => {
     setCurrentTab(tab);
-    loadTabData(tab);
+    loadTabData(tab as any);
   };
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -1768,6 +1770,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {customers.length}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => handleTabChange('ai-assistant')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'ai-assistant'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Bot className="w-4 h-4 shrink-0" />
+              <span>🤖 AI Assistant</span>
+              <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'ai-assistant' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-emerald-400'}`}>
+                Active
+              </span>
             </button>
 
             <button
@@ -3124,6 +3141,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onSettingsUpdated();
               }}
               showToast={showToast}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
+            4d. TAB: AI SHOPPING ASSISTANT SETTINGS
+        ==================================================== */}
+        {currentTab === 'ai-assistant' && (
+          <div className="max-w-5xl space-y-6 animate-fade-in">
+            <AdminAiAssistant
+              settings={settingsForm}
+              onSaveSettings={async (updated) => {
+                try {
+                  const merged = { ...settingsForm, ...updated };
+                  setSettingsForm(merged);
+                  await storeService.saveSettings(merged, password);
+                  showToast('AI Assistant settings updated successfully!', 'success');
+                  onSettingsUpdated();
+                  return true;
+                } catch (err: any) {
+                  console.error('Save AI settings failed:', err);
+                  showToast('Failed to save AI settings: ' + err.message, 'error');
+                  return false;
+                }
+              }}
             />
           </div>
         )}

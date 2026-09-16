@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { PriceRange } from './components/PriceFilter';
-import { FloatingSupportButton } from './components/FloatingSupportButton';
 import { ProductCard } from './components/ProductCard';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
@@ -23,6 +22,9 @@ const InvoiceModal = React.lazy(() =>
 );
 const OrderTrackerModal = React.lazy(() =>
   import('./components/OrderTrackerModal').then((m) => ({ default: m.OrderTrackerModal }))
+);
+const AiShoppingAssistant = React.lazy(() =>
+  import('./components/AiShoppingAssistant').then((m) => ({ default: m.AiShoppingAssistant }))
 );
 
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
@@ -1870,8 +1872,15 @@ export default function App() {
         onResetAll={handleResetAllFilters}
       />
 
-      {/* Floating WhatsApp / Live Chat Support Button */}
-      <FloatingSupportButton settings={settings} />
+      {/* Floating AI Shopping Assistant (Bengali-First, Lazy Loaded) */}
+      <React.Suspense fallback={null}>
+        <AiShoppingAssistant
+          settings={settings}
+          currentProduct={quickViewProduct}
+          allProducts={products}
+          onNavigateToProduct={(p) => handleOpenProductDetail(p)}
+        />
+      </React.Suspense>
     </div>
   );
 }

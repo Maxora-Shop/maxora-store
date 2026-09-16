@@ -1,5 +1,57 @@
 import userProductsJson from "./userProducts.json";
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner, AiSuggestedQuestion, AiFaqItem } from '../types';
+
+export const DEFAULT_AI_SUGGESTED_QUESTIONS: AiSuggestedQuestion[] = [
+  { id: "sq-1", question: "এই পণ্যের দাম কত?", active: true, order: 1 },
+  { id: "sq-2", question: "ঢাকায় delivery charge কত?", active: true, order: 2 },
+  { id: "sq-3", question: "Cash on Delivery আছে?", active: true, order: 3 },
+  { id: "sq-4", question: "কীভাবে অর্ডার করব?", active: true, order: 4 },
+  { id: "sq-5", question: "আমার জন্য একটা ভালো গ্যাজেট সাজেস্ট করুন", active: true, order: 5 },
+  { id: "sq-6", question: "ডেলিভারি হতে কত দিন সময় লাগে?", active: true, order: 6 },
+];
+
+export const DEFAULT_AI_FAQS: AiFaqItem[] = [
+  {
+    id: "faq-1",
+    question: "কীভাবে অর্ডার করব?",
+    answer: "আপনার পছন্দের পণ্য নির্বাচন করে 'Add to Cart' অথবা সরাসরি 'Buy Now' বাটনে ক্লিক করুন। এরপর আপনার নাম, মোবাইল নম্বর এবং সম্পূর্ণ ডেলিভারি ঠিকানা প্রদান করে 'Confirm Order'-এ ক্লিক করলেই অর্ডার সফলভাবে প্লেস হবে।",
+    category: "অর্ডার",
+    active: true,
+    order: 1,
+  },
+  {
+    id: "faq-2",
+    question: "Cash on Delivery (ক্যাশ অন ডেলিভারি) সুবিধা আছে কি?",
+    answer: "হ্যাঁ, Maxora-তে সমগ্র বাংলাদেশের ৬৪টি জেলাতেই ক্যাশ অন ডেলিভারি (পণ্য হাতে পেয়ে মূল্য পরিশোধ) সুবিধা রয়েছে।",
+    category: "পেমেন্ট",
+    active: true,
+    order: 2,
+  },
+  {
+    id: "faq-3",
+    question: "ডেলিভারি চার্জ কত এবং ডেলিভারি হতে কত দিন সময় লাগে?",
+    answer: "আমাদের ডেলিভারি চার্জ: ঢাকা সিটির ভেতরে ৭০ টাকা (২-৩ কার্যদিবস), ঢাকা সাব-এরিয়া ১০০ টাকা এবং ঢাকার বাইরে সমগ্র বাংলাদেশে ১৩০ টাকা (৩-৫ কার্যদিবস)।",
+    category: "ডেলিভারি",
+    active: true,
+    order: 3,
+  },
+  {
+    id: "faq-4",
+    question: "পণ্য পছন্দ না হলে বা কোনো সমস্যা থাকলে কি রিপ্লেসমেন্ট পাওয়া যাবে?",
+    answer: "হ্যাঁ, পণ্য গ্রহণের পর কোনো ডিফেক্ট বা অমিল পেলে ৭ দিনের মধ্যে আমাদের সাথে যোগাযোগ করলে সহজ রিপ্লেসমেন্ট সুবিধা পাবেন।",
+    category: "ওয়ারেন্টি ও রিটার্ন",
+    active: true,
+    order: 4,
+  },
+  {
+    id: "faq-5",
+    question: "অর্ডার করার সময় কি অগ্রিম কোনো টাকা পরিশোধ করতে হবে?",
+    answer: "না, সাধারণ অর্ডারে কোনো অগ্রিম টাকার প্রয়োজন নেই। আপনি পণ্য হাতে পাওয়ার পর চেক করে মূল্য পরিশোধ করতে পারবেন।",
+    category: "পেমেন্ট",
+    active: true,
+    order: 5,
+  },
+];
 
 export const DEFAULT_HERO_BANNERS: HeroBanner[] = [
   {
@@ -560,6 +612,11 @@ export const INITIAL_SETTINGS: StoreSettings = {
     "Exclusive Edition",
     "Clearance Sale"
   ],
+  ai_assistant_enabled: true,
+  ai_welcome_message: "হ্যালো! 👋 আমি Maxora AI Assistant। পণ্যের দাম, স্পেসিফিকেশন, স্টক, ডেলিভারি বা আপনার প্রয়োজন অনুযায়ী পণ্য খুঁজে দিতে আমি সাহায্য করতে পারি। কীভাবে আপনাকে সাহায্য করতে পারি?",
+  ai_whatsapp_number: "+8801635451746",
+  ai_suggested_questions: DEFAULT_AI_SUGGESTED_QUESTIONS,
+  ai_faqs: DEFAULT_AI_FAQS,
 };
 
 export const INITIAL_PRODUCTS: Product[] = (userProductsJson as Product[]);
