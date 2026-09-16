@@ -381,6 +381,24 @@ export default function App() {
     }
   }, [products, hasFetchedProducts, loadingProducts]);
 
+  // Keep currently viewed product details in sync in real time if changed from admin
+  useEffect(() => {
+    if (quickViewProduct && products.length > 0) {
+      const refreshed = findProductBySlugOrId(products, quickViewProduct.slug || quickViewProduct.id);
+      if (refreshed && (
+        refreshed.name !== quickViewProduct.name ||
+        refreshed.selling_price !== quickViewProduct.selling_price ||
+        refreshed.discount !== quickViewProduct.discount ||
+        refreshed.description !== quickViewProduct.description ||
+        refreshed.image_url !== quickViewProduct.image_url ||
+        refreshed.updated_at !== quickViewProduct.updated_at ||
+        JSON.stringify(refreshed.images) !== JSON.stringify(quickViewProduct.images)
+      )) {
+        setQuickViewProduct(refreshed);
+      }
+    }
+  }, [products]);
+
   // Save Cart to LocalStorage
   useEffect(() => {
     try {

@@ -311,8 +311,9 @@ app.get('/api/settings', (req, res) => {
 app.get('/api/products', (req, res) => {
   const search = (req.query.search as string || '').toLowerCase().trim();
   const category = (req.query.category as string || '').trim();
+  const returnAll = req.query.all === 'true';
 
-  let products = db.products.filter(p => p.active !== 0 && p.active !== false);
+  let products = returnAll ? [...db.products] : db.products.filter(p => p.active !== 0 && p.active !== false && String(p.active) !== '0');
 
   if (search) {
     products = products.filter(p =>
@@ -323,7 +324,7 @@ app.get('/api/products', (req, res) => {
   }
 
   if (category) {
-    products = products.filter(p => p.category === category);
+    products = products.filter(p => p.category === category || p.category_slug === category);
   }
 
   // Sort by featured then created_at
@@ -339,12 +340,15 @@ app.get('/api/products', (req, res) => {
     const price = Number(product.selling_price || 0);
     const finalPrice = Math.max(0, price - discount);
     
-    // Privacy: Strip buying_price for public customer consumption
+    // Privacy: Strip buying_price for public customer consumption unless returnAll (admin/sync)
     const { buying_price, ...publicProduct } = product;
+    const imgs = safeJSON(product.images);
+    const imagesArray = Array.isArray(imgs) && imgs.length > 0 ? imgs : (product.image_url ? [product.image_url] : []);
 
     return {
       ...publicProduct,
-      images: safeJSON(product.images),
+      images: imagesArray,
+      image_url: imagesArray[0] || product.image_url || '',
       final_price: finalPrice
     };
   });
@@ -1317,6 +1321,13 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
     stock: Number(body.stock || 0),
     badge: body.badge || "",
     featured: body.featured ? 1 : 0,
+    is_hot_deal: Boolean(body.is_hot_deal),
+    is_flash_sale: Boolean(body.is_flash_sale),
+    is_new_arrival: Boolean(body.is_new_arrival),
+    is_best_seller: Boolean(body.is_best_seller),
+    colors: Array.isArray(body.colors) ? body.colors : [],
+    sizes: Array.isArray(body.sizes) ? body.sizes : [],
+    specifications: typeof body.specifications === 'object' ? body.specifications : {},
     active: body.active === false || body.active === 0 ? 0 : 1,
     meta_title: body.meta_title || "",
     meta_description: body.meta_description || "",
@@ -1352,52 +1363,74 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
 
 // PUT /api/admin/products/:id
 app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
-  const productId = req.params.id;
-  const pIndex = db.products.findIndex(p => p.id === productId);
-  if (pIndex === -1) {
-    return res.status(404).json({ success: false, error: "Product not found." });
+  const productId = String(req.params.id);
+  let pIndex = db.products.findIndex(p => 
+    String(p.id) === productId || 
+    (p.sku && String(p.sku) === productId) || 
+    (p.slug && String(p.slug) === productId)
+  );
+
+  const body = req.body;
+  const existing = pIndex !== -1 ? db.products[pIndex] : {};
+
+  // Parse images if array or string
+  let imagesVal = existing.images;
+  if (body.images) {
+    imagesVal = Array.isArray(body.images) ? JSON.stringify(body.images) : String(body.images);
+  } else if (body.image_url) {
+    imagesVal = JSON.stringify([body.image_url]);
   }
 
-  const existing = db.products[pIndex];
-  const body = req.body;
-
-  db.products[pIndex] = {
+  const updatedProduct = {
     ...existing,
-    name: body.name ?? existing.name,
-    description: body.description ?? existing.description,
-    category: body.category ?? existing.category,
+    id: existing.id || productId,
+    name: body.name ?? existing.name ?? "Product",
+    description: body.description ?? existing.description ?? "",
+    category: body.category ?? existing.category ?? "Smart Gadgets",
     category_id: body.category_id ?? existing.category_id ?? "",
     category_slug: body.category_slug ?? existing.category_slug ?? "",
-    sub_category: body.sub_category ?? existing.sub_category,
+    sub_category: body.sub_category ?? existing.sub_category ?? "",
     subcategory_id: body.subcategory_id ?? existing.subcategory_id ?? "",
     subcategory_slug: body.subcategory_slug ?? existing.subcategory_slug ?? "",
-    child_category: body.child_category ?? existing.child_category,
+    child_category: body.child_category ?? existing.child_category ?? "",
     child_category_id: body.child_category_id ?? existing.child_category_id ?? "",
     child_category_slug: body.child_category_slug ?? existing.child_category_slug ?? "",
-    product_type: body.product_type ?? existing.product_type,
+    product_type: body.product_type ?? existing.product_type ?? "",
     product_type_id: body.product_type_id ?? existing.product_type_id ?? "",
     product_type_slug: body.product_type_slug ?? existing.product_type_slug ?? "",
-    product_link: body.product_link ?? existing.product_link,
-    sku: body.sku ?? existing.sku,
-    image_url: body.image_url ?? existing.image_url,
-    images: body.images ? JSON.stringify(body.images) : existing.images,
-    buying_price: Number(body.buying_price ?? existing.buying_price),
-    selling_price: Number(body.selling_price ?? existing.selling_price),
-    discount: Number(body.discount ?? existing.discount),
-    stock: Number(body.stock ?? existing.stock),
-    badge: body.badge ?? existing.badge,
-    featured: body.featured !== undefined ? (body.featured ? 1 : 0) : existing.featured,
-    active: body.active !== undefined ? (body.active ? 1 : 0) : existing.active,
-    meta_title: body.meta_title ?? existing.meta_title,
-    meta_description: body.meta_description ?? existing.meta_description,
-    meta_keywords: body.meta_keywords ?? existing.meta_keywords,
-    slug: body.slug ?? existing.slug,
-    brand: body.brand ?? existing.brand,
+    product_link: body.product_link ?? existing.product_link ?? "",
+    sku: body.sku ?? existing.sku ?? productId,
+    image_url: body.image_url ?? existing.image_url ?? (imagesVal ? safeJSON(imagesVal)[0] : ""),
+    images: imagesVal,
+    colors: body.colors !== undefined ? body.colors : (existing.colors || []),
+    buying_price: Number(body.buying_price ?? existing.buying_price ?? 0),
+    selling_price: Number(body.selling_price ?? existing.selling_price ?? 0),
+    discount: Number(body.discount ?? existing.discount ?? 0),
+    stock: Number(body.stock ?? existing.stock ?? 0),
+    badge: body.badge ?? existing.badge ?? "",
+    featured: body.featured !== undefined ? (body.featured ? 1 : 0) : (existing.featured ?? 0),
+    is_hot_deal: body.is_hot_deal !== undefined ? Boolean(body.is_hot_deal) : Boolean(existing.is_hot_deal),
+    is_flash_sale: body.is_flash_sale !== undefined ? Boolean(body.is_flash_sale) : Boolean(existing.is_flash_sale),
+    is_new_arrival: body.is_new_arrival !== undefined ? Boolean(body.is_new_arrival) : Boolean(existing.is_new_arrival),
+    is_best_seller: body.is_best_seller !== undefined ? Boolean(body.is_best_seller) : Boolean(existing.is_best_seller),
+    active: body.active !== undefined ? (body.active ? 1 : 0) : (existing.active !== undefined ? existing.active : 1),
+    meta_title: body.meta_title ?? existing.meta_title ?? "",
+    meta_description: body.meta_description ?? existing.meta_description ?? "",
+    meta_keywords: body.meta_keywords ?? existing.meta_keywords ?? "",
+    slug: body.slug ?? existing.slug ?? (body.name ? String(body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : productId),
+    brand: body.brand ?? existing.brand ?? "Maxora",
     brand_id: body.brand_id ?? existing.brand_id ?? "",
     brand_slug: body.brand_slug ?? existing.brand_slug ?? "",
-    og_image: body.og_image ?? existing.og_image,
+    og_image: body.og_image ?? existing.og_image ?? body.image_url ?? "",
     updated_at: new Date().toISOString()
   };
+
+  if (pIndex !== -1) {
+    db.products[pIndex] = updatedProduct;
+  } else {
+    db.products.unshift(updatedProduct);
+    pIndex = 0;
+  }
 
   saveDB();
   res.json({
@@ -1582,13 +1615,15 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
 // PUT /api/admin/settings
 app.put('/api/admin/settings', requireAdmin, (req, res) => {
   const body = req.body;
-  for (const [key, value] of Object.entries(body)) {
-    db.settings[key] = String(value ?? "");
-  }
+  db.settings = {
+    ...db.settings,
+    ...body
+  };
   saveDB();
   res.json({
     success: true,
-    message: "Settings saved successfully."
+    message: "Settings saved successfully.",
+    settings: db.settings
   });
 });
 
@@ -1600,6 +1635,40 @@ app.get('/api/categories', (req, res) => {
     success: true,
     categories: list
   });
+});
+
+// POST /api/admin/categories
+app.post('/api/admin/categories', requireAdmin, (req, res) => {
+  const cat = req.body;
+  if (!cat || !cat.name) {
+    return res.status(400).json({ success: false, error: "Category name is required" });
+  }
+  if (!db.categories) db.categories = [...defaultCategories];
+  const catId = String(cat.id || `cat-${(cat.slug || cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+  const idx = db.categories.findIndex(c => String(c.id) === catId || c.slug === cat.slug);
+  const formattedCat = {
+    ...cat,
+    id: catId,
+    name: String(cat.name).trim(),
+    slug: cat.slug || String(cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    updated_at: new Date().toISOString()
+  };
+  if (idx !== -1) {
+    db.categories[idx] = formattedCat;
+  } else {
+    db.categories.push(formattedCat);
+  }
+  saveDB();
+  res.json({ success: true, category: formattedCat });
+});
+
+// DELETE /api/admin/categories/:id
+app.delete('/api/admin/categories/:id', requireAdmin, (req, res) => {
+  const catId = String(req.params.id);
+  if (!db.categories) db.categories = [...defaultCategories];
+  db.categories = db.categories.filter(c => String(c.id) !== catId && c.slug !== catId);
+  saveDB();
+  res.json({ success: true, message: "Category deleted" });
 });
 
 // GET /api/subcategories
@@ -1618,6 +1687,86 @@ app.get('/api/subcategories', (req, res) => {
     success: true,
     subcategories: list
   });
+});
+
+// POST /api/admin/subcategories
+app.post('/api/admin/subcategories', requireAdmin, (req, res) => {
+  const sub = req.body;
+  if (!sub || !sub.name) {
+    return res.status(400).json({ success: false, error: "Subcategory name is required" });
+  }
+  if (!db.subcategories) db.subcategories = [...defaultSubCategories];
+  const subId = String(sub.id || `subcat-${(sub.slug || sub.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+  const idx = db.subcategories.findIndex(s => String(s.id) === subId || s.slug === sub.slug);
+  const formattedSub = {
+    ...sub,
+    id: subId,
+    name: String(sub.name).trim(),
+    slug: sub.slug || String(sub.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    updated_at: new Date().toISOString()
+  };
+  if (idx !== -1) {
+    db.subcategories[idx] = formattedSub;
+  } else {
+    db.subcategories.push(formattedSub);
+  }
+  saveDB();
+  res.json({ success: true, subcategory: formattedSub });
+});
+
+// DELETE /api/admin/subcategories/:id
+app.delete('/api/admin/subcategories/:id', requireAdmin, (req, res) => {
+  const subId = String(req.params.id);
+  if (!db.subcategories) db.subcategories = [...defaultSubCategories];
+  db.subcategories = db.subcategories.filter(s => String(s.id) !== subId && s.slug !== subId);
+  saveDB();
+  res.json({ success: true, message: "Subcategory deleted" });
+});
+
+// GET /api/brands
+app.get('/api/brands', (req, res) => {
+  const activeOnly = req.query.active !== 'false' && req.query.all !== 'true';
+  const brandsList = (db as any).brands || [];
+  const list = brandsList.filter((b: any) => !activeOnly || (b.active !== 0 && b.active !== false && String(b.active) !== '0'));
+  res.json({
+    success: true,
+    brands: list
+  });
+});
+
+// POST /api/admin/brands
+app.post('/api/admin/brands', requireAdmin, (req, res) => {
+  const brand = req.body;
+  if (!brand || !brand.name) {
+    return res.status(400).json({ success: false, error: "Brand name is required" });
+  }
+  if (!(db as any).brands) (db as any).brands = [];
+  const brandId = String(brand.id || `brand-${(brand.slug || brand.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+  const idx = (db as any).brands.findIndex((b: any) => String(b.id) === brandId || b.slug === brand.slug);
+  const formattedBrand = {
+    ...brand,
+    id: brandId,
+    name: String(brand.name).trim(),
+    slug: brand.slug || String(brand.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    updated_at: new Date().toISOString()
+  };
+  if (idx !== -1) {
+    (db as any).brands[idx] = formattedBrand;
+  } else {
+    (db as any).brands.push(formattedBrand);
+  }
+  saveDB();
+  res.json({ success: true, brand: formattedBrand });
+});
+
+// DELETE /api/admin/brands/:id
+app.delete('/api/admin/brands/:id', requireAdmin, (req, res) => {
+  const brandId = String(req.params.id);
+  if ((db as any).brands) {
+    (db as any).brands = (db as any).brands.filter((b: any) => String(b.id) !== brandId && b.slug !== brandId);
+    saveDB();
+  }
+  res.json({ success: true, message: "Brand deleted" });
 });
 
 function escapeXml(unsafe: string): string {
