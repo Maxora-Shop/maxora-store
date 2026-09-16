@@ -64,10 +64,19 @@ export const Hero: React.FC<HeroProps> = ({
   const slide = slides[currentSlide] || slides[0] || DEFAULT_HERO_BANNERS[0];
 
   const handleCtaClick = () => {
-    if (slide.ctaLink && slide.ctaLink.startsWith('#')) {
-      const el = document.querySelector(slide.ctaLink);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
+    if (slide.ctaLink) {
+      if (slide.ctaLink.startsWith('#')) {
+        const el = document.querySelector(slide.ctaLink);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+      } else if (slide.ctaLink.startsWith('/')) {
+        window.history.pushState({}, '', slide.ctaLink);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        return;
+      } else if (slide.ctaLink.startsWith('http')) {
+        window.location.href = slide.ctaLink;
         return;
       }
     }
@@ -77,13 +86,102 @@ export const Hero: React.FC<HeroProps> = ({
   // Background gradient class: custom or default clean sky
   const bgClass = slide.bgGradient || 'from-[#e0f2fe] via-[#e8f4fc] to-[#f0f7fd]';
 
+  // Check if current slide is a full graphic banner uploaded by the user
+  const isFullGraphicBanner =
+    slide.bannerType === 'full' ||
+    Boolean(slide.singleBannerImage && (!slide.image1 || slide.bannerType !== 'collage'));
+
   return (
     <section className="my-3 sm:my-5 w-full">
-      <div
-        className={`relative bg-gradient-to-r ${bgClass} border border-sky-200/70 rounded-3xl p-6 sm:p-10 lg:p-12 shadow-xs overflow-hidden transition-all duration-700`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
+      {isFullGraphicBanner ? (
+        /* ========================================================================= */
+        /* FULL GRAPHIC BANNER: Direct User Upload / Canva / Photoshop Designed      */
+        /* Displays full-width edge-to-edge without forcing product box or side text */
+        /* ========================================================================= */
+        <div
+          className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs cursor-pointer group select-none bg-zinc-950 border border-zinc-200/80 transition-all duration-500"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onClick={handleCtaClick}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleCtaClick();
+            }
+          }}
+        >
+          {/* Responsive picture tag supporting separate mobile banner if uploaded */}
+          <picture className="block w-full">
+            {slide.mobileBannerImage && (
+              <source media="(max-width: 640px)" srcSet={slide.mobileBannerImage} />
+            )}
+            <img
+              src={slide.singleBannerImage || slide.mobileBannerImage}
+              alt={slide.titlePrimary || 'Maxora Promotional Banner'}
+              className="w-full h-auto max-h-[550px] min-h-[160px] sm:min-h-[260px] md:min-h-[340px] lg:min-h-[400px] object-cover transition-transform duration-700 group-hover:scale-[1.01]"
+              fetchPriority={currentSlide === 0 ? "high" : "auto"}
+              decoding="async"
+            />
+          </picture>
+
+          {/* Floating Navigation Controls over Full Banner */}
+          {slides.length > 1 && (
+            <>
+              {/* Carousel Arrows */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+                }}
+                className="absolute left-2 sm:left-5 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center cursor-pointer transition-all z-20 shadow-md border border-white/20 active:scale-95"
+                aria-label="Previous Slide"
+              >
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentSlide((prev) => (prev + 1) % slides.length);
+                }}
+                className="absolute right-2 sm:right-5 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center cursor-pointer transition-all z-20 shadow-md border border-white/20 active:scale-95"
+                aria-label="Next Slide"
+              >
+                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
+              {/* Bottom Pagination Dots */}
+              <div className="absolute bottom-2.5 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md z-20 border border-white/10">
+                {slides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentSlide(idx);
+                    }}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      currentSlide === idx ? 'w-6 bg-white shadow-xs' : 'w-2 bg-white/50 hover:bg-white/80'
+                    }`}
+                    aria-label={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        /* ========================================================================= */
+        /* COLLAGE / TEXT BANNER: 2-Column Headline + 4-Gadget Collage Layout        */
+        /* ========================================================================= */
+        <div
+          className={`relative bg-gradient-to-r ${bgClass} border border-sky-200/70 rounded-3xl p-6 sm:p-10 lg:p-12 shadow-xs overflow-hidden transition-all duration-700`}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-8 items-center">
           {/* LEFT SIDE: Hero Typography, Benefits & Shop Now CTA */}
           <div className="lg:col-span-6 flex flex-col justify-center space-y-5 sm:space-y-6">
@@ -257,7 +355,8 @@ export const Hero: React.FC<HeroProps> = ({
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </section>
   );
 };

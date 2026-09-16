@@ -212,18 +212,20 @@ export interface Order {
 
 export interface HeroBanner {
   id: string;
+  bannerType?: 'full' | 'collage';
+  singleBannerImage?: string;
+  mobileBannerImage?: string;
   pill?: string;
   titlePrimary: string;
-  titleAccent: string;
-  subtitle: string;
-  cta: string;
+  titleAccent?: string;
+  subtitle?: string;
+  cta?: string;
   ctaLink?: string;
   badgeNote?: string;
   image1?: string;
   image2?: string;
   image3?: string;
   image4?: string;
-  singleBannerImage?: string;
   bgGradient?: string;
   active: boolean;
   display_order?: number;
