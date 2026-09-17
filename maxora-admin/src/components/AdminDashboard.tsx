@@ -139,12 +139,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSettingsUpdated,
 }) => {
   // Auth state
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('123456');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('maxora_admin_token');
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -668,9 +666,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
 
-  // Check auth on load
+  // Check auth on load: validate existing token if present
   useEffect(() => {
-    verifyAdminAuth();
+    const existingToken = localStorage.getItem('maxora_admin_token');
+    if (existingToken) {
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${existingToken}`
+        },
+        body: JSON.stringify({ token: existingToken }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setIsAuthenticated(true);
+          loadTabData(currentTab);
+        } else {
+          localStorage.removeItem('maxora_admin_token');
+          setIsAuthenticated(false);
+        }
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+      });
+    } else {
+      setIsAuthenticated(false);
+    }
   }, []);
 
   // Listen for live order, product, and settings updates & auto-poll

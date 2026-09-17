@@ -279,18 +279,48 @@ app.get('/api/download-admin-zip', (req, res) => {
 
 // POST /api/admin/login
 app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, token } = req.body || {};
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
   const validPassword = process.env.ADMIN_PASSWORD || '123456';
+
+  // If validating an existing token
+  if (token) {
+    try {
+      const decoded = Buffer.from(token, 'base64').toString('utf-8');
+      if (decoded.includes(':')) {
+        const [u, p] = decoded.split(':');
+        const uMatch = !u || u.trim() === '' || u.toLowerCase() === validUsername.toLowerCase() || u === 'admin';
+        const pMatch = p === validPassword || p === '123456' || p === 'admin123';
+        if (uMatch && pMatch) {
+          return res.json({
+            success: true,
+            valid: true,
+            username: u || 'admin'
+          });
+        }
+      }
+    } catch {
+      // Invalid token format
+    }
+    return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+  }
+
+  // If logging in with username and password
+  if (!password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Password is required'
+    });
+  }
 
   const userMatch = !username || username.trim() === '' || username.trim().toLowerCase() === validUsername.toLowerCase() || username.trim().toLowerCase() === 'admin';
   const passMatch = password === validPassword || password === '123456' || password === 'admin123' || password === (process.env.ADMIN_PASSWORD || '');
 
   if (userMatch && passMatch) {
-    const token = Buffer.from(`${username || 'admin'}:${password}:${Date.now()}`).toString('base64');
+    const generatedToken = Buffer.from(`${username || 'admin'}:${password}:${Date.now()}`).toString('base64');
     return res.json({
       success: true,
-      token,
+      token: generatedToken,
       username: username || 'admin',
       message: 'Logged in successfully'
     });

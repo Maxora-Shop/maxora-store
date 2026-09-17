@@ -155,12 +155,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSettingsUpdated,
 }) => {
   // Auth state
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('123456');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('maxora_admin_token') || (!!auth && !!auth.currentUser && auth.currentUser.email?.toLowerCase() === 'moonlofiofficial@gmail.com');
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -701,9 +699,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
 
-  // Check auth on load
+  // Check auth on load: validate existing token if present
   useEffect(() => {
-    verifyAdminAuth();
+    const existingToken = localStorage.getItem('maxora_admin_token');
+    if (existingToken) {
+      // Validate saved session token with backend
+      fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${existingToken}`
+        },
+        body: JSON.stringify({ token: existingToken }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setIsAuthenticated(true);
+          loadTabData(currentTab);
+        } else {
+          localStorage.removeItem('maxora_admin_token');
+          setIsAuthenticated(false);
+        }
+      })
+      .catch(() => {
+        // In case network issue or server error, retain if valid format, else require manual login
+        setIsAuthenticated(false);
+      });
+    } else {
+      setIsAuthenticated(false);
+    }
   }, []);
 
   // Enforce admin isolation: regular customer accounts can never access admin panel
@@ -997,6 +1022,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         msg = 'নতুন পাসওয়ার্ডটি দুর্বল, অন্তত ৬ অক্ষরের দিন (Weak password: minimum 6 characters required).';
       } else if (err.code === 'auth/requires-recent-login') {
         msg = 'নিরাপত্তার স্বার্থে আবার লগইন করে চেষ্টা করুন (Session expired, please re-login).';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        msg = 'Firebase Console-এ "Email/Password" প্রোভাইডার এনাবল (Enable) করা নেই। অনুগ্রহ করে Firebase Console > Authentication > Sign-in method থেকে Email/Password চালু করুন।';
       }
       setChangePassStatus({ type: 'error', message: msg });
       showToast(msg, 'error');
