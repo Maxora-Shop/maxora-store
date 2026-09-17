@@ -22,6 +22,7 @@ import { HeroBanner, StoreSettings } from '../types';
 import { DEFAULT_HERO_BANNERS } from '../data/initialData';
 import { storeService } from '../services/storeService';
 import { compressAndReadImage } from '../utils/imageCompressor';
+import { uploadProductImageToStorage } from '../utils/imageStorage';
 
 interface AdminBannersProps {
   settings: StoreSettings;
@@ -214,9 +215,21 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
     if (!file) return;
     try {
       setIsUploading(true);
-      // For banners, use high resolution (1920x1080) to preserve crisp graphic quality
-      const dataUrl = await compressAndReadImage(file, 1920, 1080, 0.85);
-      setEditingBanner((prev) => (prev ? { ...prev, [field]: dataUrl } : prev));
+      let uploadedUrl = '';
+      try {
+        uploadedUrl = await uploadProductImageToStorage(file, `hero-banner-${editingBanner?.id || Date.now()}`, {
+          customName: field,
+        });
+      } catch (e) {
+        console.warn('Banner upload to storage/API failed, using local compression fallback:', e);
+      }
+
+      if (!uploadedUrl) {
+        // Fallback: WebP compression
+        uploadedUrl = await compressAndReadImage(file, 1600, 800, 0.80);
+      }
+
+      setEditingBanner((prev) => (prev ? { ...prev, [field]: uploadedUrl } : prev));
       showToast('ছবি সফলভাবে আপলোড হয়েছে!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Image upload failed', 'error');

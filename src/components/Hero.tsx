@@ -91,12 +91,14 @@ export const Hero: React.FC<HeroProps> = ({
     slide.bannerType === 'full' ||
     slide.bannerType === 'single' ||
     Boolean(slide.singleBannerImage) ||
+    Boolean(slide.mobileBannerImage) ||
     (!slide.image2 && !slide.image3 && !slide.image4 && Boolean(slide.image1));
 
   const bannerImgSrc =
     slide.singleBannerImage ||
+    slide.image1 ||
     slide.mobileBannerImage ||
-    (!slide.image2 && !slide.image3 && !slide.image4 ? slide.image1 : '');
+    '';
 
   return (
     <section className="my-3 sm:my-5 w-full">

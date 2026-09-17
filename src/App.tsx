@@ -84,7 +84,9 @@ export default function App() {
   });
 
   // Settings State
-  const [settings, setSettings] = useState<StoreSettings>(INITIAL_SETTINGS);
+  const [settings, setSettings] = useState<StoreSettings>(() => {
+    return typeof window !== 'undefined' ? storeService.getCachedSettings() : INITIAL_SETTINGS;
+  });
 
   // Products State
   const [products, setProducts] = useState<Product[]>(() => {

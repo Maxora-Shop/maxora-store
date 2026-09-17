@@ -56,12 +56,25 @@ import {
   Music2,
   Loader2,
   Bot,
+  KeyRound,
+  Mail,
+  ArrowLeft,
+  CheckCircle2,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import {
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
+  signOut,
+  onAuthStateChanged,
+} from 'firebase/auth';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminCategories } from './AdminCategories';
@@ -143,15 +156,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Auth state
   const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState(
-    () => localStorage.getItem('maxora_admin_password') || '123456'
-  );
+  const [password, setPassword] = useState('123456');
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('maxora_admin_token') || !!localStorage.getItem('maxora_admin_password');
+    return !!localStorage.getItem('maxora_admin_token') || (!!auth && !!auth.currentUser && auth.currentUser.email?.toLowerCase() === 'moonlofiofficial@gmail.com');
   });
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Admin Authorization & Forgot Password States
+  const AUTHORIZED_ADMIN_EMAIL = 'moonlofiofficial@gmail.com';
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState(AUTHORIZED_ADMIN_EMAIL);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetStatus, setResetStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Change Password States (in Settings)
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [changePassLoading, setChangePassLoading] = useState(false);
+  const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Navigation
   const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings'>('overview');
@@ -659,7 +687,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing' | 'security'>('general');
   const [isCategoryEditModalOpen, setIsCategoryEditModalOpen] = useState(false);
   const [categoryToEdit, setCategoryToEdit] = useState<Partial<Category> | null>(null);
   const [isSavingCategory, setIsSavingCategory] = useState(false);
@@ -677,6 +705,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   useEffect(() => {
     verifyAdminAuth();
   }, []);
+
+  // Enforce admin isolation: regular customer accounts can never access admin panel
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.email) {
+        if (user.email.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+          setIsAuthenticated(false);
+          setAuthError('Access Denied: Customer accounts are not authorized to access the Admin Panel.');
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [AUTHORIZED_ADMIN_EMAIL]);
 
   // Listen for live order, product, and settings updates & auto-poll
   useEffect(() => {
@@ -744,6 +786,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setAuthLoading(true);
     setAuthError('');
     try {
+      // If user logs in with email, enforce authorized admin email
+      if (u.includes('@')) {
+        if (u.trim().toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+          setIsAuthenticated(false);
+          setAuthError('Access Denied: Only the authorized admin account can access this panel.');
+          return;
+        }
+        if (auth) {
+          try {
+            await signInWithEmailAndPassword(auth, u.trim(), p);
+          } catch (fbErr: any) {
+            console.warn('Firebase admin signin notice:', fbErr);
+          }
+        }
+      }
+
       // 1. Try modern login API
       try {
         const res = await fetch('/api/admin/login', {
@@ -754,9 +812,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const data = await res.json();
         if (data.success && data.token) {
           localStorage.setItem('maxora_admin_token', data.token);
-          localStorage.setItem('maxora_admin_password', p);
           setIsAuthenticated(true);
           loadTabData(currentTab, p);
+
+          // Sign in to Firebase Auth in background if not already connected
+          if (auth && !auth.currentUser) {
+            signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p).catch(() => {});
+          }
           return;
         }
       } catch {
@@ -764,13 +826,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // 2. Fallback to verification or local check
-      const expectedPass = localStorage.getItem('maxora_admin_password') || '123456';
-      let isValid = p === expectedPass || p === '123456' || p === 'admin123';
+      let isValid = p === '123456' || p === 'admin123';
 
       if (isValid) {
         setIsAuthenticated(true);
-        localStorage.setItem('maxora_admin_password', p);
         loadTabData(currentTab, p);
+
+        // Sign in to Firebase Auth in background if not already connected
+        if (auth && !auth.currentUser) {
+          signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p).catch(() => {});
+        }
       } else {
         setIsAuthenticated(false);
         setAuthError('Incorrect username or password. (Default: admin / 123456)');
@@ -788,11 +853,156 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     verifyAdminAuth(password, username);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('maxora_admin_token');
-    localStorage.removeItem('maxora_admin_password');
+    if (auth) {
+      try {
+        await signOut(auth);
+      } catch {}
+    }
     setIsAuthenticated(false);
+    setOrders([]);
+    setCustomers([]);
+    setPassword('');
     showToast('Logged out of admin panel', 'success');
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = resetEmail.trim();
+    if (!email) {
+      setResetStatus({
+        type: 'error',
+        message: 'Please enter your registered admin email address.',
+      });
+      return;
+    }
+
+    if (email.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+      setResetStatus({
+        type: 'error',
+        message: 'Access Denied: This email is not registered as an authorized administrator.',
+      });
+      return;
+    }
+
+    if (!auth) {
+      setResetStatus({
+        type: 'error',
+        message: 'Firebase Authentication is currently unavailable. Please check your network connection.',
+      });
+      return;
+    }
+
+    setResetLoading(true);
+    setResetStatus(null);
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetStatus({
+        type: 'success',
+        message: `Password reset email sent to ${email}! Please check your inbox or spam folder for the secure reset link.`,
+      });
+    } catch (err: any) {
+      console.error('sendPasswordResetEmail error:', err);
+      let errorMsg = 'Failed to send password reset email.';
+      if (err.code === 'auth/user-not-found') {
+        errorMsg = 'No Firebase account found with this email address.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMsg = 'Invalid email address format.';
+      } else if (err.code === 'auth/too-many-requests') {
+        errorMsg = 'Too many password reset requests. Please wait a few minutes and try again.';
+      } else if (err.code === 'auth/network-request-failed') {
+        errorMsg = 'Network error. Please check your internet connection.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      setResetStatus({ type: 'error', message: errorMsg });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePassStatus(null);
+
+    if (!currentPasswordInput.trim()) {
+      setChangePassStatus({ type: 'error', message: 'Current password is required.' });
+      return;
+    }
+    if (newPasswordInput.length < 6) {
+      setChangePassStatus({ type: 'error', message: 'New password must be at least 6 characters long.' });
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setChangePassStatus({ type: 'error', message: 'New passwords do not match. Please verify.' });
+      return;
+    }
+
+    setChangePassLoading(true);
+    try {
+      if (!auth) {
+        throw new Error('Firebase Authentication is not initialized.');
+      }
+
+      let user = auth.currentUser;
+
+      // If user is not currently signed in to Firebase Auth, sign in first with authorized admin email
+      if (!user) {
+        try {
+          const cred = await signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, currentPasswordInput);
+          user = cred.user;
+        } catch (loginErr: any) {
+          if (loginErr.code === 'auth/wrong-password' || loginErr.code === 'auth/invalid-credential') {
+            throw new Error('Incorrect current password.');
+          }
+          throw loginErr;
+        }
+      } else {
+        // Enforce authorization: only authorized admin email
+        if (user.email && user.email.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+          await signOut(auth);
+          throw new Error('Access Denied: Customer accounts cannot access or change admin credentials.');
+        }
+
+        // Re-authenticate user with current password
+        const emailToUse = user.email || AUTHORIZED_ADMIN_EMAIL;
+        const credential = EmailAuthProvider.credential(emailToUse, currentPasswordInput);
+        await reauthenticateWithCredential(user, credential);
+      }
+
+      // Update password using Firebase Auth
+      await updatePassword(user, newPasswordInput);
+
+      // Update component state
+      setPassword(newPasswordInput);
+
+      // Clear input fields
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+
+      setChangePassStatus({
+        type: 'success',
+        message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! (Password successfully updated via Firebase Authentication)',
+      });
+      showToast('Admin password updated successfully!', 'success');
+    } catch (err: any) {
+      console.error('Change password error:', err);
+      let msg = err.message || 'Failed to update password.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        msg = 'বর্তমান পাসওয়ার্ডটি সঠিক নয় (Incorrect current password).';
+      } else if (err.code === 'auth/weak-password') {
+        msg = 'নতুন পাসওয়ার্ডটি দুর্বল, অন্তত ৬ অক্ষরের দিন (Weak password: minimum 6 characters required).';
+      } else if (err.code === 'auth/requires-recent-login') {
+        msg = 'নিরাপত্তার স্বার্থে আবার লগইন করে চেষ্টা করুন (Session expired, please re-login).';
+      }
+      setChangePassStatus({ type: 'error', message: msg });
+      showToast(msg, 'error');
+    } finally {
+      setChangePassLoading(false);
+    }
   };
 
   const loadCategories = async () => {
@@ -1501,6 +1711,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // AUTHENTICATION LOGIN SCREEN
   // ====================================================
   if (!isAuthenticated) {
+    if (showForgotPassword) {
+      return (
+        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
+          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-white space-y-6 animate-fade-in">
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgotPassword(false);
+                setResetStatus(null);
+              }}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Admin Login</span>
+            </button>
+
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 text-emerald-400 mb-1 shadow-inner">
+                <KeyRound className="w-7 h-7" />
+              </div>
+              <h1 className="text-2xl font-black tracking-tight text-white">
+                Forgot Password?
+              </h1>
+              <p className="text-xs text-zinc-400">
+                Enter your registered admin email to receive an official Firebase password reset link.
+              </p>
+            </div>
+
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
+                  Authorized Admin Email
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="moonlofiofficial@gmail.com"
+                    required
+                    className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
+                </div>
+              </div>
+
+              {resetStatus && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
+                    resetStatus.type === 'success'
+                      ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950/60 border-rose-800 text-rose-300'
+                  }`}
+                >
+                  {resetStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  )}
+                  <span className="leading-relaxed">{resetStatus.message}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-sm transition-all shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {resetLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Sending Reset Link via Firebase...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    <span>Send Password Reset Email</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="pt-2 text-center border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setResetStatus(null);
+                }}
+                className="text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Return to Login
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
         <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-white space-y-6 animate-fade-in">
@@ -1552,8 +1861,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
-              <div className="flex justify-between items-center text-[11px] text-zinc-500 mt-1.5">
+              <div className="flex justify-between items-center text-[11px] text-zinc-500 mt-2">
                 <span>Default credentials: admin / 123456</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(true);
+                    setResetStatus(null);
+                    setResetEmail(AUTHORIZED_ADMIN_EMAIL);
+                  }}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline transition-colors cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
               </div>
             </div>
 
@@ -3231,6 +3551,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Megaphone className="w-3.5 h-3.5 text-blue-600" />
                   Marketing & Pixels
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('security')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    settingsSubTab === 'security'
+                      ? 'bg-white text-zinc-950 shadow-xs font-black'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                  Security & Password
+                </button>
               </div>
             </div>
 
@@ -3397,6 +3729,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })}
                   </div>
                 )}
+              </div>
+            ) : settingsSubTab === 'security' ? (
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-zinc-200 shadow-xs space-y-6 animate-fade-in">
+                {/* Header & Description */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-black text-zinc-900 flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-xs">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <span>Admin Security & Password Management</span>
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Manage and update your administrator credentials securely using Firebase Authentication.
+                    </p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Authorized Admin: {AUTHORIZED_ADMIN_EMAIL}</span>
+                  </div>
+                </div>
+
+                {/* Password Change Form */}
+                <form onSubmit={handleChangePassword} className="max-w-xl space-y-5">
+                  <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-xs text-zinc-600 space-y-1">
+                    <div className="font-bold text-zinc-800 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-zinc-500" />
+                      <span>Firebase Secure Password Update</span>
+                    </div>
+                    <p>
+                      Enter your current password to re-authenticate, followed by your new password (minimum 6 characters). The password will be immediately updated in Firebase Authentication.
+                    </p>
+                  </div>
+
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                      Current Password (বর্তমান পাসওয়ার্ড)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPass ? 'text' : 'password'}
+                        value={currentPasswordInput}
+                        onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                        placeholder="Enter current admin password"
+                        required
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm pl-4 pr-11 py-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPass(!showCurrentPass)}
+                        className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
+                      >
+                        {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                      New Password (নতুন পাসওয়ার্ড - অন্তত ৬ ক্যারেক্টার)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPass ? 'text' : 'password'}
+                        value={newPasswordInput}
+                        onChange={(e) => setNewPasswordInput(e.target.value)}
+                        placeholder="Enter new password (min. 6 characters)"
+                        required
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm pl-4 pr-11 py-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPass(!showNewPass)}
+                        className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
+                      >
+                        {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
+                      Confirm New Password (নতুন পাসওয়ার্ড নিশ্চিত করুন)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPass ? 'text' : 'password'}
+                        value={confirmPasswordInput}
+                        onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                        placeholder="Confirm new password"
+                        required
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm pl-4 pr-11 py-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPass(!showConfirmPass)}
+                        className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer"
+                      >
+                        {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Status Notifications */}
+                  {changePassStatus && (
+                    <div
+                      className={`p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
+                        changePassStatus.type === 'success'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : 'bg-rose-50 border-rose-200 text-rose-800'
+                      }`}
+                    >
+                      {changePassStatus.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                      )}
+                      <span className="leading-relaxed">{changePassStatus.message}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={changePassLoading}
+                      className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-zinc-900 hover:bg-emerald-600 text-white font-extrabold text-xs sm:text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {changePassLoading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Updating Password via Firebase...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4 text-emerald-400" />
+                          <span>Update Admin Password</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
               </div>
             ) : (
               <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">

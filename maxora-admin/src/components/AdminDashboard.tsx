@@ -140,12 +140,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   // Auth state
   const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState(
-    () => localStorage.getItem('maxora_admin_password') || '123456'
-  );
+  const [password, setPassword] = useState('123456');
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('maxora_admin_token') || !!localStorage.getItem('maxora_admin_password');
+    return !!localStorage.getItem('maxora_admin_token');
   });
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -751,7 +749,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const data = await res.json();
         if (data.success && data.token) {
           localStorage.setItem('maxora_admin_token', data.token);
-          localStorage.setItem('maxora_admin_password', p);
           setIsAuthenticated(true);
           loadTabData(currentTab, p);
           return;
@@ -761,12 +758,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // 2. Fallback to verification or local check
-      const expectedPass = localStorage.getItem('maxora_admin_password') || '123456';
-      let isValid = p === expectedPass || p === '123456' || p === 'admin123';
+      let isValid = p === '123456' || p === 'admin123';
 
       if (isValid) {
         setIsAuthenticated(true);
-        localStorage.setItem('maxora_admin_password', p);
         loadTabData(currentTab, p);
       } else {
         setIsAuthenticated(false);
@@ -787,7 +782,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleLogout = () => {
     localStorage.removeItem('maxora_admin_token');
-    localStorage.removeItem('maxora_admin_password');
     setIsAuthenticated(false);
     showToast('Logged out of admin panel', 'success');
   };

@@ -547,7 +547,7 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
     'Content-Type': 'application/json',
   };
   const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
-  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+  const pass = adminPassword || (token ? null : '123456');
 
   if (pass) {
     headers['x-admin-password'] = pass;
@@ -1511,10 +1511,11 @@ export const storeService = {
 
     // 1. Fetch from REST API (server database source of truth)
     try {
-      const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
+      const pass = adminPassword || (token ? null : '123456');
       const url = statusFilter ? `/api/admin/orders?status=${encodeURIComponent(statusFilter)}` : '/api/admin/orders';
       const apiResult = await tryApi<{ success: boolean; orders: Order[] }>(url, {
-        headers: { 'x-admin-password': pass },
+        headers: getAuthHeaders(pass || undefined),
       });
 
       if (apiResult.success && Array.isArray(apiResult.data?.orders)) {
@@ -1578,14 +1579,10 @@ export const storeService = {
     }
 
     // 3. API
-    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
     try {
       await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': pass,
-        },
+        headers: getAuthHeaders(adminPassword),
         body: JSON.stringify({ status }),
       });
     } catch (e) {
@@ -1619,14 +1616,10 @@ export const storeService = {
     }
 
     // 3. API
-    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
     try {
       await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': pass,
-        },
+        headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(orderData),
       });
     } catch (e) {
@@ -1669,11 +1662,10 @@ export const storeService = {
     setLocal(ORDERS_KEY, filtered);
 
     // 3. API backend delete
-    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
     try {
       await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': pass },
+        headers: getAuthHeaders(adminPassword),
       });
     } catch (e) {
       console.warn('API delete order error:', e);
@@ -1770,9 +1762,8 @@ export const storeService = {
     }
 
     if (customers.length === 0) {
-      const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
       const apiResult = await tryApi<{ success: boolean; customers: Customer[] }>('/api/admin/customers', {
-        headers: { 'x-admin-password': pass },
+        headers: getAuthHeaders(adminPassword),
       });
       if (apiResult.success && Array.isArray(apiResult.data?.customers) && apiResult.data.customers.length > 0) {
         customers = apiResult.data.customers;
@@ -3094,11 +3085,10 @@ export const storeService = {
     notifyBrandsChanged();
 
     // 4. REST API sync
-    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
     try {
       await tryApi('/api/admin/brands', {
         method: 'POST',
-        headers: getAuthHeaders(pass),
+        headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(newBrand),
       });
     } catch {
@@ -3155,11 +3145,10 @@ export const storeService = {
     }
 
     // 3. REST API delete
-    const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || '123456';
     try {
       await tryApi(`/api/admin/brands/${brandId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(pass),
+        headers: getAuthHeaders(adminPassword),
       });
     } catch {
       // non-blocking

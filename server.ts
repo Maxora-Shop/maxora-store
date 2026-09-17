@@ -7,6 +7,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
 import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
 import { processAiChatMessage } from './src/server/aiChatCore';
+import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
 
 // Set Firestore log level to error to avoid noisy internal idle-stream disconnect warnings
 try {
@@ -96,13 +97,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // In-memory + file persistence DB
 const DB_FILE = path.join(process.cwd(), 'maxora_db.json');
 
 interface DBSchema {
-  settings: Record<string, string>;
+  settings: Record<string, any>;
   products: any[];
   customers: any[];
   orders: any[];
@@ -114,7 +116,7 @@ interface DBSchema {
   uploaded_images?: Record<string, any>;
 }
 
-const defaultSettings: Record<string, string> = {
+const defaultSettings: Record<string, any> = {
   store_name: "Maxora",
   store_tagline: "Premium Products. Trusted Service.",
   delivery_inside_dhaka: "70",
@@ -128,7 +130,9 @@ const defaultSettings: Record<string, string> = {
   hero_title: "Discover Products You'll Love",
   hero_subtitle: "Quality lifestyle gadgets & accessories delivered across Bangladesh.",
   promo_text: "Cash on Delivery Available Across Bangladesh",
-  footer_text: "© Maxora Bangladesh. All rights reserved."
+  footer_text: "© Maxora Bangladesh. All rights reserved.",
+  hero_banners: DEFAULT_HERO_BANNERS,
+  banner_slide_speed: 4500,
 };
 
 const defaultProducts = JSON.parse(fs.readFileSync(path.join(process.cwd(), "src/data/userProducts.json"), "utf8"));
