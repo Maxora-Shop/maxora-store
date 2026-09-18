@@ -5,7 +5,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
-import { generateDynamicSitemapXml } from './src/utils/sitemapGenerator';
+import { generateDynamicSitemapXml, invalidateSitemapCache } from './src/utils/sitemapGenerator';
 import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
 
@@ -59,9 +59,25 @@ function isQuotaExceededError(err: any): boolean {
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
     msg.includes('free daily read units') ||
-    msg.includes('rate-limit') ||
-    msg.includes('disconnecting idle stream')
+    msg.includes('rate-limit')
   );
+}
+
+function cleanForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanForFirestore).filter((item) => item !== undefined);
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== undefined) {
+        cleaned[key] = cleanForFirestore(val);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
 }
 
 let firestoreQuotaCooldownUntil = 0;
@@ -708,6 +724,20 @@ app.post('/api/orders', (req, res) => {
     }
 
     saveDB();
+
+    // Mirror to Firestore in background
+    try {
+      const fDb = getFirestoreInstance();
+      const firestoreOrder = cleanForFirestore({
+        ...orderRecord,
+        customer_phone: custPhone,
+        total_amount: orderRecord.total,
+        order_status: orderRecord.status,
+        items: db.order_items.filter(i => i.order_id === oId)
+      });
+      setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true }).catch(() => {});
+    } catch (e) {}
+
     return res.status(201).json({
       success: true,
       message: "Order synchronized successfully.",
@@ -878,6 +908,18 @@ app.post('/api/orders', (req, res) => {
     ...newOrder,
     items: db.order_items.filter(i => i.order_id === orderId)
   };
+
+  // Mirror to Firestore in background
+  try {
+    const fDb = getFirestoreInstance();
+    const firestoreOrder = cleanForFirestore({
+      ...fullOrderResponse,
+      customer_phone: body.phone,
+      total_amount: total,
+      order_status: 'Pending'
+    });
+    setDoc(doc(fDb, 'orders', orderId), firestoreOrder, { merge: true }).catch(() => {});
+  } catch (e) {}
 
   res.status(201).json({
     success: true,
@@ -1449,6 +1491,7 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
     db.products.unshift(newProduct);
   }
   saveDB();
+  invalidateSitemapCache();
 
   res.status(201).json({
     success: true,
@@ -1534,6 +1577,7 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   }
 
   saveDB();
+  invalidateSitemapCache();
   res.json({
     success: true,
     message: "Product updated successfully.",
@@ -1549,6 +1593,7 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
   const productId = req.params.id;
   db.products = db.products.filter(p => p.id !== productId && p.sku !== productId && p.slug !== productId);
   saveDB();
+  invalidateSitemapCache();
   res.json({
     success: true,
     message: "Product deleted successfully."
@@ -2014,21 +2059,19 @@ ${productUrls}
 // GET /sitemap.xml (Dynamic Google XML Sitemap from live Firestore)
 app.get(['/sitemap.xml', '/api/sitemap.xml'], async (req, res) => {
   const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true' || req.headers['cache-control'] === 'no-cache';
   try {
-    const sitemap = await generateDynamicSitemapXml(baseUrl);
+    const sitemap = await generateDynamicSitemapXml(baseUrl, forceRefresh);
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+    res.setHeader('X-Sitemap-Source', 'dynamic-firestore');
     res.send(sitemap);
   } catch (error) {
-    if (isQuotaExceededError(error)) {
-      handleFirestoreError('Dynamic Firestore sitemap', error);
-      const fallbackSitemap = buildDynamicSitemap(baseUrl);
-      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300');
-      return res.send(fallbackSitemap);
-    }
-    console.error('Error generating dynamic Firestore sitemap in server.ts:', error);
-    res.status(500).send('Error generating dynamic sitemap');
+    handleFirestoreError('Dynamic Firestore sitemap', error);
+    const fallbackSitemap = buildDynamicSitemap(baseUrl);
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+    return res.status(200).send(fallbackSitemap);
   }
 });
 
@@ -2051,15 +2094,14 @@ async function syncFirestoreProducts() {
     const firestoreDb = getFirestoreInstance();
     const snap = await getDocs(collection(firestoreDb, 'products'));
     if (!snap.empty) {
+      const freshProducts: any[] = [];
       snap.forEach(d => {
         const data = { ...d.data(), id: String(d.data().id || d.id) };
-        const idx = db.products.findIndex(p => p.id === data.id);
-        if (idx >= 0) {
-          db.products[idx] = { ...db.products[idx], ...data };
-        } else {
-          db.products.push(data);
-        }
+        freshProducts.push(data);
       });
+      // Replace db.products with the exact active set from Firestore to purge deleted items
+      db.products = freshProducts;
+      saveDB();
     }
   } catch (err) {
     handleFirestoreError('Sync products from Firestore', err);

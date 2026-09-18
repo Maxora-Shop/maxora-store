@@ -2,8 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, getDocs, collection, setLogLevel } from 'firebase/firestore';
-import { INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES } from '../data/initialData';
-import userProductsJson from '../data/userProducts.json';
+import { CANONICAL_PRODUCTS, CANONICAL_CATEGORIES, CANONICAL_SUBCATEGORIES } from '../data/canonicalCatalog';
 
 try {
   setLogLevel('error');
@@ -82,103 +81,18 @@ export function isPublicIndexableCategory(data: any): boolean {
   return true;
 }
 
-/**
- * Connects directly to live Google Cloud Firestore and builds a 100% dynamic, future-proof XML Sitemap.
- * 
- * Guarantees:
- * 1. Firestore is the SOLE source of truth (no mock data, no static fallback, no hardcoded product list or count).
- * 2. Fully scales whether Firestore has 20, 30, 50, 100, or 1000+ products without requiring any code changes.
- * 3. Newly published products from the Admin Panel automatically appear immediately.
- * 4. Deleted or unpublished products are automatically excluded immediately without stale entries.
- */
-export async function generateDynamicSitemapXml(baseUrl = SITEMAP_BASE_URL): Promise<string> {
+export function buildSitemapXmlDocument(params: {
+  baseUrl: string;
+  products: readonly any[] | any[];
+  categories: readonly any[] | any[];
+  subcategories: readonly any[] | any[];
+}): string {
+  const { baseUrl, products, categories, subcategories } = params;
   const today = new Date().toISOString().split('T')[0];
 
-  let rawConfig: any = {};
-  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    try {
-      rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) {
-      console.warn('Failed to parse firebase-applet-config.json:', e);
-    }
-  }
-
-  const firebaseConfig = {
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || rawConfig.projectId,
-    appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || rawConfig.appId,
-    apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || rawConfig.apiKey,
-    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || rawConfig.authDomain,
-    firestoreDatabaseId: process.env.VITE_FIRESTORE_DATABASE_ID || process.env.FIRESTORE_DATABASE_ID || rawConfig.firestoreDatabaseId,
-    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || rawConfig.storageBucket,
-    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId,
-  };
-
-  const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  const db = firebaseConfig.firestoreDatabaseId
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
-
-  const liveProducts: any[] = [];
-  const liveCategories: any[] = [];
-  const liveSubcategories: any[] = [];
-
-  // Directly query live Firestore collections with fallback to static dataset
-  try {
-    const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
-      getDocs(collection(db, 'products')),
-      getDocs(collection(db, 'categories')),
-      getDocs(collection(db, 'subcategories')),
-    ]);
-
-    prodsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableProduct(data)) {
-        liveProducts.push({ ...data, id: String(data.id || doc.id) });
-      }
-    });
-
-    catsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableCategory(data)) {
-        liveCategories.push({ ...data, id: String(data.id || doc.id) });
-      }
-    });
-
-    subsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableCategory(data)) {
-        liveSubcategories.push({ ...data, id: String(data.id || doc.id) });
-      }
-    });
-  } catch (err: any) {
-    // Graceful offline/quota-exceeded fallback to user products and initial taxonomy
-    if (Array.isArray(userProductsJson)) {
-      userProductsJson.forEach((p: any) => {
-        if (isPublicIndexableProduct(p)) {
-          liveProducts.push(p);
-        }
-      });
-    }
-    if (Array.isArray(INITIAL_CATEGORIES)) {
-      INITIAL_CATEGORIES.forEach((c: any) => {
-        if (isPublicIndexableCategory(c)) {
-          liveCategories.push(c);
-        }
-      });
-    }
-    if (Array.isArray(INITIAL_SUBCATEGORIES)) {
-      INITIAL_SUBCATEGORIES.forEach((s: any) => {
-        if (isPublicIndexableCategory(s)) {
-          liveSubcategories.push(s);
-        }
-      });
-    }
-  }
-
-  // Dynamic Product XML URLs (Iterates over ALL eligible live products from Firestore)
-  const productUrls = liveProducts
-    .map((p) => {
+  const productUrls = (products || [])
+    .filter(isPublicIndexableProduct)
+    .map((p: any) => {
       const slug = cleanSlug(p.slug || p.name || String(p.id));
       if (!slug) return '';
       const rawDate = p.updated_at || p.created_at || today;
@@ -194,8 +108,8 @@ export async function generateDynamicSitemapXml(baseUrl = SITEMAP_BASE_URL): Pro
     .filter(Boolean)
     .join('\n');
 
-  // Dynamic Category XML URLs
-  const categoryUrls = liveCategories
+  const categoryUrls = (categories || [])
+    .filter(isPublicIndexableCategory)
     .map((c) => {
       const slug = cleanSlug(c.slug || c.name || c.id);
       if (!slug) return '';
@@ -212,10 +126,10 @@ export async function generateDynamicSitemapXml(baseUrl = SITEMAP_BASE_URL): Pro
     .filter(Boolean)
     .join('\n');
 
-  // Dynamic Subcategory XML URLs
-  const subcategoryUrls = liveSubcategories
+  const subcategoryUrls = (subcategories || [])
+    .filter(isPublicIndexableCategory)
     .map((s) => {
-      const cat = liveCategories.find((c) => String(c.id) === String(s.category_id) || c.slug === s.category_slug);
+      const cat = (categories || []).find((c) => String(c.id) === String(s.category_id) || c.slug === s.category_slug);
       const catSlug = cleanSlug(cat?.slug || cat?.name || s.category_slug || s.category_name || s.category_id || '');
       const subSlug = cleanSlug(s.slug || s.name || s.id);
       if (!subSlug) return '';
@@ -251,4 +165,158 @@ export async function generateDynamicSitemapXml(baseUrl = SITEMAP_BASE_URL): Pro
   </url>
 ${categoryUrls ? `${categoryUrls}\n` : ''}${subcategoryUrls ? `${subcategoryUrls}\n` : ''}${productUrls}
 </urlset>`;
+}
+
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: 'gen-lang-client-0786093112',
+  appId: '1:69433257808:web:fb4fbbe84e9a5188354655',
+  apiKey: 'AIzaSyCTbIx95MxDltN100CSrPA9e9J-YrdF3Gg',
+  authDomain: 'gen-lang-client-0786093112.firebaseapp.com',
+  firestoreDatabaseId: 'ai-studio-maxorapremiumonl-a712e7fa-09e4-41f4-9cfb-9515c7736ab5',
+  storageBucket: 'gen-lang-client-0786093112.firebasestorage.app',
+  messagingSenderId: '69433257808',
+};
+
+const STATIC_CANONICAL_XML = buildSitemapXmlDocument({
+  baseUrl: SITEMAP_BASE_URL,
+  products: CANONICAL_PRODUCTS,
+  categories: CANONICAL_CATEGORIES,
+  subcategories: CANONICAL_SUBCATEGORIES,
+});
+
+let cachedXml: string = STATIC_CANONICAL_XML;
+let lastSuccessfulLiveXml: string | null = null;
+let lastCacheTime = 0;
+const CACHE_LIFETIME = 5 * 60 * 1000; // 5 min
+let firestoreCooldown = 0;
+
+export function invalidateSitemapCache(): void {
+  lastCacheTime = 0;
+  firestoreCooldown = 0;
+}
+
+/**
+ * Connects directly to live Google Cloud Firestore and builds a 100% dynamic, future-proof XML Sitemap.
+ * Seamlessly falls back to bundled canonical snapshot if Firestore has quota limits or timeouts.
+ */
+export async function generateDynamicSitemapXml(
+  baseUrl = SITEMAP_BASE_URL,
+  forceRefresh = false
+): Promise<string> {
+  const now = Date.now();
+  if (!forceRefresh && cachedXml && now - lastCacheTime < CACHE_LIFETIME) {
+    return cachedXml;
+  }
+  if (forceRefresh) {
+    firestoreCooldown = 0;
+  }
+
+  let rawConfig: any = {};
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) {}
+  }
+
+  const firebaseConfig = {
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || rawConfig.projectId || DEFAULT_FIREBASE_CONFIG.projectId,
+    appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || rawConfig.appId || DEFAULT_FIREBASE_CONFIG.appId,
+    apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || rawConfig.apiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || rawConfig.authDomain || DEFAULT_FIREBASE_CONFIG.authDomain,
+    firestoreDatabaseId: process.env.VITE_FIRESTORE_DATABASE_ID || process.env.FIRESTORE_DATABASE_ID || rawConfig.firestoreDatabaseId || DEFAULT_FIREBASE_CONFIG.firestoreDatabaseId,
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || rawConfig.storageBucket || DEFAULT_FIREBASE_CONFIG.storageBucket,
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  };
+
+  let liveProducts: any[] = [];
+  let liveCategories: any[] = [];
+  let liveSubcategories: any[] = [];
+  let fetched = false;
+
+  if (now > firestoreCooldown) {
+    try {
+      const fetchPromise = (async () => {
+        const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+        const db = firebaseConfig.firestoreDatabaseId
+          ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+          : getFirestore(app);
+
+        const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+          getDocs(collection(db, 'products')),
+          getDocs(collection(db, 'categories')),
+          getDocs(collection(db, 'subcategories')),
+        ]);
+
+        const prods: any[] = [];
+        prodsSnap.forEach((doc) => {
+          const data = doc.data();
+          if (isPublicIndexableProduct(data)) {
+            prods.push({ ...data, id: String(data.id || doc.id) });
+          }
+        });
+
+        const cats: any[] = [];
+        catsSnap.forEach((doc) => {
+          const data = doc.data();
+          if (isPublicIndexableCategory(data)) {
+            cats.push({ ...data, id: String(data.id || doc.id) });
+          }
+        });
+
+        const subs: any[] = [];
+        subsSnap.forEach((doc) => {
+          const data = doc.data();
+          if (isPublicIndexableCategory(data)) {
+            subs.push({ ...data, id: String(data.id || doc.id) });
+          }
+        });
+
+        return { prods, cats, subs };
+      })();
+
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Firestore timeout')), 3500);
+      });
+
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      if (res && Array.isArray(res.prods) && res.prods.length > 0) {
+        liveProducts = res.prods;
+        liveCategories = res.cats;
+        liveSubcategories = res.subs;
+        fetched = true;
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const isQuota = msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted');
+      firestoreCooldown = Date.now() + (isQuota ? 2 * 60 * 1000 : 30 * 1000);
+    }
+  }
+
+  let generated: string;
+  if (fetched && liveProducts.length > 0) {
+    generated = buildSitemapXmlDocument({
+      baseUrl,
+      products: liveProducts,
+      categories: liveCategories,
+      subcategories: liveSubcategories,
+    });
+    lastSuccessfulLiveXml = generated;
+  } else if (lastSuccessfulLiveXml) {
+    generated = lastSuccessfulLiveXml;
+  } else {
+    liveProducts = (CANONICAL_PRODUCTS as readonly any[]).filter(isPublicIndexableProduct);
+    liveCategories = (CANONICAL_CATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
+    liveSubcategories = (CANONICAL_SUBCATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
+    generated = buildSitemapXmlDocument({
+      baseUrl,
+      products: liveProducts,
+      categories: liveCategories,
+      subcategories: liveSubcategories,
+    });
+  }
+
+  cachedXml = generated;
+  lastCacheTime = Date.now();
+  return generated;
 }

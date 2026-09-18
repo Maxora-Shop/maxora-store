@@ -337,14 +337,14 @@ export function isQuotaExceededError(err: any): boolean {
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
     msg.includes('free daily read units') ||
-    msg.includes('rate-limit') ||
-    msg.includes('disconnecting idle stream')
+    msg.includes('rate-limit')
   );
 }
 
 let clientQuotaCooldownUntil = 0;
 let clientQuotaNoticeLogged = false;
 let activeFirestoreUnsubscribers: Array<() => void> = [];
+let reconnectTimer: any = null;
 
 export function isClientQuotaCooldownActive(): boolean {
   if (typeof window !== 'undefined') {
@@ -364,6 +364,16 @@ export function detachFirestoreListeners() {
   isListening = false;
 }
 
+export function scheduleReconnectListeners(delayMs = 4000) {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    if (!isClientQuotaCooldownActive()) {
+      detachFirestoreListeners();
+      initRealtimeFirestoreListeners();
+    }
+  }, delayMs);
+}
+
 export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
     // 2-hour circuit breaker saved to persistent storage
@@ -373,18 +383,20 @@ export function handleStoreFirestoreError(context: string, err: any) {
         localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil));
       } catch {}
     }
-    // Cleanly detach active listeners so browser console is not spammed with cancelled/quota errors
+    // Cleanly detach active listeners
     detachFirestoreListeners();
 
     if (!clientQuotaNoticeLogged) {
       clientQuotaNoticeLogged = true;
-      console.info(`[StoreService] Firestore quota paused (${context}). Seamlessly running on High-Performance Server Engine & Local Persistence.`);
+      console.info(`[StoreService] Firestore quota reached (${context}). Seamlessly running on Local Persistence.`);
     }
     return;
   }
   const msg = err?.message || String(err);
   if (!msg.includes('idle stream') && !msg.includes('CANCELLED')) {
     console.warn(`${context} notice:`, msg);
+    // Transient error: schedule a clean reconnect attempt
+    scheduleReconnectListeners(5000);
   }
 }
 
@@ -393,10 +405,10 @@ let isListening = false;
 export function initRealtimeFirestoreListeners() {
   if (typeof window === 'undefined') return;
 
-  // Background polling from Server REST API is ALWAYS active and cross-client reliable
-  startServerPollingOnce();
+  // Ensure background reconnect handlers are registered
+  registerNetworkSyncListeners();
 
-  // If quota cooldown is currently active, DO NOT spam Firestore with 9 collection listeners
+  // If quota cooldown is currently active, avoid spinning up listeners
   if (isClientQuotaCooldownActive()) {
     return;
   }
@@ -569,51 +581,22 @@ export function initRealtimeFirestoreListeners() {
   }
 }
 
-// Background sync engine from Authoritative Server REST API
-let isServerPollingStarted = false;
-function startServerPollingOnce() {
-  if (isServerPollingStarted || typeof window === 'undefined') return;
-  isServerPollingStarted = true;
+// Background network & visibility reconnect engine
+let isNetworkListenersRegistered = false;
+function registerNetworkSyncListeners() {
+  if (isNetworkListenersRegistered || typeof window === 'undefined') return;
+  isNetworkListenersRegistered = true;
 
-  let isPolling = false;
-  const pollServerUpdates = async () => {
-    if (isPolling || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
-    isPolling = true;
-    try {
-      const res = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
-      if (res.success && Array.isArray(res.data?.products) && res.data.products.length > 0) {
-        const currentLocal = getLocal<Product[]>(PRODUCTS_KEY, []);
-        const incoming = res.data.products;
-        const currentSig = currentLocal.map(p => `${p.id}:${p.updated_at}:${p.selling_price}:${p.discount}:${p.active}:${p.featured}:${p.is_hot_deal}:${p.is_flash_sale}`).join('|');
-        const incomingSig = incoming.map(p => `${p.id}:${p.updated_at}:${p.selling_price}:${p.discount}:${p.active}:${p.featured}:${p.is_hot_deal}:${p.is_flash_sale}`).join('|');
-        if (currentSig !== incomingSig) {
-          const deleted = getDeletedProductIds();
-          const valid = incoming.filter(p => !deleted.has(String(p.id)) && (!p.sku || !deleted.has(String(p.sku))));
-          setLocal(PRODUCTS_KEY, valid);
-          notifyProductsChanged();
-        }
-      }
-    } catch {}
+  window.addEventListener('online', () => {
+    if (!isClientQuotaCooldownActive()) {
+      detachFirestoreListeners();
+      initRealtimeFirestoreListeners();
+    }
+  });
 
-    try {
-      const setRes = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-      if (setRes.success && setRes.data?.settings) {
-        const currentSettings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-        if (JSON.stringify(setRes.data.settings) !== JSON.stringify(currentSettings)) {
-          setLocal(SETTINGS_KEY, setRes.data.settings);
-          notifySettingsChanged();
-        }
-      }
-    } catch {}
-
-    isPolling = false;
-  };
-
-  // Poll server every 6 seconds
-  setInterval(pollServerUpdates, 6000);
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      pollServerUpdates();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !isListening && !isClientQuotaCooldownActive()) {
+      initRealtimeFirestoreListeners();
     }
   });
 }
@@ -843,34 +826,34 @@ export const storeService = {
   },
 
   async getSettings(): Promise<StoreSettings> {
-    const local = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+    let current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     
-    // 1. Query Authoritative Backend Server API first (instant, reliable, zero quota limits)
-    try {
-      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-      if (apiResult.success && apiResult.data?.settings) {
-        const merged = { ...local, ...apiResult.data.settings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
-      }
-    } catch {}
-
-    // 2. Query Firestore if server is unreachable and quota is healthy
+    // 1. If quota is healthy, query Firestore directly as single source of truth
     if (!isClientQuotaCooldownActive()) {
       try {
         const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
         if (docSnap.exists()) {
           const firestoreSettings = docSnap.data() as StoreSettings;
-          const merged = { ...local, ...firestoreSettings };
-          setLocal(SETTINGS_KEY, merged);
-          return merged;
+          current = { ...current, ...firestoreSettings };
+          setLocal(SETTINGS_KEY, current);
+          return current;
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getSettings', e);
       }
     }
 
-    return local;
+    // 2. Fallback to API if Firestore is unavailable
+    try {
+      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
+      if (apiResult.success && apiResult.data?.settings) {
+        const merged = { ...current, ...apiResult.data.settings };
+        setLocal(SETTINGS_KEY, merged);
+        return merged;
+      }
+    } catch {}
+
+    return current;
   },
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
@@ -913,58 +896,36 @@ export const storeService = {
     childCategory = ''
   ): Promise<Product[]> {
     const deletedProductIds = getDeletedProductIds();
-    let prods: Product[] = [];
+    let prods = getLocal<Product[]>(PRODUCTS_KEY, []);
 
-    // 1. Query Authoritative Backend Server API first
-    // Runs in < 15ms with zero quota limits, protecting Firestore from 50k reads/day exhaustion
-    try {
-      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
-      if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
-        const apiProds: Product[] = [];
-        apiRes.data.products.forEach((item) => {
-          const pId = String(item.id);
-          const pSku = String(item.sku || '');
-          const pSlug = String(item.slug || '');
-          const pName = String(item.name || '').trim();
-          if (!pName) return;
-          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-            return;
-          }
-          apiProds.push({
-            ...item,
-            id: pId,
-            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
-          });
-        });
-        if (apiProds.length > 0) {
-          prods = apiProds;
-          setLocal(PRODUCTS_KEY, prods);
-        }
-      }
-    } catch (e) {
-      console.warn('Backend REST API getProducts notice:', e);
-    }
-
-    // 2. If Server API returned nothing (e.g. offline) and Firestore quota is healthy, query Firestore
+    // 1. If local cache is empty and quota is healthy, load directly from Firestore (single source of truth)
     if (prods.length === 0 && !isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
+          const freshProds: Product[] = [];
           snap.forEach((d) => {
             const item = d.data() as Product;
             const pId = String(item.id || d.id);
             const pSku = String(item.sku || '');
             const pSlug = String(item.slug || '');
             const pName = String(item.name || '').trim();
-            if (!pName) {
-              return;
-            }
+            if (!pName) return;
             if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
               return;
             }
-            prods.push({ ...item, id: pId });
+            freshProds.push({
+              ...item,
+              id: pId,
+              selling_price: Number(item.selling_price || 0),
+              discount: Number(item.discount || 0),
+              stock: Number(item.stock !== undefined ? item.stock : 0),
+              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
+            });
           });
-          if (prods.length > 0) {
+          freshProds.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          if (freshProds.length > 0) {
+            prods = freshProds;
             setLocal(PRODUCTS_KEY, prods);
           }
         }
@@ -973,7 +934,39 @@ export const storeService = {
       }
     }
 
-    // 3. Fallback to cached local storage
+    // 2. If still empty, try fallback REST API
+    if (prods.length === 0) {
+      try {
+        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
+        if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
+          const apiProds: Product[] = [];
+          apiRes.data.products.forEach((item) => {
+            const pId = String(item.id);
+            const pSku = String(item.sku || '');
+            const pSlug = String(item.slug || '');
+            const pName = String(item.name || '').trim();
+            if (!pName) return;
+            if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+              return;
+            }
+            apiProds.push({
+              ...item,
+              id: pId,
+              selling_price: Number(item.selling_price || 0),
+              discount: Number(item.discount || 0),
+              stock: Number(item.stock !== undefined ? item.stock : 0),
+              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
+            });
+          });
+          if (apiProds.length > 0) {
+            prods = apiProds;
+            setLocal(PRODUCTS_KEY, prods);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Fallback to default catalog if completely empty
     if (prods.length === 0) {
       const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       prods = cached.filter(
@@ -1332,6 +1325,9 @@ export const storeService = {
   },
 
   // 3. ORDERS & CHECKOUT
+  // Duplicate submission protection cache (in-memory per session)
+  _recentOrderSignatures: new Map<string, { timestamp: number; order: Order }>(),
+
   async createOrder(orderPayload: {
     customer_name: string;
     phone: string;
@@ -1353,12 +1349,29 @@ export const storeService = {
       sku?: string;
     }>;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
+    // Check duplicate order submission signature (prevents accidental double clicks)
+    const normPhone = (orderPayload.phone || '').replace(/[^0-9]/g, '');
+    const normAddr = (orderPayload.address || '').toLowerCase().trim();
+    const itemsSig = (orderPayload.items || [])
+      .map(i => `${i.product_id}x${i.quantity}`)
+      .sort()
+      .join(',');
+    const submissionSig = `${normPhone}|${normAddr}|${itemsSig}`;
+    const now = Date.now();
+    const existing = this._recentOrderSignatures.get(submissionSig);
+    if (existing && (now - existing.timestamp) < 15000) {
+      console.info('[StoreService] Duplicate order submission prevented. Returning confirmed order:', existing.order.order_number);
+      return { success: true, order: existing.order };
+    }
+
     const settings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
 
     let subtotal = 0;
     const orderItems: OrderItem[] = [];
     const orderId = `ord-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+
+    const stockUpdatePromises: Promise<any>[] = [];
 
     for (const item of orderPayload.items) {
       const prod = products.find((p) => String(p.id) === String(item.product_id));
@@ -1398,7 +1411,9 @@ export const storeService = {
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
         // update stock in Firestore
-        setDoc(doc(db, 'products', String(prod.id)), { stock: prod.stock }, { merge: true }).catch(() => {});
+        stockUpdatePromises.push(
+          setDoc(doc(db, 'products', String(prod.id)), { stock: prod.stock, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {})
+        );
       }
     }
     setLocal(PRODUCTS_KEY, products);
@@ -1460,7 +1475,26 @@ export const storeService = {
       items: orderItems,
     };
 
-    // 1. Authoritative Backend Server API persistence (guaranteed disk storage, zero quota failure)
+    // 1. Authoritative Firestore Persistence
+    const firestoreOrder = cleanForFirestore({
+      ...newOrder,
+      customer_phone: orderPayload.phone || '',
+      total_amount: total,
+      order_status: 'Pending',
+    });
+    const firestoreCustomer = cleanForFirestore(customerData);
+
+    try {
+      await Promise.all([
+        setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
+        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }),
+        ...stockUpdatePromises
+      ]);
+    } catch (fsErr) {
+      console.warn('Direct Firestore order persistence notice:', fsErr);
+    }
+
+    // 2. Authoritative Backend Server API persistence (mirrored in background)
     const fullOrderSyncPayload = {
       ...orderPayload,
       order: newOrder,
@@ -1471,29 +1505,11 @@ export const storeService = {
       subtotal,
       delivery_charge: deliveryCharge,
     };
-    try {
-      await tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullOrderSyncPayload),
-      });
-    } catch (e) {
-      console.warn('API /api/orders sync notice:', e);
-    }
-
-    // 2. Mirror to Cloud Firestore in background if available
-    const firestoreOrder = cleanForFirestore({
-      ...newOrder,
-      customer_phone: orderPayload.phone || '',
-      total_amount: total,
-      order_status: 'Pending',
-    });
-    const firestoreCustomer = cleanForFirestore(customerData);
-
-    if (db && !isClientQuotaCooldownActive()) {
-      setDoc(doc(db, 'orders', orderId), firestoreOrder).catch(() => {});
-      setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }).catch(() => {});
-    }
+    tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullOrderSyncPayload),
+    }).catch(() => {});
 
     // 3. Local update
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
@@ -1510,6 +1526,13 @@ export const storeService = {
       customers.push(customerData);
     }
     setLocal(CUSTOMERS_KEY, customers);
+
+    // Save to idempotency cache
+    this._recentOrderSignatures.set(submissionSig, { timestamp: now, order: newOrder });
+    if (this._recentOrderSignatures.size > 50) {
+      const oldestKey = this._recentOrderSignatures.keys().next().value;
+      if (oldestKey) this._recentOrderSignatures.delete(oldestKey);
+    }
 
     notifyOrdersChanged();
 

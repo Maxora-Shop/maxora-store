@@ -2,7 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, getDocs, collection } from 'firebase/firestore';
+import { getFirestore, getDocs, collection, setLogLevel } from 'firebase/firestore';
+import { CANONICAL_PRODUCTS, CANONICAL_CATEGORIES, CANONICAL_SUBCATEGORIES } from '../src/data/canonicalCatalog';
+
+try {
+  setLogLevel('error');
+} catch (e) {}
 
 const BASE_URL = 'https://maxora-store-ruby.vercel.app';
 
@@ -88,10 +93,134 @@ function isPublicIndexableCategory(data: any): boolean {
   return true;
 }
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+function buildSitemapXml(params: {
+  baseUrl: string;
+  products: readonly any[] | any[];
+  categories: readonly any[] | any[];
+  subcategories: readonly any[] | any[];
+}): string {
+  const { baseUrl, products, categories, subcategories } = params;
   const today = new Date().toISOString().split('T')[0];
 
+  // Dynamic Product URLs
+  const productUrls = (products || [])
+    .filter(isPublicIndexableProduct)
+    .map((p: any) => {
+      const slug = cleanSlug(p.slug || p.name || String(p.id));
+      if (!slug) return '';
+      const rawDate = p.updated_at || p.created_at || today;
+      const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
+      return `  <url>
+    <loc>${escapeXml(`${baseUrl}/product/${slug}`)}</loc>
+    <lastmod>${escapeXml(validDate)}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  // Dynamic Category URLs
+  const categoryUrls = (categories || [])
+    .filter(isPublicIndexableCategory)
+    .map((c: any) => {
+      const slug = cleanSlug(c.slug || c.name || c.id);
+      if (!slug) return '';
+      const rawDate = c.updated_at || c.created_at || today;
+      const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
+      return `  <url>
+    <loc>${escapeXml(`${baseUrl}/category/${slug}`)}</loc>
+    <lastmod>${escapeXml(validDate)}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  // Dynamic Subcategory URLs
+  const subcategoryUrls = (subcategories || [])
+    .filter(isPublicIndexableCategory)
+    .map((s: any) => {
+      const cat = (categories || []).find((c: any) => String(c.id) === String(s.category_id) || c.slug === s.category_slug);
+      const catSlug = cleanSlug(cat?.slug || cat?.name || s.category_slug || s.category_name || s.category_id || '');
+      const subSlug = cleanSlug(s.slug || s.name || s.id);
+      if (!subSlug) return '';
+      const loc = catSlug
+        ? `${baseUrl}/category/${catSlug}/${subSlug}`
+        : `${baseUrl}/category/${subSlug}`;
+      const rawDate = s.updated_at || s.created_at || today;
+      const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
+      return `  <url>
+    <loc>${escapeXml(loc)}</loc>
+    <lastmod>${escapeXml(validDate)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${escapeXml(`${baseUrl}/`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${escapeXml(`${baseUrl}/track`)}</loc>
+    <lastmod>${escapeXml(today)}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+${categoryUrls ? `${categoryUrls}\n` : ''}${subcategoryUrls ? `${subcategoryUrls}\n` : ''}${productUrls}
+</urlset>`;
+}
+
+// Pre-computed fallback XML guaranteed to be available instantly in memory
+const EMERGENCY_CANONICAL_SITEMAP_XML = buildSitemapXml({
+  baseUrl: BASE_URL,
+  products: CANONICAL_PRODUCTS,
+  categories: CANONICAL_CATEGORIES,
+  subcategories: CANONICAL_SUBCATEGORIES,
+});
+
+// Server-side module cache to protect Firestore quota and deliver instant responses (<10ms)
+let cachedSitemapXml: string = EMERGENCY_CANONICAL_SITEMAP_XML;
+let lastSuccessfulLiveXml: string | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+let firestoreCooldownUntil = 0;
+
+export function invalidateSitemapCache(): void {
+  cacheTimestamp = 0;
+  firestoreCooldownUntil = 0;
+}
+
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
+    const now = Date.now();
+    const reqUrl = req.url || '';
+    const isForceRefresh = reqUrl.includes('refresh=1') ||
+      reqUrl.includes('refresh=true') ||
+      req.headers['cache-control'] === 'no-cache' ||
+      req.headers['pragma'] === 'no-cache';
+
+    // 1. Serve fresh in-memory cache if available and not explicitly requested to refresh
+    if (!isForceRefresh && cachedSitemapXml && now - cacheTimestamp < CACHE_TTL_MS) {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+      res.setHeader('X-Sitemap-Source', 'memory-cache');
+      res.end(cachedSitemapXml);
+      return;
+    }
+
     // Resolve Firebase configuration
     let rawConfig: any = {};
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -99,7 +228,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       try {
         rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       } catch (e) {
-        console.warn('Warning: Could not read firebase-applet-config.json:', e);
+        // Safe ignore
       }
     }
 
@@ -113,126 +242,120 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
     };
 
-    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const db = firebaseConfig.firestoreDatabaseId
-      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-      : getFirestore(app);
+    let liveProducts: any[] = [];
+    let liveCategories: any[] = [];
+    let liveSubcategories: any[] = [];
+    let fromLiveFirestore = false;
 
-    // Fetch live Firestore collections directly
-    const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
-      getDocs(collection(db, 'products')),
-      getDocs(collection(db, 'categories')),
-      getDocs(collection(db, 'subcategories')),
-    ]);
+    // 2. Query Firestore with 3.5s timeout guard if not in quota cooldown
+    if (now > firestoreCooldownUntil) {
+      try {
+        const firestoreFetchPromise = (async () => {
+          const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+          const db = firebaseConfig.firestoreDatabaseId
+            ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+            : getFirestore(app);
 
-    const liveProducts: any[] = [];
-    prodsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableProduct(data)) {
-        liveProducts.push({ ...data, id: String(data.id || doc.id) });
+          const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+            getDocs(collection(db, 'products')),
+            getDocs(collection(db, 'categories')),
+            getDocs(collection(db, 'subcategories')),
+          ]);
+
+          const prods: any[] = [];
+          prodsSnap.forEach((doc) => {
+            const data = doc.data();
+            if (isPublicIndexableProduct(data)) {
+              prods.push({ ...data, id: String(data.id || doc.id) });
+            }
+          });
+
+          const cats: any[] = [];
+          catsSnap.forEach((doc) => {
+            const data = doc.data();
+            if (isPublicIndexableCategory(data)) {
+              cats.push({ ...data, id: String(data.id || doc.id) });
+            }
+          });
+
+          const subs: any[] = [];
+          subsSnap.forEach((doc) => {
+            const data = doc.data();
+            if (isPublicIndexableCategory(data)) {
+              subs.push({ ...data, id: String(data.id || doc.id) });
+            }
+          });
+
+          return { prods, cats, subs };
+        })();
+
+        // 3.5s timeout guard prevents Vercel lambda execution cutoff
+        const timeoutPromise = new Promise<null>((_, reject) => {
+          setTimeout(() => reject(new Error('Firestore connection timeout (3500ms)')), 3500);
+        });
+
+        const firestoreResult = await Promise.race([firestoreFetchPromise, timeoutPromise]);
+        if (firestoreResult && Array.isArray(firestoreResult.prods) && firestoreResult.prods.length > 0) {
+          liveProducts = firestoreResult.prods;
+          liveCategories = firestoreResult.cats;
+          liveSubcategories = firestoreResult.subs;
+          fromLiveFirestore = true;
+        }
+      } catch (firestoreError: any) {
+        const msg = firestoreError?.message || String(firestoreError);
+        console.warn('[Sitemap] Firestore fetch bypassed:', msg);
+        // Quota exhaustion cooldown is 2 minutes; general timeout cooldown is 30 seconds
+        const isQuota = msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted');
+        firestoreCooldownUntil = Date.now() + (isQuota ? 2 * 60 * 1000 : 30 * 1000);
       }
-    });
+    }
 
-    const liveCategories: any[] = [];
-    catsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableCategory(data)) {
-        liveCategories.push({ ...data, id: String(data.id || doc.id) });
-      }
-    });
+    // 3. Generate compliant XML string with graceful fallback hierarchy
+    let sitemapXml: string;
+    let sitemapSource: string;
 
-    const liveSubcategories: any[] = [];
-    subsSnap.forEach((doc) => {
-      const data = doc.data();
-      if (isPublicIndexableCategory(data)) {
-        liveSubcategories.push({ ...data, id: String(data.id || doc.id) });
-      }
-    });
+    if (fromLiveFirestore && liveProducts.length > 0) {
+      sitemapXml = buildSitemapXml({
+        baseUrl: BASE_URL,
+        products: liveProducts,
+        categories: liveCategories,
+        subcategories: liveSubcategories,
+      });
+      lastSuccessfulLiveXml = sitemapXml;
+      sitemapSource = 'firestore-live';
+    } else if (lastSuccessfulLiveXml) {
+      sitemapXml = lastSuccessfulLiveXml;
+      sitemapSource = 'last-live-fallback';
+    } else {
+      liveProducts = (CANONICAL_PRODUCTS as readonly any[]).filter(isPublicIndexableProduct);
+      liveCategories = (CANONICAL_CATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
+      liveSubcategories = (CANONICAL_SUBCATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
+      sitemapXml = buildSitemapXml({
+        baseUrl: BASE_URL,
+        products: liveProducts,
+        categories: liveCategories,
+        subcategories: liveSubcategories,
+      });
+      sitemapSource = 'canonical-catalog';
+    }
 
-    // Dynamic Product URLs: iterates dynamically over ALL returned Firestore products without hardcoding
-    const productUrls = liveProducts
-      .map((p) => {
-        const slug = cleanSlug(p.slug || p.name || String(p.id));
-        if (!slug) return '';
-        const rawDate = p.updated_at || p.created_at || today;
-        const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
-        const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
-        return `  <url>
-    <loc>${escapeXml(`${BASE_URL}/product/${slug}`)}</loc>
-    <lastmod>${escapeXml(validDate)}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>`;
-      })
-      .filter(Boolean)
-      .join('\n');
+    // Update in-memory cache
+    cachedSitemapXml = sitemapXml;
+    cacheTimestamp = Date.now();
 
-    // Dynamic Category URLs
-    const categoryUrls = liveCategories
-      .map((c) => {
-        const slug = cleanSlug(c.slug || c.name || c.id);
-        if (!slug) return '';
-        const rawDate = c.updated_at || c.created_at || today;
-        const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
-        const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
-        return `  <url>
-    <loc>${escapeXml(`${BASE_URL}/category/${slug}`)}</loc>
-    <lastmod>${escapeXml(validDate)}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>`;
-      })
-      .filter(Boolean)
-      .join('\n');
-
-    // Dynamic Subcategory URLs
-    const subcategoryUrls = liveSubcategories
-      .map((s) => {
-        const cat = liveCategories.find((c) => String(c.id) === String(s.category_id) || c.slug === s.category_slug);
-        const catSlug = cleanSlug(cat?.slug || cat?.name || s.category_slug || s.category_name || s.category_id || '');
-        const subSlug = cleanSlug(s.slug || s.name || s.id);
-        if (!subSlug) return '';
-        const loc = catSlug
-          ? `${BASE_URL}/category/${catSlug}/${subSlug}`
-          : `${BASE_URL}/category/${subSlug}`;
-        const rawDate = s.updated_at || s.created_at || today;
-        const lastMod = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
-        const validDate = /^\d{4}-\d{2}-\d{2}$/.test(lastMod) ? lastMod : today;
-        return `  <url>
-    <loc>${escapeXml(loc)}</loc>
-    <lastmod>${escapeXml(validDate)}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>`;
-      })
-      .filter(Boolean)
-      .join('\n');
-
-    const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${escapeXml(`${BASE_URL}/`)}</loc>
-    <lastmod>${escapeXml(today)}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${escapeXml(`${BASE_URL}/track`)}</loc>
-    <lastmod>${escapeXml(today)}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-${categoryUrls ? `${categoryUrls}\n` : ''}${subcategoryUrls ? `${subcategoryUrls}\n` : ''}${productUrls}
-</urlset>`;
-
+    // 4. Send production HTTP 200 response with XML Content-Type and CDN headers
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+    res.setHeader('X-Sitemap-Source', sitemapSource);
     res.end(sitemapXml);
   } catch (error) {
-    console.error('Error generating dynamic Firestore sitemap:', error);
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.end('Failed to generate dynamic sitemap');
+    // 6. Absolute safety guard: NEVER return 500, NEVER return text error, ALWAYS return valid XML 200
+    console.error('[Sitemap] Error intercepted, returning emergency canonical XML:', error);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('X-Sitemap-Source', 'emergency-fallback');
+    res.end(EMERGENCY_CANONICAL_SITEMAP_XML);
   }
 }

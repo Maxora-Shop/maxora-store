@@ -337,8 +337,7 @@ export function isQuotaExceededError(err: any): boolean {
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
     msg.includes('free daily read units') ||
-    msg.includes('rate-limit') ||
-    msg.includes('disconnecting idle stream')
+    msg.includes('rate-limit')
   );
 }
 
