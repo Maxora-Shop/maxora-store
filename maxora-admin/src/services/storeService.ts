@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug, getProductSlug } from '../utils/seo';
@@ -774,11 +774,61 @@ export const storeService = {
   },
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
+    let settingsToSave = { ...newSettings };
+
+    // Offload heavy base64 banner images into uploaded_images collection to prevent 1MB limit
+    if (Array.isArray(settingsToSave.hero_banners) && settingsToSave.hero_banners.length > 0) {
+      try {
+        const offloadedBanners: HeroBanner[] = [];
+        for (const b of settingsToSave.hero_banners) {
+          const bannerCopy = { ...b };
+          const offloadField = async (val?: string): Promise<string | undefined> => {
+            if (!val || !val.startsWith('data:image/')) return val;
+            try {
+              const imgId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              await setDoc(doc(db, 'uploaded_images', imgId), {
+                id: imgId,
+                data_url: val,
+                created_at: new Date().toISOString(),
+                type: 'hero_banner',
+              });
+              return `/api/images/${imgId}`;
+            } catch (e) {
+              return val;
+            }
+          };
+
+          if (bannerCopy.singleBannerImage?.startsWith('data:image/')) {
+            bannerCopy.singleBannerImage = await offloadField(bannerCopy.singleBannerImage);
+          }
+          if (bannerCopy.mobileBannerImage?.startsWith('data:image/')) {
+            bannerCopy.mobileBannerImage = await offloadField(bannerCopy.mobileBannerImage);
+          }
+          if (bannerCopy.image1?.startsWith('data:image/')) {
+            bannerCopy.image1 = await offloadField(bannerCopy.image1);
+          }
+          if (bannerCopy.image2?.startsWith('data:image/')) {
+            bannerCopy.image2 = await offloadField(bannerCopy.image2);
+          }
+          if (bannerCopy.image3?.startsWith('data:image/')) {
+            bannerCopy.image3 = await offloadField(bannerCopy.image3);
+          }
+          if (bannerCopy.image4?.startsWith('data:image/')) {
+            bannerCopy.image4 = await offloadField(bannerCopy.image4);
+          }
+          offloadedBanners.push(bannerCopy);
+        }
+        settingsToSave.hero_banners = offloadedBanners;
+      } catch (err) {
+        console.warn('maxora-admin banner offload error:', err);
+      }
+    }
+
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    const updated = { ...current, ...newSettings };
+    const updated = { ...current, ...settingsToSave };
     setLocal(SETTINGS_KEY, updated);
 
-    // 1. Update Firestore
+    // 1. Update Firestore (Await write as primary source of truth)
     try {
       await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
     } catch (e) {
@@ -789,7 +839,7 @@ export const storeService = {
     tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
       method: 'PUT',
       headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newSettings),
+      body: JSON.stringify(settingsToSave),
     }).catch(() => {});
 
     notifySettingsChanged();

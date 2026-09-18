@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug, getProductSlug } from '../utils/seo';
@@ -858,25 +858,77 @@ export const storeService = {
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    const updated = { ...current, ...newSettings };
+    let updated = { ...current, ...newSettings };
+
+    // Offload any heavy base64 images from hero_banners into individual uploaded_images documents in Firestore
+    // This strictly prevents the 1MB Firestore document size limit and guarantees clean, fast loading.
+    if (updated.hero_banners && Array.isArray(updated.hero_banners)) {
+      try {
+        const cleanedBanners = await Promise.all(
+          updated.hero_banners.map(async (banner) => {
+            const b = { ...banner };
+            const fields: (keyof HeroBanner)[] = [
+              'singleBannerImage',
+              'mobileBannerImage',
+              'image1',
+              'image2',
+              'image3',
+              'image4',
+            ];
+            for (const field of fields) {
+              let val = b[field];
+              if (typeof val === 'string') {
+                // Strip invalid internal localhost URLs
+                if (val.includes('localhost:3000')) {
+                  val = val.replace(/^https?:\/\/localhost:3000/i, '');
+                  (b as any)[field] = val;
+                }
+                // If it's a data URL, store in uploaded_images collection
+                if (val.startsWith('data:image/')) {
+                  const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+                  try {
+                    await setDoc(doc(db, 'uploaded_images', imageId), {
+                      id: imageId,
+                      data_url: val,
+                      filename: `banner-${field}.webp`,
+                      created_at: new Date().toISOString(),
+                    });
+                    (b as any)[field] = `/api/product-image/${imageId}`;
+                  } catch (imgErr) {
+                    console.warn('Could not offload banner image to uploaded_images collection:', imgErr);
+                  }
+                }
+              }
+            }
+            return b;
+          })
+        );
+        updated.hero_banners = cleanedBanners;
+      } catch (err) {
+        console.warn('Notice processing banner images:', err);
+      }
+    }
+
     setLocal(SETTINGS_KEY, updated);
 
-    // 1. Persist to Authoritative Server REST API first
+    // 1. Persist to Firestore FIRST and await it as the single source of truth
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
+      } catch (e) {
+        handleStoreFirestoreError('Firestore updateSettings mirror', e);
+      }
+    }
+
+    // 2. Persist to Authoritative Server REST API
     try {
       await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify(newSettings),
+        body: JSON.stringify(updated),
       });
     } catch (e) {
       console.warn('API updateSettings notice:', e);
-    }
-
-    // 2. Mirror to Firestore in background if quota is available
-    if (!isClientQuotaCooldownActive()) {
-      setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
-        handleStoreFirestoreError('Firestore updateSettings mirror', e);
-      });
     }
 
     notifySettingsChanged();

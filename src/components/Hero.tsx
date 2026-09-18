@@ -40,6 +40,33 @@ export const Hero: React.FC<HeroProps> = ({
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
+
+  const handleImageError = async (imgSrc: string) => {
+    if (!imgSrc || resolvedImages[imgSrc]) return;
+    const match = imgSrc.match(/img-[a-z0-9_-]+/i);
+    if (match) {
+      const imgId = match[0];
+      try {
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('../firebase');
+        const snap = await getDoc(doc(db, 'uploaded_images', imgId));
+        if (snap.exists() && snap.data()?.data_url) {
+          setResolvedImages((prev) => ({ ...prev, [imgSrc]: snap.data().data_url }));
+        }
+      } catch (err) {
+        console.warn('Fallback banner image fetch from Firestore error:', err);
+      }
+    }
+  };
+
+  const sanitizeImg = (url?: string) => {
+    if (!url) return '';
+    const clean = url.includes('localhost:3000')
+      ? url.replace(/^https?:\/\/localhost:3000/i, '')
+      : url;
+    return resolvedImages[clean] || clean;
+  };
 
   // Auto-rotation interval: settings.banner_slide_speed or 4500ms
   const slideInterval = settings.banner_slide_speed && settings.banner_slide_speed >= 2000
@@ -94,11 +121,13 @@ export const Hero: React.FC<HeroProps> = ({
     Boolean(slide.mobileBannerImage) ||
     (!slide.image2 && !slide.image3 && !slide.image4 && Boolean(slide.image1));
 
-  const bannerImgSrc =
+  const rawBannerImg =
     slide.singleBannerImage ||
     slide.image1 ||
     slide.mobileBannerImage ||
     '';
+  const bannerImgSrc = sanitizeImg(rawBannerImg);
+  const mobileBannerImgSrc = sanitizeImg(slide.mobileBannerImage);
 
   return (
     <section className="my-3 sm:my-5 w-full">
@@ -123,8 +152,8 @@ export const Hero: React.FC<HeroProps> = ({
         >
           {/* Responsive picture tag supporting separate mobile banner if uploaded */}
           <picture className="block w-full">
-            {slide.mobileBannerImage && (
-              <source media="(max-width: 640px)" srcSet={slide.mobileBannerImage} />
+            {mobileBannerImgSrc && (
+              <source media="(max-width: 640px)" srcSet={mobileBannerImgSrc} />
             )}
             <img
               src={bannerImgSrc}
@@ -132,6 +161,7 @@ export const Hero: React.FC<HeroProps> = ({
               className="w-full h-auto max-h-[550px] min-h-[160px] sm:min-h-[260px] md:min-h-[340px] lg:min-h-[400px] object-cover transition-transform duration-700 group-hover:scale-[1.01]"
               fetchPriority={currentSlide === 0 ? "high" : "auto"}
               decoding="async"
+              onError={() => handleImageError(bannerImgSrc)}
             />
           </picture>
 
@@ -261,11 +291,12 @@ export const Hero: React.FC<HeroProps> = ({
               /* Single Full Banner Image Mode */
               <div className="relative w-full max-w-lg aspect-16/10 rounded-2xl overflow-hidden shadow-xl border border-white/60">
                 <img
-                  src={slide.singleBannerImage}
+                  src={sanitizeImg(slide.singleBannerImage)}
                   alt={slide.titlePrimary}
                   className="w-full h-full object-cover"
                   fetchPriority={currentSlide === 0 ? "high" : "auto"}
                   decoding="async"
+                  onError={() => handleImageError(sanitizeImg(slide.singleBannerImage))}
                 />
               </div>
             ) : (
@@ -274,42 +305,46 @@ export const Hero: React.FC<HeroProps> = ({
                 {/* Main Gadget 1 (Left-Center) */}
                 <div className="absolute left-2 sm:left-4 top-2 sm:top-4 w-36 sm:w-52 h-36 sm:h-52 z-20 drop-shadow-xl hover:scale-105 transition-transform">
                   <img
-                    src={slide.image1 || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'}
+                    src={sanitizeImg(slide.image1) || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 1"
                     className="w-full h-full object-contain filter drop-shadow-lg"
                     fetchPriority={currentSlide === 0 ? "high" : "auto"}
                     decoding="async"
+                    onError={() => handleImageError(sanitizeImg(slide.image1))}
                   />
                 </div>
 
                 {/* Main Gadget 2 (Center-Right) */}
                 <div className="absolute right-12 sm:right-20 top-0 sm:top-2 w-32 sm:w-44 h-44 sm:h-60 z-30 drop-shadow-2xl hover:scale-105 transition-transform rotate-6">
                   <img
-                    src={slide.image2 || 'https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600&auto=format&fit=crop&q=80'}
+                    src={sanitizeImg(slide.image2) || 'https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 2"
                     className="w-full h-full object-contain filter drop-shadow-xl"
                     fetchPriority={currentSlide === 0 ? "high" : "auto"}
                     decoding="async"
+                    onError={() => handleImageError(sanitizeImg(slide.image2))}
                   />
                 </div>
 
                 {/* Main Gadget 3 (Bottom-Left) */}
                 <div className="absolute left-16 sm:left-24 bottom-2 sm:bottom-4 w-24 sm:w-36 h-24 sm:h-36 z-30 drop-shadow-xl hover:scale-105 transition-transform -rotate-12">
                   <img
-                    src={slide.image3 || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80'}
+                    src={sanitizeImg(slide.image3) || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 3"
                     className="w-full h-full object-contain filter drop-shadow-lg"
                     decoding="async"
+                    onError={() => handleImageError(sanitizeImg(slide.image3))}
                   />
                 </div>
 
                 {/* Main Gadget 4 (Bottom-Right) */}
                 <div className="absolute right-4 sm:right-6 bottom-4 sm:bottom-6 w-24 sm:w-36 h-24 sm:h-36 z-20 drop-shadow-lg hover:scale-105 transition-transform">
                   <img
-                    src={slide.image4 || 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80'}
+                    src={sanitizeImg(slide.image4) || 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 4"
                     className="w-full h-full object-contain filter drop-shadow-md"
                     decoding="async"
+                    onError={() => handleImageError(sanitizeImg(slide.image4))}
                   />
                 </div>
 

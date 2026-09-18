@@ -54,11 +54,13 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
   const [editingBanner, setEditingBanner] = useState<HeroBanner | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [bannerMode, setBannerMode] = useState<'single' | 'collage'>('single');
 
   // Save all banners array back to settings
   const saveBanners = async (updatedBanners: HeroBanner[], newSpeed?: number) => {
     try {
+      setIsSaving(true);
       const speedToSave = newSpeed !== undefined ? newSpeed : slideSpeed;
       const newSettings: Partial<StoreSettings> = {
         ...settings,
@@ -70,6 +72,8 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       showToast('ব্যানার সফলভাবে আপডেট হয়েছে! (Banners updated successfully)', 'success');
     } catch (err: any) {
       showToast('ব্যানার সংরক্ষণ করতে সমস্যা হয়েছে: ' + err.message, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -120,7 +124,7 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       cta: 'Shop Now',
       ctaLink: '#products-catalog-section',
       active: true,
-      display_order: banners.length + 1,
+      display_order: 1,
     };
     setEditingBanner(newBanner);
     setBannerMode('single');
@@ -145,7 +149,7 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       image4: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80',
       bgGradient: 'from-[#e0f2fe] via-[#e8f4fc] to-[#f0f7fd]',
       active: true,
-      display_order: banners.length + 1,
+      display_order: 1,
     };
     setEditingBanner(newBanner);
     setBannerMode('collage');
@@ -200,7 +204,10 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
     if (exists) {
       updated = banners.map((b) => (b.id === editingBanner.id ? editingBanner : b));
     } else {
-      updated = [...banners, editingBanner];
+      // Put newly created banner at the beginning so it is immediately visible as the primary banner on customer site
+      const adjusted = banners.map((b, i) => ({ ...b, display_order: i + 2 }));
+      const newFirst = { ...editingBanner, display_order: 1 };
+      updated = [newFirst, ...adjusted];
     }
 
     await saveBanners(updated);
@@ -227,6 +234,10 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
       if (!uploadedUrl) {
         // Fallback: WebP compression
         uploadedUrl = await compressAndReadImage(file, 1600, 800, 0.80);
+      }
+
+      if (uploadedUrl && uploadedUrl.includes('localhost:3000')) {
+        uploadedUrl = uploadedUrl.replace(/^https?:\/\/localhost:3000/i, '');
       }
 
       setEditingBanner((prev) => (prev ? { ...prev, [field]: uploadedUrl } : prev));
@@ -967,10 +978,15 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={isUploading}
+                  disabled={isUploading || isSaving}
                   className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isUploading ? (
+                  {isSaving ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>সংরক্ষণ হচ্ছে...</span>
+                    </span>
+                  ) : isUploading ? (
                     <span>আপলোড হচ্ছে...</span>
                   ) : (
                     <>

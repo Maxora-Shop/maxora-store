@@ -550,7 +550,10 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
 
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'maxora-store-ruby.vercel.app';
     const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
-    const publicUrl = `${proto === 'http' && host.includes('vercel.app') ? 'https' : proto}://${host}/api/product-image/${imageId}`;
+    const isLocalhost = String(host).includes('localhost') || String(host).includes('127.0.0.1');
+    const publicUrl = isLocalhost
+      ? `/api/product-image/${imageId}`
+      : `${proto === 'http' && host.includes('vercel.app') ? 'https' : proto}://${host}/api/product-image/${imageId}`;
 
     res.json({
       success: true,
@@ -1759,13 +1762,24 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
 });
 
 // PUT /api/admin/settings
-app.put('/api/admin/settings', requireAdmin, (req, res) => {
+app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   const body = req.body;
   db.settings = {
     ...db.settings,
     ...body
   };
   saveDB();
+
+  // Mirror to Firestore in background
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      await setDoc(doc(firestoreDb, 'settings', 'store_settings'), cleanForFirestore(db.settings), { merge: true });
+    } catch (fsErr) {
+      console.warn('Firestore settings mirror warning:', fsErr);
+    }
+  }
+
   res.json({
     success: true,
     message: "Settings saved successfully.",
@@ -2105,6 +2119,21 @@ async function syncFirestoreProducts() {
     }
   } catch (err) {
     handleFirestoreError('Sync products from Firestore', err);
+  }
+}
+
+async function syncFirestoreSettings() {
+  if (isFirestoreQuotaCooldownActive()) return;
+  try {
+    const firestoreDb = getFirestoreInstance();
+    const snap = await getDoc(doc(firestoreDb, 'settings', 'store_settings'));
+    if (snap.exists()) {
+      const freshSettings = snap.data();
+      db.settings = { ...db.settings, ...freshSettings };
+      saveDB();
+    }
+  } catch (err) {
+    handleFirestoreError('Sync settings from Firestore', err);
   }
 }
 
@@ -2557,7 +2586,7 @@ Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
 // VITE / STATIC INTEGRATION
 // ==========================================
 async function startServer() {
-  await syncFirestoreProducts();
+  await Promise.allSettled([syncFirestoreProducts(), syncFirestoreSettings()]);
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

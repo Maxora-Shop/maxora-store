@@ -516,6 +516,12 @@ export default function App() {
 
   const fetchSettings = async () => {
     try {
+      // 1. Immediately apply cached settings for zero-latency instant response
+      const cached = storeService.getCachedSettings();
+      if (cached) {
+        setSettings(cached);
+      }
+      // 2. Query Firestore / authoritative server for latest settings
       const data = await storeService.getSettings();
       setSettings(data);
     } catch (err) {

@@ -226,7 +226,11 @@ export async function uploadProductImageToStorage(
       if (contentType.includes('application/json')) {
         const json = await resp.json();
         if (json.success && json.url && typeof json.url === 'string') {
-          return json.url;
+          let cleanUrl = json.url;
+          if (cleanUrl.includes('localhost:3000')) {
+            cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
+          }
+          return cleanUrl;
         }
       }
     }
@@ -245,6 +249,7 @@ export async function uploadProductImageToStorage(
         data_url: dataUrl,
         created_at: new Date().toISOString(),
       });
+      return `/api/product-image/${imageId}`;
     }
   } catch (fsErr) {
     console.warn('Direct Firestore uploaded_images save note:', fsErr);
@@ -321,7 +326,11 @@ export async function uploadCategoryImageToStorage(
       if (contentType.includes('application/json')) {
         const json = await resp.json();
         if (json.success && json.url && typeof json.url === 'string') {
-          return json.url;
+          let cleanUrl = json.url;
+          if (cleanUrl.includes('localhost:3000')) {
+            cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
+          }
+          return cleanUrl;
         }
       }
     }
