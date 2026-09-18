@@ -321,17 +321,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Guarantees image displays instantly on screen with zero infinite spinning
       const instantDataUrl = await compressAndReadImage(file);
       setEditingProduct((prev) => (prev ? { ...prev, id: prev.id || prodId, image_url: instantDataUrl } : prev));
-      setIsUploadingImage(false);
-      showToast('ছবি সফলভাবে যুক্ত হয়েছে!', 'success');
+      showToast('ছবি প্রক্রিয়াধীন...', 'info');
 
-      // Step 2: Background upload attempt to Storage / Server
+      // Step 2: Upload to Cloudinary via server endpoint
       try {
         const httpsUrl = await uploadProductImageToStorage(file, prodId, { isGallery: false });
         if (httpsUrl && httpsUrl !== instantDataUrl) {
           setEditingProduct((prev) => (prev ? { ...prev, image_url: httpsUrl } : prev));
+          showToast('ছবি সফলভাবে ক্লাউডে সংরক্ষিত হয়েছে!', 'success');
+        } else {
+          showToast('ছবি সফলভাবে যুক্ত হয়েছে!', 'success');
         }
       } catch (bgErr) {
         console.warn('Background image upload note:', bgErr);
+      } finally {
+        setIsUploadingImage(false);
       }
     } catch (err: any) {
       showToast(err.message || 'Image upload failed', 'error');

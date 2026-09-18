@@ -178,36 +178,10 @@ export async function uploadProductImageToStorage(
   const cleanFileName = `${timestamp}-${filePrefix}.${extension}`;
   const storagePath = `products/${cleanId}/${cleanFileName}`;
 
-  // Step 2: Attempt Firebase Storage upload with a strict 2.5 second race timeout
-  // Avoids Firebase Storage JS SDK retrying for 2 minutes when bucket 404s or has CORS issues
-  if (storage) {
-    try {
-      const storageRef = ref(storage, storagePath);
-      const uploadPromise = (async () => {
-        const snapshot = await uploadBytes(storageRef, blob, {
-          contentType: mimeType,
-          cacheControl: 'public, max-age=31536000, s-maxage=31536000',
-        });
-        return await getDownloadURL(snapshot.ref);
-      })();
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage timeout')), 2500)
-      );
-
-      const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
-      if (downloadUrl && (downloadUrl.startsWith('https://') || downloadUrl.startsWith('http://'))) {
-        return downloadUrl.replace(/^http:\/\//i, 'https://');
-      }
-    } catch (storageErr: any) {
-      console.warn('Direct Firebase Storage upload bypassed/timed out:', storageErr?.message || storageErr?.code);
-    }
-  }
-
-  // Step 3: Server Fallback Upload (/api/upload-image) with a strict 2.5 second timeout
+  // Step 2: Primary Secure Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
   try {
     const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 2500);
+    const abortTimeout = setTimeout(() => controller.abort(), 12000);
 
     const resp = await fetch('/api/upload-image', {
       method: 'POST',
@@ -235,7 +209,32 @@ export async function uploadProductImageToStorage(
       }
     }
   } catch (serverErr) {
-    console.warn('Server fallback upload error:', serverErr);
+    console.warn('Server upload error, evaluating fallbacks:', serverErr);
+  }
+
+  // Step 3: Optional Firebase Storage attempt (if configured)
+  if (storage) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      const uploadPromise = (async () => {
+        const snapshot = await uploadBytes(storageRef, blob, {
+          contentType: mimeType,
+          cacheControl: 'public, max-age=31536000, s-maxage=31536000',
+        });
+        return await getDownloadURL(snapshot.ref);
+      })();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Firebase Storage timeout')), 2500)
+      );
+
+      const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      if (downloadUrl && (downloadUrl.startsWith('https://') || downloadUrl.startsWith('http://'))) {
+        return downloadUrl.replace(/^http:\/\//i, 'https://');
+      }
+    } catch (storageErr: any) {
+      console.warn('Firebase Storage upload bypassed/timed out:', storageErr?.message || storageErr?.code);
+    }
   }
 
   // Step 4: Write image record directly to Firestore uploaded_images collection (if db available)
@@ -259,6 +258,7 @@ export async function uploadProductImageToStorage(
   if (dataUrl && dataUrl.startsWith('data:image/')) {
     return dataUrl;
   }
+
 
   return dataUrl;
 }

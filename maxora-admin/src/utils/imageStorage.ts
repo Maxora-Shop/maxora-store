@@ -178,8 +178,50 @@ export async function uploadProductImageToStorage(
   const cleanFileName = `${timestamp}-${filePrefix}.${extension}`;
   const storagePath = `products/${cleanId}/${cleanFileName}`;
 
-  // Step 2: Attempt Firebase Storage upload with a strict 2.5 second race timeout
-  // Avoids Firebase Storage JS SDK retrying for 2 minutes when bucket 404s or has CORS issues
+  // Step 2: Primary Secure Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
+  try {
+    const controller = new AbortController();
+    const abortTimeout = setTimeout(() => controller.abort(), 12000);
+
+    const apiUrl = (import.meta as any)?.env?.VITE_API_URL;
+    const endpoints = [
+      '/api/upload-image',
+      apiUrl ? `${String(apiUrl).replace(/\/+$/, '')}/api/upload-image` : 'https://maxora-store-ruby.vercel.app/api/upload-image',
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            data_url: dataUrl,
+            filename: cleanFileName,
+            product_id: cleanId,
+          }),
+        });
+
+        if (resp.ok) {
+          const contentType = resp.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const json = await resp.json();
+            if (json.success && json.url && typeof json.url === 'string') {
+              clearTimeout(abortTimeout);
+              return json.url;
+            }
+          }
+        }
+      } catch (endpointErr) {
+        // try next endpoint
+      }
+    }
+    clearTimeout(abortTimeout);
+  } catch (serverErr) {
+    console.warn('Server upload error, evaluating fallbacks:', serverErr);
+  }
+
+  // Step 3: Optional Firebase Storage attempt (if configured)
   if (storage) {
     try {
       const storageRef = ref(storage, storagePath);
@@ -204,36 +246,6 @@ export async function uploadProductImageToStorage(
     }
   }
 
-  // Step 3: Server Fallback Upload (/api/upload-image) with a strict 2.5 second timeout
-  try {
-    const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 2500);
-
-    const resp = await fetch('/api/upload-image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        data_url: dataUrl,
-        filename: cleanFileName,
-        product_id: cleanId,
-      }),
-    });
-    clearTimeout(abortTimeout);
-
-    if (resp.ok) {
-      const contentType = resp.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await resp.json();
-        if (json.success && json.url && typeof json.url === 'string') {
-          return json.url;
-        }
-      }
-    }
-  } catch (serverErr) {
-    console.warn('Server fallback upload error:', serverErr);
-  }
-
   // Step 4: Write image record directly to Firestore uploaded_images collection (if db available)
   try {
     if (db) {
@@ -245,6 +257,7 @@ export async function uploadProductImageToStorage(
         data_url: dataUrl,
         created_at: new Date().toISOString(),
       });
+      return `/api/product-image/${imageId}`;
     }
   } catch (fsErr) {
     console.warn('Direct Firestore uploaded_images save note:', fsErr);
@@ -254,6 +267,7 @@ export async function uploadProductImageToStorage(
   if (dataUrl && dataUrl.startsWith('data:image/')) {
     return dataUrl;
   }
+
 
   return dataUrl;
 }

@@ -454,38 +454,9 @@ export function initRealtimeFirestoreListeners() {
     }, (err) => handleStoreFirestoreError('Settings snapshot', err));
     activeFirestoreUnsubscribers.push(unsubSettings);
 
-    // 3. Listen for orders changes (realtime cloud sync)
-    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-      const deletedIds = getDeletedOrderIds();
-      const orders: Order[] = [];
-      snapshot.forEach((docSnap) => {
-        const o = docSnap.data() as Order;
-        const oId = String(o.id || docSnap.id);
-        const oNum = String(o.order_number || '');
-        if (deletedIds.has(oId) || (oNum && deletedIds.has(oNum))) {
-          return;
-        }
-        if (['ord-001', 'ord-002', 'ord-003'].includes(oId) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
-          return;
-        }
-        orders.push({
-          ...o,
-          id: oId,
-          order_number: oNum || `MX-${oId.slice(-6)}`,
-          phone: o.phone || (o as any).customer_phone || '',
-          customer_phone: o.phone || (o as any).customer_phone || '',
-          total: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
-          total_amount: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
-          status: (o.status || (o as any).order_status || 'Pending') as OrderStatus,
-          items: Array.isArray(o.items) ? o.items : [],
-          created_at: o.created_at || new Date().toISOString(),
-        });
-      });
-      orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setLocal(ORDERS_KEY, orders);
-      notifyOrdersChanged();
-    }, (err) => handleStoreFirestoreError('Orders snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubOrders);
+    // Note: Global orders collection onSnapshot removed from customer storefront
+    // for data privacy (preventing public download of customer orders) and Firestore read quota conservation.
+    // Order creation (createOrder) and on-demand customer order tracking (trackOrder) remain fully functional.
 
     // 4. Listen for categories changes
     const unsubCats = onSnapshot(collection(db, 'categories'), (snapshot) => {

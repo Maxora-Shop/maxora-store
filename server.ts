@@ -2,6 +2,7 @@ import express from 'express';
 import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
@@ -517,6 +518,67 @@ app.get('/api/product-image/:id', async (req, res) => {
   return res.status(404).type('text/plain').send('Unsupported image format');
 });
 
+// Secure server-side Cloudinary upload helper
+async function uploadToCloudinary(
+  dataUrl: string,
+  productId: string
+): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return {
+      success: false,
+      error: 'Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)',
+    };
+  }
+
+  const cleanProdId = (productId || 'product').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const uniqueSuffix = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+  const publicId = `${cleanProdId}_${uniqueSuffix}`;
+  const folder = 'products';
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+
+  // Cloudinary signature parameters sorted alphabetically: folder, overwrite, public_id, timestamp
+  const paramsToSign = `folder=${folder}&overwrite=false&public_id=${publicId}&timestamp=${timestamp}`;
+  const signature = crypto
+    .createHash('sha1')
+    .update(paramsToSign + apiSecret)
+    .digest('hex');
+
+  const payload = {
+    file: dataUrl,
+    api_key: apiKey,
+    timestamp,
+    public_id: publicId,
+    folder,
+    overwrite: false,
+    signature,
+  };
+
+  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.secure_url) {
+    const errMsg = result.error?.message || `Cloudinary upload failed (status ${response.status})`;
+    return { success: false, error: errMsg };
+  }
+
+  return {
+    success: true,
+    url: result.secure_url,
+    public_id: result.public_id,
+  };
+}
+
 // POST /api/upload-image (Server-assisted image upload endpoint)
 app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) => {
   try {
@@ -525,6 +587,26 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
       return res.status(400).json({ success: false, error: 'data_url is required' });
     }
 
+    if (!data_url.startsWith('data:image/')) {
+      return res.status(400).json({ success: false, error: 'Invalid image format. Must be a valid data:image URL.' });
+    }
+
+    // Step 1: Secure Cloudinary Upload (Zero Firestore storage, permanent CDN URL)
+    const cloudResult = await uploadToCloudinary(data_url, product_id);
+    if (cloudResult.success && cloudResult.url) {
+      return res.json({
+        success: true,
+        url: cloudResult.url,
+        id: cloudResult.public_id,
+        provider: 'cloudinary',
+      });
+    }
+
+    if (cloudResult.error) {
+      console.warn('Cloudinary upload warning:', cloudResult.error);
+    }
+
+    // Step 2: Fallback to existing mechanism if Cloudinary is not configured yet
     const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
     const cleanProdId = (product_id || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const imagePayload = {
