@@ -201,7 +201,9 @@ export async function uploadProductImageToStorage(
         const json = await resp.json();
         if (json.success && json.url && typeof json.url === 'string') {
           let cleanUrl = json.url;
-          if (cleanUrl.includes('localhost:3000')) {
+          if (cleanUrl.includes('/api/product-image/')) {
+            cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
+          } else if (cleanUrl.includes('localhost:3000')) {
             cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
           }
           return cleanUrl;
@@ -327,7 +329,9 @@ export async function uploadCategoryImageToStorage(
         const json = await resp.json();
         if (json.success && json.url && typeof json.url === 'string') {
           let cleanUrl = json.url;
-          if (cleanUrl.includes('localhost:3000')) {
+          if (cleanUrl.includes('/api/product-image/')) {
+            cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
+          } else if (cleanUrl.includes('localhost:3000')) {
             cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
           }
           return cleanUrl;

@@ -609,7 +609,7 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
   try {
     const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(fullUrl, {
       ...options,
@@ -798,8 +798,20 @@ export const storeService = {
 
   async getSettings(): Promise<StoreSettings> {
     let current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+
+    // 1. Authoritative Backend REST API query
+    try {
+      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
+      if (apiResult.success && apiResult.data?.settings) {
+        const merged = { ...current, ...apiResult.data.settings };
+        setLocal(SETTINGS_KEY, merged);
+        return merged;
+      }
+    } catch (apiErr) {
+      console.warn('API getSettings error:', apiErr);
+    }
     
-    // 1. If quota is healthy, query Firestore directly as single source of truth
+    // 2. Query Firestore if quota is healthy
     if (!isClientQuotaCooldownActive()) {
       try {
         const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
@@ -814,16 +826,6 @@ export const storeService = {
       }
     }
 
-    // 2. Fallback to API if Firestore is unavailable
-    try {
-      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-      if (apiResult.success && apiResult.data?.settings) {
-        const merged = { ...current, ...apiResult.data.settings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
-      }
-    } catch {}
-
     return current;
   },
 
@@ -831,7 +833,7 @@ export const storeService = {
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     let updated = { ...current, ...newSettings };
 
-    // Offload any heavy base64 images from hero_banners into individual uploaded_images documents in Firestore
+    // Offload any heavy base64 images from hero_banners into /api/upload-image on the backend server
     // This strictly prevents the 1MB Firestore document size limit and guarantees clean, fast loading.
     if (updated.hero_banners && Array.isArray(updated.hero_banners)) {
       try {
@@ -849,24 +851,34 @@ export const storeService = {
             for (const field of fields) {
               let val = b[field];
               if (typeof val === 'string') {
-                // Strip invalid internal localhost URLs
-                if (val.includes('localhost:3000')) {
+                if (val.includes('/api/product-image/')) {
+                  val = val.substring(val.indexOf('/api/product-image/'));
+                  (b as any)[field] = val;
+                } else if (val.includes('localhost:3000')) {
                   val = val.replace(/^https?:\/\/localhost:3000/i, '');
                   (b as any)[field] = val;
                 }
-                // If it's a data URL, store in uploaded_images collection
+                // If it's a data URL, store via server image upload API
                 if (val.startsWith('data:image/')) {
-                  const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
                   try {
-                    await setDoc(doc(db, 'uploaded_images', imageId), {
-                      id: imageId,
-                      data_url: val,
-                      filename: `banner-${field}.webp`,
-                      created_at: new Date().toISOString(),
+                    const uploadRes = await tryApi<{ success: boolean; url: string; id: string }>('/api/upload-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        data_url: val,
+                        filename: `banner-${field}.webp`,
+                        product_id: 'hero-banner',
+                      }),
                     });
-                    (b as any)[field] = `/api/product-image/${imageId}`;
+                    if (uploadRes.success && uploadRes.data?.url) {
+                      let cleanUrl = uploadRes.data.url;
+                      if (cleanUrl.includes('/api/product-image/')) {
+                        cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
+                      }
+                      (b as any)[field] = cleanUrl;
+                    }
                   } catch (imgErr) {
-                    console.warn('Could not offload banner image to uploaded_images collection:', imgErr);
+                    console.warn('Could not offload banner image to backend server:', imgErr);
                   }
                 }
               }
@@ -880,26 +892,27 @@ export const storeService = {
       }
     }
 
-    setLocal(SETTINGS_KEY, updated);
-
-    // 1. Persist to Firestore FIRST and await it as the single source of truth
-    if (!isClientQuotaCooldownActive()) {
-      try {
-        await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
-      } catch (e) {
-        handleStoreFirestoreError('Firestore updateSettings mirror', e);
-      }
-    }
-
-    // 2. Persist to Authoritative Server REST API
+    // 1. Persist to Authoritative Server REST API FIRST
     try {
-      await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
+      const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(updated),
       });
+      if (apiRes.success && apiRes.data?.settings) {
+        updated = { ...updated, ...apiRes.data.settings };
+      }
     } catch (e) {
       console.warn('API updateSettings notice:', e);
+    }
+
+    setLocal(SETTINGS_KEY, updated);
+
+    // 2. Mirror to Firestore in background without blocking UI
+    if (!isClientQuotaCooldownActive()) {
+      setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
+        handleStoreFirestoreError('Firestore updateSettings mirror', e);
+      });
     }
 
     notifySettingsChanged();
@@ -920,13 +933,45 @@ export const storeService = {
   ): Promise<Product[]> {
     const deletedProductIds = getDeletedProductIds();
     let prods = getLocal<Product[]>(PRODUCTS_KEY, []);
+    let freshProds: Product[] | null = null;
 
-    // 1. If local cache is empty and quota is healthy, load directly from Firestore (single source of truth)
-    if (prods.length === 0 && !isClientQuotaCooldownActive()) {
+    // 1. Authoritative Backend REST API query first (always gets the latest products from server DB)
+    try {
+      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
+      if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
+        const apiProds: Product[] = [];
+        apiRes.data.products.forEach((item) => {
+          const pId = String(item.id);
+          const pSku = String(item.sku || '');
+          const pSlug = String(item.slug || '');
+          const pName = String(item.name || '').trim();
+          if (!pName) return;
+          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
+            return;
+          }
+          apiProds.push({
+            ...item,
+            id: pId,
+            selling_price: Number(item.selling_price || 0),
+            discount: Number(item.discount || 0),
+            stock: Number(item.stock !== undefined ? item.stock : 0),
+            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
+          });
+        });
+        if (apiProds.length > 0) {
+          freshProds = apiProds;
+        }
+      }
+    } catch (e) {
+      console.warn('API getProducts error:', e);
+    }
+
+    // 2. Fallback to Firestore if API didn't return products and quota is healthy
+    if (!freshProds && !isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
-          const freshProds: Product[] = [];
+          const fsProds: Product[] = [];
           snap.forEach((d) => {
             const item = d.data() as Product;
             const pId = String(item.id || d.id);
@@ -937,7 +982,7 @@ export const storeService = {
             if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
               return;
             }
-            freshProds.push({
+            fsProds.push({
               ...item,
               id: pId,
               selling_price: Number(item.selling_price || 0),
@@ -946,10 +991,8 @@ export const storeService = {
               images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
             });
           });
-          freshProds.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          if (freshProds.length > 0) {
-            prods = freshProds;
-            setLocal(PRODUCTS_KEY, prods);
+          if (fsProds.length > 0) {
+            freshProds = fsProds;
           }
         }
       } catch (e) {
@@ -957,40 +1000,12 @@ export const storeService = {
       }
     }
 
-    // 2. If still empty, try fallback REST API
-    if (prods.length === 0) {
-      try {
-        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
-        if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
-          const apiProds: Product[] = [];
-          apiRes.data.products.forEach((item) => {
-            const pId = String(item.id);
-            const pSku = String(item.sku || '');
-            const pSlug = String(item.slug || '');
-            const pName = String(item.name || '').trim();
-            if (!pName) return;
-            if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-              return;
-            }
-            apiProds.push({
-              ...item,
-              id: pId,
-              selling_price: Number(item.selling_price || 0),
-              discount: Number(item.discount || 0),
-              stock: Number(item.stock !== undefined ? item.stock : 0),
-              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
-            });
-          });
-          if (apiProds.length > 0) {
-            prods = apiProds;
-            setLocal(PRODUCTS_KEY, prods);
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 3. Fallback to default catalog if completely empty
-    if (prods.length === 0) {
+    // 3. Update local cache with authoritative list
+    if (freshProds && freshProds.length > 0) {
+      freshProds.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      prods = freshProds;
+      setLocal(PRODUCTS_KEY, prods);
+    } else if (prods.length === 0) {
       const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       prods = cached.filter(
         (p) =>
@@ -1000,6 +1015,14 @@ export const storeService = {
           !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
       );
       setLocal(PRODUCTS_KEY, prods);
+    } else {
+      prods = prods.filter(
+        (p) =>
+          !deletedProductIds.has(String(p.id)) &&
+          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
+          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
+          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
+      );
     }
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);

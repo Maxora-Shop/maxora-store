@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
-import { Product, StoreSettings, AiFaqItem } from '../types';
+import type { Product, StoreSettings, AiFaqItem } from '../types';
 
 export interface AiChatRequest {
   message: string;
@@ -488,6 +488,41 @@ function matchLocalIntent(
     };
   }
 
+  // 14. Low Price / Budget Inquiries ("kom damer kichu product dekhaw", "budget", "sosta")
+  const isLowPrice = /(kom\s*dam|kom\s*damer|kom\s*dame|sosta|shosta|budget|cheap|cheapest|low\s*price|lowest\s*price|kom\s*taka|কম\s*দাম|কম\s*দামের|কম\s*দামে|বাজেট|সস্তা|স্বল্প\s*মূল্য)/i.test(
+    q
+  );
+  if (isLowPrice && Array.isArray(req.candidateProducts) && req.candidateProducts.length > 0) {
+    const budgetCandidates = [...req.candidateProducts]
+      .sort((a, b) => {
+        const netA = Math.max(0, Number(a.selling_price || 0) - Number(a.discount || 0));
+        const netB = Math.max(0, Number(b.selling_price || 0) - Number(b.discount || 0));
+        return netA - netB;
+      })
+      .slice(0, 3);
+
+    const listText = budgetCandidates
+      .map((p, i) => {
+        const net = Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0));
+        return `${i + 1}. **${p.name}** — বর্তমান অফার মূল্য: **৳${net.toLocaleString('en-BD')}**`;
+      })
+      .join('\n');
+
+    let reply = `জি স্যার! আমাদের স্টোরের সবচেয়ে সাশ্রয়ী ও আকর্ষণীয় মূল্যের বাজেট-ফ্রেন্ডলি পণ্যসমূহ নিচে দেওয়া হলো:\n\n${listText}\n\nপছন্দের পণ্যটি সরাসরি অর্ডার করতে নিচের কার্ডের **"Buy Now"** বাটনে ক্লিক করুন (১০০% ক্যাশ অন ডেলিভারি)!`;
+    if (lang === 'en') {
+      reply = `Here are the top budget-friendly, best-value products from our store:\n\n${listText}\n\nClick **"Buy Now"** on any card below to place your order with 100% Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Ji sir! Amader store-er shobcheye shashroyi o budget-friendly product-gulo nicher list-e royeche:\n\n${listText}\n\nOrder korte nicher card-er **"Buy Now"** batone click korun (100% Cash on Delivery)!`;
+    }
+
+    return {
+      reply,
+      recommendedProductIds: budgetCandidates.map((p) => p.id).filter(Boolean),
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
   return null;
 }
 
@@ -619,6 +654,69 @@ function generateSmartFallbackResponse(
     };
   }
 
+  // Low Price / Budget Inquiries ("kom damer kichu product dekhaw", "budget", "sosta")
+  const isLowPrice = /(kom\s*dam|kom\s*damer|kom\s*dame|sosta|shosta|budget|cheap|cheapest|low\s*price|lowest\s*price|kom\s*taka|কম\s*দাম|কম\s*দামের|কম\s*দামে|বাজেট|সস্তা|স্বল্প\s*মূল্য)/i.test(
+    queryLower
+  );
+  if (isLowPrice && allCandidates.length > 0) {
+    const budgetCandidates = [...allCandidates]
+      .sort((a, b) => {
+        const netA = Math.max(0, Number(a.selling_price || 0) - Number(a.discount || 0));
+        const netB = Math.max(0, Number(b.selling_price || 0) - Number(b.discount || 0));
+        return netA - netB;
+      })
+      .slice(0, 3);
+
+    const listText = budgetCandidates
+      .map((p, i) => {
+        const net = Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0));
+        return `${i + 1}. **${p.name}** — বর্তমান অফার মূল্য: **৳${net.toLocaleString('en-BD')}**`;
+      })
+      .join('\n');
+
+    let reply = `জি স্যার! আমাদের স্টোরের সবচেয়ে সাশ্রয়ী ও আকর্ষণীয় মূল্যের বাজেট-ফ্রেন্ডলি পণ্যসমূহ নিচে দেওয়া হলো:\n\n${listText}\n\nপছন্দের পণ্যটি সরাসরি অর্ডার করতে নিচের কার্ডের **"Buy Now"** বাটনে ক্লিক করুন (১০০% ক্যাশ অন ডেলিভারি)!`;
+    if (lang === 'en') {
+      reply = `Here are the top budget-friendly, best-value products from our store:\n\n${listText}\n\nClick **"Buy Now"** on any card below to place your order with 100% Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Ji sir! Amader store-er shobcheye shashroyi o budget-friendly product-gulo nicher list-e royeche:\n\n${listText}\n\nOrder korte nicher card-er **"Buy Now"** batone click korun (100% Cash on Delivery)!`;
+    }
+
+    return {
+      reply,
+      recommendedProductIds: budgetCandidates.map((p) => p.id).filter(Boolean),
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
+  // Show products / browse request ("product dekhaw", "product dekhan", "kichu product", "ki ki ache")
+  const isShowProducts = /(product\s*dekhaw|product\s*dekhan|kichu\s*product|ki\s*ki\s*ache|ki\s*ki\s*product|show\s*product|list|পণ্য\s*দেখান|প্রোডাক্ট\s*দেখাও|কি\s*কি\s*আছে|পণ্য\s*দেখাও)/i.test(
+    queryLower
+  );
+  if (isShowProducts && allCandidates.length > 0) {
+    const topFeatured = allCandidates.slice(0, 3);
+    const listText = topFeatured
+      .map((p, i) => {
+        const net = Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0));
+        return `${i + 1}. **${p.name}** — বর্তমান মূল্য: **৳${net.toLocaleString('en-BD')}**`;
+      })
+      .join('\n');
+
+    let reply = `Maxora-র কিছু সেরা ও আকর্ষণীয় পণ্য নিচে দেওয়া হলো:\n\n${listText}\n\nযেকোনো পণ্য কিনতে সরাসরি নিচের কার্ডের **"Buy Now"** বাটনে ক্লিক করুন (১০০% ক্যাশ অন ডেলিভারি)।`;
+    if (lang === 'en') {
+      reply = `Here are some of our popular products:\n\n${listText}\n\nClick **"Buy Now"** on any product below to order with 100% Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Maxora-r popular kichu products niche royeche:\n\n${listText}\n\nOrder korte shorashori **"Buy Now"** batone click korun!`;
+    }
+
+    return {
+      reply,
+      recommendedProductIds: topFeatured.map((p) => p.id).filter(Boolean),
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
   // If user searched for smartwatch or specific category not in stock
   if (
     queryLower.includes('smartwatch') ||
@@ -643,6 +741,7 @@ function generateSmartFallbackResponse(
     };
   }
 
+  const defaultTop = allCandidates.slice(0, 3);
   let defaultReply = `আমি Maxora AI Shopping Assistant। আমাদের যেকোনো পণ্য, বর্তমান অফার মূল্য, স্টক, ডেলিভারি চার্জ বা অর্ডার নিয়ে যেকোনো প্রশ্ন করতে পারেন—আমি সাথে সাথে তথ্য দেব। সরাসরি কাস্টমার কেয়ারের সাথে কথা বলতে চাইলে নিচে WhatsApp-এ ট্যাপ করুন।`;
   if (lang === 'en') {
     defaultReply = `I am your Maxora AI Shopping Assistant! Feel free to ask about any product details, prices, delivery charges, or ordering steps. For direct assistance, tap WhatsApp below!`;
@@ -652,6 +751,7 @@ function generateSmartFallbackResponse(
 
   return {
     reply: defaultReply,
+    recommendedProductIds: defaultTop.map((p) => p.id).filter(Boolean),
     needsWhatsApp: true,
     whatsappPrefilledText: `হ্যালো Maxora, আমি এই বিষয়ে জানতে চাই: ${userQuery}`,
     source: 'fallback',

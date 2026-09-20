@@ -5,7 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, setLogLevel } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, deleteDoc, setLogLevel } from 'firebase/firestore';
 import { generateDynamicSitemapXml, invalidateSitemapCache } from './src/utils/sitemapGenerator';
 import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
@@ -622,20 +622,19 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
     db.uploaded_images[imageId] = imagePayload;
     saveDB();
 
-    // Save to Firestore
-    try {
-      const firestoreDb = getFirestoreInstance();
-      await setDoc(doc(firestoreDb, 'uploaded_images', imageId), imagePayload);
-    } catch (fsErr) {
-      console.warn('Firestore setDoc uploaded_images warning (cached locally):', fsErr);
+    // Save to Firestore in background without blocking HTTP response
+    if (!isFirestoreQuotaCooldownActive()) {
+      try {
+        const firestoreDb = getFirestoreInstance();
+        setDoc(doc(firestoreDb, 'uploaded_images', imageId), imagePayload).catch((fsErr) => {
+          handleFirestoreError('Firestore upload image mirror', fsErr);
+        });
+      } catch (err) {
+        handleFirestoreError('Firestore upload instance', err);
+      }
     }
 
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'maxora-store-ruby.vercel.app';
-    const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
-    const isLocalhost = String(host).includes('localhost') || String(host).includes('127.0.0.1');
-    const publicUrl = isLocalhost
-      ? `/api/product-image/${imageId}`
-      : `${proto === 'http' && host.includes('vercel.app') ? 'https' : proto}://${host}/api/product-image/${imageId}`;
+    const publicUrl = `/api/product-image/${imageId}`;
 
     res.json({
       success: true,
@@ -1675,14 +1674,32 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
 
 // DELETE /api/admin/products/:id
 app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
-  const productId = req.params.id;
-  db.products = db.products.filter(p => p.id !== productId && p.sku !== productId && p.slug !== productId);
+  const productId = String(req.params.id || '').trim();
+  db.products = db.products.filter(
+    (p) =>
+      String(p.id || '').trim() !== productId &&
+      String(p.sku || '').trim() !== productId &&
+      String(p.slug || '').trim() !== productId
+  );
   saveDB();
   invalidateSitemapCache();
+
   res.json({
     success: true,
     message: "Product deleted successfully."
   });
+
+  // Mirror delete to Firestore in background without blocking response
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      deleteDoc(doc(firestoreDb, 'products', productId)).catch((fsErr) => {
+        handleFirestoreError('Firestore product delete mirror', fsErr);
+      });
+    } catch (err) {
+      handleFirestoreError('Firestore product delete instance', err);
+    }
+  }
 });
 
 // GET /api/admin/orders
@@ -1845,28 +1862,55 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
 
 // PUT /api/admin/settings
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
-  const body = req.body;
+  const body = req.body || {};
+
+  // Safeguard: Automatically offload any raw data:image/ in hero_banners into db.uploaded_images
+  if (body.hero_banners && Array.isArray(body.hero_banners)) {
+    if (!db.uploaded_images) db.uploaded_images = {};
+    body.hero_banners = body.hero_banners.map((b: any) => {
+      if (!b || typeof b !== 'object') return b;
+      const banner = { ...b };
+      const imgFields = ['singleBannerImage', 'mobileBannerImage', 'image1', 'image2', 'image3', 'image4'];
+      for (const field of imgFields) {
+        const val = banner[field];
+        if (typeof val === 'string' && val.startsWith('data:image/')) {
+          const imgId = `img-banner-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+          db.uploaded_images![imgId] = {
+            id: imgId,
+            data_url: val,
+            filename: `banner-${field}.webp`,
+            created_at: new Date().toISOString()
+          };
+          banner[field] = `/api/product-image/${imgId}`;
+        }
+      }
+      return banner;
+    });
+  }
+
   db.settings = {
     ...db.settings,
     ...body
   };
   saveDB();
 
-  // Mirror to Firestore in background
-  if (!isFirestoreQuotaCooldownActive()) {
-    try {
-      const firestoreDb = getFirestoreInstance();
-      await setDoc(doc(firestoreDb, 'settings', 'store_settings'), cleanForFirestore(db.settings), { merge: true });
-    } catch (fsErr) {
-      console.warn('Firestore settings mirror warning:', fsErr);
-    }
-  }
-
   res.json({
     success: true,
     message: "Settings saved successfully.",
     settings: db.settings
   });
+
+  // Mirror to Firestore in background without delaying HTTP response
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      setDoc(doc(firestoreDb, 'settings', 'store_settings'), cleanForFirestore(db.settings), { merge: true }).catch((fsErr) => {
+        handleFirestoreError('Firestore settings mirror', fsErr);
+      });
+    } catch (err) {
+      handleFirestoreError('Firestore settings instance', err);
+    }
+  }
 });
 
 // GET /api/categories

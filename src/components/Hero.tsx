@@ -48,6 +48,13 @@ export const Hero: React.FC<HeroProps> = ({
     if (match) {
       const imgId = match[0];
       try {
+        // If image URL wasn't using relative /api/product-image/, switch to it immediately
+        const relUrl = `/api/product-image/${imgId}`;
+        if (imgSrc !== relUrl && !imgSrc.endsWith(relUrl)) {
+          setResolvedImages((prev) => ({ ...prev, [imgSrc]: relUrl }));
+          return;
+        }
+        // Direct Firestore fallback if available
         const { doc, getDoc } = await import('firebase/firestore');
         const { db } = await import('../firebase');
         const snap = await getDoc(doc(db, 'uploaded_images', imgId));
@@ -55,16 +62,19 @@ export const Hero: React.FC<HeroProps> = ({
           setResolvedImages((prev) => ({ ...prev, [imgSrc]: snap.data().data_url }));
         }
       } catch (err) {
-        console.warn('Fallback banner image fetch from Firestore error:', err);
+        console.warn('Fallback banner image fetch error:', err);
       }
     }
   };
 
   const sanitizeImg = (url?: string) => {
     if (!url) return '';
-    const clean = url.includes('localhost:3000')
-      ? url.replace(/^https?:\/\/localhost:3000/i, '')
-      : url;
+    let clean = url;
+    if (clean.includes('/api/product-image/')) {
+      clean = clean.substring(clean.indexOf('/api/product-image/'));
+    } else if (clean.includes('localhost:3000')) {
+      clean = clean.replace(/^https?:\/\/localhost:3000/i, '');
+    }
     return resolvedImages[clean] || clean;
   };
 

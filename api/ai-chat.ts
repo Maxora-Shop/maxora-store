@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { processAiChatMessage, AiChatRequest } from '../src/server/aiChatCore';
+import { processAiChatMessage } from '../src/server/aiChatCore';
+import type { AiChatRequest } from '../src/server/aiChatCore';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   // Set CORS headers

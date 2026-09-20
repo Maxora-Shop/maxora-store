@@ -236,7 +236,9 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
         uploadedUrl = await compressAndReadImage(file, 1600, 800, 0.80);
       }
 
-      if (uploadedUrl && uploadedUrl.includes('localhost:3000')) {
+      if (uploadedUrl && uploadedUrl.includes('/api/product-image/')) {
+        uploadedUrl = uploadedUrl.substring(uploadedUrl.indexOf('/api/product-image/'));
+      } else if (uploadedUrl && uploadedUrl.includes('localhost:3000')) {
         uploadedUrl = uploadedUrl.replace(/^https?:\/\/localhost:3000/i, '');
       }
 
