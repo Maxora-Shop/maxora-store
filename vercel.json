@@ -15,6 +15,10 @@
       "destination": "/api/product-image?id=$1"
     },
     {
+      "source": "/api/ai/chat",
+      "destination": "/api/ai-chat"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

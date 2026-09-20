@@ -201,7 +201,45 @@ function clientFallbackAnswer(
   const outsideDhaka = settings?.delivery_outside_dhaka ?? 130;
   const lang = detectClientQueryLanguage(query);
 
-  if (q.includes('দাম') || q.includes('price') || q.includes('dam') || q.includes('daam')) {
+  // 1. Greetings & Welcomes
+  const isGreeting = /^(hello|hi|hey|hola|hlo|helo|salam|assalamu\s*alaikum|assalamualaikum|kemon\s*achen|kemon\s*acho|bhai|vai)[\s!.,?]*$/i.test(
+    q
+  );
+  if (isGreeting) {
+    let reply = `হ্যালো! 👋 Maxora-তে আপনাকে স্বাগতম। আমি আপনার শপিং অ্যাসিস্ট্যান্ট। আমাদের যেকোনো পণ্য, দাম, স্টক, ডেলিভারি বা অর্ডার সম্পর্কে প্রশ্ন করতে পারেন। কীভাবে আপনাকে সাহায্য করতে পারি?`;
+    if (lang === 'en') {
+      reply = `Hello! 👋 Welcome to Maxora. I am your AI Shopping Assistant. How can I help you today? Feel free to ask about our products, special prices, stock availability, or delivery process!`;
+    } else if (lang === 'banglish') {
+      reply = `Hello! 👋 Maxora-te apnake shagotom. Ami apnar shopping assistant. Amader jekono product, dam, stock, delivery charge ba order somporke prosno korte paren. Kivabe sahajjo korte pari?`;
+    }
+    return {
+      reply,
+      recommendedProducts: currentProduct ? [currentProduct] : [],
+      needsWhatsApp: false,
+    };
+  }
+
+  // 2. User complains or asks if it's working ("koi kaj tho kore na", "kaj kore na", "not working")
+  const isNotWorking = /(kaj\s*kore\s*na|kaj\s*tho\s*kore\s*na|kaj\s*korche\s*na|not\s*working|not\s*replying|কাজ\s*করে\s*না|কাজ\s*করছে\s*না|কাজ\s*তো\s*করে\s*না)/i.test(
+    q
+  );
+  if (isNotWorking) {
+    let reply = `জি, আমি সক্রিয় আছি এবং সাহায্য করতে প্রস্তুত! 😊 আপনার কি কোনো পণ্য সম্পর্কে জানার আছে, নাকি অর্ডার বা ডেলিভারি নিয়ে তথ্য প্রয়োজন? বিস্তারিত লিখলে আমি সাথে সাথে উত্তর দেব।`;
+    if (lang === 'en') {
+      reply = `I am active and ready to help! 😊 Would you like to know about any product, price, or delivery details? Just let me know what you need.`;
+    } else if (lang === 'banglish') {
+      reply = `Ji, ami active ebong sahajjo korte ready achi! 😊 Apnar kon product somporke jante hobe ba kon bisoye sahajjo lagbe janan, ami sathe sathe answer dichi.`;
+    }
+    return {
+      reply,
+      recommendedProducts: currentProduct ? [currentProduct] : [],
+      needsWhatsApp: true,
+      whatsappPrefilledText: `হ্যালো Maxora, আমি সহায়তা চাই: ${query}`,
+    };
+  }
+
+  // 3. Price inquiry for current product or named product
+  if (q.includes('দাম') || q.includes('price') || q.includes('dam') || q.includes('daam') || q.includes('koto')) {
     if (currentProduct) {
       const price = Math.max(0, Number(currentProduct.selling_price || 0) - Number(currentProduct.discount || 0));
       let reply = `**${currentProduct.name}**-এর বর্তমান অফার মূল্য **৳${price.toLocaleString('en-BD')}**। ক্যাশ অন ডেলিভারিতে অর্ডার করতে "Buy Now" বাটনে ক্লিক করুন।`;
@@ -216,6 +254,37 @@ function clientFallbackAnswer(
         needsWhatsApp: false,
       };
     }
+  }
+
+  // 4. Product Catalog Keyword Matching
+  const searchWords = q.split(/[\s,?!]+/).filter((w) => w.length >= 2);
+  const matchedProducts = allProducts.filter((p) => {
+    const pName = (p.name || '').toLowerCase();
+    const pCat = (p.category || '').toLowerCase();
+    const pBrand = (p.brand || '').toLowerCase();
+    return searchWords.some((w) => pName.includes(w) || pCat.includes(w) || pBrand.includes(w));
+  });
+
+  if (matchedProducts.length > 0 && !q.includes('delivery') && !q.includes('charge')) {
+    const top = matchedProducts.slice(0, 3);
+    const listText = top
+      .map((p, i) => {
+        const net = Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0));
+        return `${i + 1}. **${p.name}** — অফার মূল্য: **৳${net.toLocaleString('en-BD')}** ${Number(p.stock || 0) > 0 ? '(স্টকে আছে ✅)' : '(স্টক শেষ)'}`;
+      })
+      .join('\n');
+
+    let reply = `আপনার অনুসন্ধানের সাথে মিল রেখে আমাদের পণ্যসমূহ নিচে দেওয়া হলো:\n\n${listText}\n\nসরাসরি অর্ডার করতে নিচের কার্ডের **"Buy Now"** বাটনে ক্লিক করুন (১০০% ক্যাশ অন ডেলিভারি)।`;
+    if (lang === 'en') {
+      reply = `Here are the matching products from our store:\n\n${listText}\n\nClick **"Buy Now"** on the card below to place your order with 100% Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Apnar search onujayi amader matching products nicher list-e royeche:\n\n${listText}\n\nShorashori order korte nicher **"Buy Now"** batone click korun!`;
+    }
+    return {
+      reply,
+      recommendedProducts: top,
+      needsWhatsApp: false,
+    };
   }
 
   if (q.includes('ডেলিভারি') || q.includes('delivery') || q.includes('charge') || q.includes('shipping')) {
@@ -342,11 +411,11 @@ function clientFallbackAnswer(
   }
 
   // Default friendly fallback with WhatsApp button
-  let defaultReply = `Maxora-তে আপনাকে স্বাগতম! সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারিতে আসল গ্যাজেট ও লাইফস্টাইল পণ্য ডেলিভারি দেওয়া হয় (ঢাকা সিটি: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। যেকোনো পণ্য কিনতে সরাসরি পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো প্রশ্ন বা তথ্যের জন্য আমাদের WhatsApp সাপোর্ট টিম সদা প্রস্তুত।`;
+  let defaultReply = `আমি Maxora AI Shopping Assistant। পণ্য, মূল্য, অফার, ডেলিভারি চার্জ বা অর্ডার নিয়ে যেকোনো প্রশ্ন করতে পারেন—আমি সাথে সাথে তথ্য দেব। সরাসরি আমাদের টিমের সাথে কথা বলতে নিচে WhatsApp-এ ট্যাপ করতে পারেন।`;
   if (lang === 'en') {
-    defaultReply = `Welcome to Maxora! We offer 100% Cash on Delivery across all 64 districts in Bangladesh (Dhaka: ৳${insideDhaka}, Outside Dhaka: ৳${outsideDhaka}). Feel free to ask about any product or policy, or connect directly with our WhatsApp support!`;
+    defaultReply = `I am your Maxora AI Shopping Assistant! Feel free to ask about any product details, prices, delivery charges, or ordering steps. For direct assistance from our team, tap WhatsApp below!`;
   } else if (lang === 'banglish') {
-    defaultReply = `Maxora-te apnake shagotom! Shara Bangladesh-e 100% Cash on Delivery ebong fast delivery ache (Dhaka: ৳${insideDhaka}, Dhakar baire: ৳${outsideDhaka})। Website-er jekono product, dam ba policy somporke jante chaile prosno korun!`;
+    defaultReply = `Ami Maxora AI Shopping Assistant! Jekono product, dam, offer, delivery charge ba kivabe order korben ta jante prosno korun. Directly kotha bolte nicher WhatsApp batone click korte paren.`;
   }
 
   return {

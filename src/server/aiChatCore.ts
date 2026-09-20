@@ -518,6 +518,43 @@ function generateSmartFallbackResponse(
     }
   }
 
+  // Check if query is a greeting
+  const isGreeting = /^(hello|hi|hey|hola|hlo|helo|salam|assalamu\s*alaikum|assalamualaikum|kemon\s*achen|kemon\s*acho|bhai|vai)[\s!.,?]*$/i.test(
+    userQuery.trim()
+  );
+  if (isGreeting) {
+    let reply = `হ্যালো! 👋 Maxora-তে আপনাকে স্বাগতম। আমি আপনার শপিং অ্যাসিস্ট্যান্ট। আমাদের যেকোনো পণ্য, বর্তমান অফার মূল্য, স্টক, ডেলিভারি চার্জ বা অর্ডার সম্পর্কে জানতে পারেন। কীভাবে আপনাকে সাহায্য করতে পারি?`;
+    if (lang === 'en') {
+      reply = `Hello! 👋 Welcome to Maxora. I am your AI Shopping Assistant. How can I help you today? Feel free to ask about our products, special prices, stock availability, or delivery process!`;
+    } else if (lang === 'banglish') {
+      reply = `Hello! 👋 Maxora-te apnake shagotom. Ami apnar shopping assistant. Amader jekono product, dam, stock, delivery charge ba order somporke prosno korte paren. Kivabe sahajjo korte pari?`;
+    }
+    return {
+      reply,
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
+  // Check if user says it's not working or complains about assistant
+  const isNotWorking = /(kaj\s*kore\s*na|kaj\s*tho\s*kore\s*na|kaj\s*korche\s*na|not\s*working|not\s*replying|কাজ\s*করে\s*না|কাজ\s*করছে\s*না|কাজ\s*তো\s*করে\s*না)/i.test(
+    userQuery
+  );
+  if (isNotWorking) {
+    let reply = `জি, আমি সক্রিয় ও প্রস্তুত আছি! 😊 আপনি কোনো পণ্যের দাম, স্পেসিফিকেশন, ডেলিভারি চার্জ বা কীভাবে অর্ডার করবেন তা জানতে প্রশ্ন করতে পারেন। এছাড়াও সরাসরি আমাদের WhatsApp সাপোর্টে যোগাযোগ করতে নিচের বাটনে ট্যাপ করতে পারেন।`;
+    if (lang === 'en') {
+      reply = `I am active and ready to help! 😊 Feel free to ask about any product price, delivery charges, or ordering steps. You can also connect directly with our WhatsApp support below.`;
+    } else if (lang === 'banglish') {
+      reply = `Ji, ami active ebong sahajjo korte ready achi! 😊 Apni kono product-er dam, delivery charge ba kivabe order korben ta jante paren. Othoba nicher WhatsApp batone tap kore amader sathe kotha bolte paren.`;
+    }
+    return {
+      reply,
+      needsWhatsApp: true,
+      whatsappPrefilledText: `হ্যালো Maxora, আমি সহায়তা চাই: ${userQuery}`,
+      source: 'fallback',
+    };
+  }
+
   // Check custom commands
   const customCommands = (settings.ai_custom_commands || []).filter((c: any) => c.active !== false);
   for (const cmd of customCommands) {
@@ -546,11 +583,71 @@ function generateSmartFallbackResponse(
     };
   }
 
-  let defaultReply = `Maxora-তে আপনাকে স্বাগতম! আমাদের সকল পণ্যে পাচ্ছেন ১০০% ক্যাশ অন ডেলিভারি এবং দ্রুততম হোম ডেলিভারি সুবিধা (ঢাকা: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। আপনার পছন্দের পণ্যটি সহজে অর্ডার করতে পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো অনুসন্ধানে আমাদের প্রতিনিধি সদা প্রস্তুত।`;
+  // Check across all candidate products in the store
+  const allCandidates = req.candidateProducts || [];
+  const queryLower = userQuery.toLowerCase();
+  const searchWords = queryLower.split(/[\s,?!]+/).filter((w) => w.length >= 2);
+
+  const matched = allCandidates.filter((p) => {
+    const name = (p.name || '').toLowerCase();
+    const cat = (p.category || '').toLowerCase();
+    const brand = (p.brand || '').toLowerCase();
+    return searchWords.some((w) => name.includes(w) || cat.includes(w) || brand.includes(w));
+  });
+
+  if (matched.length > 0 && !queryLower.includes('delivery') && !queryLower.includes('charge')) {
+    const top = matched.slice(0, 3);
+    const listText = top
+      .map((p, i) => {
+        const net = Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0));
+        return `${i + 1}. **${p.name}** — বর্তমান মূল্য: **৳${net.toLocaleString('en-BD')}** ${Number(p.stock || 0) > 0 ? '(স্টকে আছে ✅)' : '(স্টক শেষ ⚠️)'}`;
+      })
+      .join('\n');
+
+    let reply = `আপনার অনুসন্ধানের সাথে মিল রেখে আমাদের পণ্যসমূহ নিচে দেওয়া হলো:\n\n${listText}\n\nসরাসরি অর্ডার করতে নিচের কার্ডের **"Buy Now"** বাটনে ক্লিক করুন (১০০% ক্যাশ অন ডেলিভারি)।`;
+    if (lang === 'en') {
+      reply = `Here are the matching products from our store:\n\n${listText}\n\nClick **"Buy Now"** on any product card below to order with 100% Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Apnar search onujayi amader matching products nicher list-e royeche:\n\n${listText}\n\nShorashori order korte nicher **"Buy Now"** batone click korun!`;
+    }
+
+    return {
+      reply,
+      recommendedProductIds: top.map((p) => p.id).filter(Boolean),
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
+  // If user searched for smartwatch or specific category not in stock
+  if (
+    queryLower.includes('smartwatch') ||
+    queryLower.includes('watch') ||
+    queryLower.includes('স্মার্টওয়াচ') ||
+    queryLower.includes('ঘড়ি') ||
+    queryLower.includes('ঘরি')
+  ) {
+    const inStockGadgets = allCandidates.filter((p) => Number(p.stock || 0) > 0).slice(0, 3);
+    let reply = `দুঃখিত, এই মুহূর্তে আমাদের স্টকে সরাসরি 'স্মার্টওয়াচ' নেই। তবে আমাদের কাছে রয়েছে দারুণ কিছু আকর্ষণীয় গ্যাজেট ও ইলেকট্রনিক্স পণ্য (যেমন: TWS Wireless Earbuds, Fast Charging Power Bank ইত্যাদি)।\n\nআপনি চাইলে নিচের জনপ্রিয় গ্যাজেটগুলো দেখতে পারেন এবং ক্যাশ অন ডেলিভারিতে অর্ডার করতে পারেন!`;
+    if (lang === 'en') {
+      reply = `Sorry, we currently do not have smartwatches in stock. However, we have other great gadgets like TWS Wireless Earbuds and Fast Charging Power Banks available for Cash on Delivery!`;
+    } else if (lang === 'banglish') {
+      reply = `Dukhkito, eimuhurte amader stock-e shorashori 'smartwatch' nei. Tobe amader kache darun kichu gadgets ache (jemon: Earbuds, Power Bank)! Apni chaile nicher popular product-gulo dekhte paren.`;
+    }
+
+    return {
+      reply,
+      recommendedProductIds: inStockGadgets.map((p) => p.id).filter(Boolean),
+      needsWhatsApp: false,
+      source: 'catalog',
+    };
+  }
+
+  let defaultReply = `আমি Maxora AI Shopping Assistant। আমাদের যেকোনো পণ্য, বর্তমান অফার মূল্য, স্টক, ডেলিভারি চার্জ বা অর্ডার নিয়ে যেকোনো প্রশ্ন করতে পারেন—আমি সাথে সাথে তথ্য দেব। সরাসরি কাস্টমার কেয়ারের সাথে কথা বলতে চাইলে নিচে WhatsApp-এ ট্যাপ করুন।`;
   if (lang === 'en') {
-    defaultReply = `Welcome to Maxora! We offer 100% Cash on Delivery across all 64 districts in Bangladesh with fast doorstep delivery (Dhaka: ৳${insideDhaka}, Outside Dhaka: ৳${outsideDhaka}). Feel free to ask about any product, price, or ordering details, or tap WhatsApp below for live support!`;
+    defaultReply = `I am your Maxora AI Shopping Assistant! Feel free to ask about any product details, prices, delivery charges, or ordering steps. For direct assistance, tap WhatsApp below!`;
   } else if (lang === 'banglish') {
-    defaultReply = `Maxora-te apnake shagotom! Shara Bangladesh-e 100% Cash on Delivery ebong fast delivery ache (Dhaka: ৳${insideDhaka}, Dhakar baire: ৳${outsideDhaka})। Website-er jekono product, dam, ba order somporke jante chaile prosno korun, amader team apnake sahajjo korbe!`;
+    defaultReply = `Ami Maxora AI Shopping Assistant! Jekono product, dam, offer, delivery charge ba kivabe order korben ta jante prosno korun. Shorashori kotha bolte nicher WhatsApp batone tap korun.`;
   }
 
   return {
@@ -782,29 +879,44 @@ CUSTOMER'S QUERY (Detect language: Banglish, Bangla, English, etc. and reply acc
 
     try {
       response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.35,
-          maxOutputTokens: 2048,
-        },
-      });
-    } catch (primaryErr: any) {
-      console.warn(
-        'Primary model gemini-3.8-flash failed, attempting fallback model gemini-3.1-flash-lite:',
-        primaryErr?.message || primaryErr
-      );
-      // Failover to secondary compliant model
-      response = await ai.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents,
         config: {
           systemInstruction,
           temperature: 0.35,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024,
         },
       });
+    } catch (primaryErr: any) {
+      console.warn(
+        'Primary model gemini-3.1-flash-lite failed, attempting gemini-flash-latest:',
+        primaryErr?.message || primaryErr
+      );
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-flash-latest',
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.35,
+            maxOutputTokens: 1024,
+          },
+        });
+      } catch (secErr: any) {
+        console.warn(
+          'Secondary model gemini-flash-latest failed, attempting gemini-3.8-flash:',
+          secErr?.message || secErr
+        );
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents,
+          config: {
+            systemInstruction,
+            temperature: 0.35,
+            maxOutputTokens: 1024,
+          },
+        });
+      }
     }
 
     const rawText = response.text || '';
