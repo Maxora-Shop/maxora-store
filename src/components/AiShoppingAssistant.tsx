@@ -44,7 +44,7 @@ export const AiShoppingAssistant: React.FC<AiShoppingAssistantProps> = ({
 
   const defaultWelcome =
     settings.ai_welcome_message ||
-    'হ্যালো! 👋 আমি Maxora AI Assistant। পণ্যের দাম, স্পেসিফিকেশন, স্টক, ডেলিভারি বা আপনার পছন্দ অনুযায়ী সেরা পণ্য খুঁজে দিতে আমি সাহায্য করতে পারি। কীভাবে আপনাকে সাহায্য করতে পারি?';
+    'হ্যালো! 👋 আমি Maxora AI Assistant। বাংলা, Banglish বা English—যেকোনো ভাষায় আমাদের ওয়েবসাইট, পণ্যের দাম, স্পেক্স, স্টক, ডেলিভারি বা অর্ডার সম্পর্কে প্রশ্ন করতে পারেন। কীভাবে সাহায্য করতে পারি?';
 
   // Initialize messages with welcome message
   useEffect(() => {
@@ -276,7 +276,7 @@ export const AiShoppingAssistant: React.FC<AiShoppingAssistantProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-400 truncate">
-                    কেনাকাটার স্মার্ট সহায়ক (বাংলা)
+                    স্মার্ট সহকারী (Bangla / Banglish / English)
                   </p>
                 </div>
               </div>
@@ -520,7 +520,7 @@ export const AiShoppingAssistant: React.FC<AiShoppingAssistantProps> = ({
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder="আপনার প্রশ্ন লিখুন (বাংলা বা English)..."
+                placeholder="যেকোনো ভাষায় প্রশ্ন করুন (Bangla, Banglish, English)..."
                 disabled={isLoading}
                 className="flex-1 bg-zinc-100 text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
               />

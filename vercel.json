@@ -27,6 +27,10 @@
       "destination": "/api/render?type=category&slug=$1"
     },
     {
+      "source": "/",
+      "destination": "/api/render?type=home"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

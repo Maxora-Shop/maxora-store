@@ -167,39 +167,80 @@ export async function sendAiChatMessage({
   return clientFallbackAnswer(message, currentProduct, allProducts, settings);
 }
 
+function detectClientQueryLanguage(text: string): 'bn' | 'banglish' | 'en' {
+  const t = text.toLowerCase().trim();
+  if (/[\u0980-\u09FF]/.test(t)) {
+    return 'bn';
+  }
+  const banglishTokens = [
+    'koto', 'dam', 'daam', 'kivabe', 'order', 'korbo', 'korte', 'chai', 'ache', 'ase',
+    'kina', 'apnader', 'bhai', 'vai', 'dhaka', 'baire', 'taka', 'tk', 'pabo', 'advance',
+    'ogrim', 'kothay', 'lagbe', 'hobe', 'eta', 'oita', 'bhalo', 'valo', 'dekhan', 'nibo',
+    'kena', 'dokan', 'showroom', 'thikana', 'somoy', 'din', 'original', 'asol', 'nosto'
+  ];
+  const words = t.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (words.some((w) => ['koto', 'dam', 'kivabe', 'korbo', 'ache', 'ase', 'lagbe', 'pabo', 'nibo', 'taka', 'bhai', 'dokan'].includes(w))) {
+    return 'banglish';
+  }
+  let count = 0;
+  for (const w of words) {
+    if (banglishTokens.includes(w)) count++;
+  }
+  return count >= 1 ? 'banglish' : 'en';
+}
+
 function clientFallbackAnswer(
   query: string,
   currentProduct?: Product | null,
   allProducts: Product[] = [],
   settings?: StoreSettings
 ): SendAiMessageResult {
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
   const insideDhaka = settings?.delivery_inside_dhaka ?? 70;
   const subDhaka = settings?.delivery_sub_dhaka ?? 100;
   const outsideDhaka = settings?.delivery_outside_dhaka ?? 130;
+  const lang = detectClientQueryLanguage(query);
 
-  if (q.includes('দাম') || q.includes('price') || q.includes('dam')) {
+  if (q.includes('দাম') || q.includes('price') || q.includes('dam') || q.includes('daam')) {
     if (currentProduct) {
       const price = Math.max(0, Number(currentProduct.selling_price || 0) - Number(currentProduct.discount || 0));
+      let reply = `**${currentProduct.name}**-এর বর্তমান অফার মূল্য **৳${price.toLocaleString('en-BD')}**। ক্যাশ অন ডেলিভারিতে অর্ডার করতে "Buy Now" বাটনে ক্লিক করুন।`;
+      if (lang === 'en') {
+        reply = `The current offer price for **${currentProduct.name}** is **৳${price.toLocaleString('en-BD')}**. You can order with 100% Cash on Delivery by clicking "Buy Now".`;
+      } else if (lang === 'banglish') {
+        reply = `**${currentProduct.name}**-er offer price **৳${price.toLocaleString('en-BD')}**। Cash on Delivery-te order korte "Buy Now" batone click korun.`;
+      }
       return {
-        reply: `**${currentProduct.name}**-এর বর্তমান অফার মূল্য **৳${price.toLocaleString('en-BD')}**। ক্যাশ অন ডেলিভারিতে অর্ডার করতে "Buy Now" বাটনে ক্লিক করুন।`,
+        reply,
         recommendedProducts: [currentProduct],
         needsWhatsApp: false,
       };
     }
   }
 
-  if (q.includes('ডেলিভারি') || q.includes('delivery') || q.includes('charge')) {
+  if (q.includes('ডেলিভারি') || q.includes('delivery') || q.includes('charge') || q.includes('shipping')) {
+    let reply = `আমাদের ডেলিভারি চার্জ:\n• ঢাকা সিটি: ৳${insideDhaka} (২-৩ দিন)\n• ঢাকা সাব-এরিয়া: ৳${subDhaka} (২-৩ দিন)\n• ঢাকার বাইরে সমগ্র বাংলাদেশ: ৳${outsideDhaka} (৩-৫ দিন)\n\nসমগ্র বাংলাদেশে ক্যাশ অন ডেলিভারি প্রযোজ্য।`;
+    if (lang === 'en') {
+      reply = `Maxora Delivery Charges:\n• Inside Dhaka City: ৳${insideDhaka} (2–3 days)\n• Dhaka Sub-area: ৳${subDhaka} (2–3 days)\n• Outside Dhaka (all 64 districts): ৳${outsideDhaka} (3–5 days)\n\n100% Cash on Delivery nationwide!`;
+    } else if (lang === 'banglish') {
+      reply = `Maxora Delivery Charges:\n• Dhaka City: ৳${insideDhaka} (২-৩ দিন)\n• Dhaka Sub-area: ৳${subDhaka} (২-৩ দিন)\n• Dhakar baire (64 districts): ৳${outsideDhaka} (৩-৫ দিন)\n\nShara Bangladesh-e 100% Cash on Delivery shubidha ache!`;
+    }
     return {
-      reply: `আমাদের ডেলিভারি চার্জ:\n• ঢাকা সিটি: ৳${insideDhaka} (২-৩ দিন)\n• ঢাকা সাব-এরিয়া: ৳${subDhaka} (২-৩ দিন)\n• ঢাকার বাইরে সমগ্র বাংলাদেশ: ৳${outsideDhaka} (৩-৫ দিন)\n\nসমগ্র বাংলাদেশে ক্যাশ অন ডেলিভারি প্রযোজ্য।`,
+      reply,
       recommendedProducts: [],
       needsWhatsApp: false,
     };
   }
 
-  if (q.includes('cash on delivery') || q.includes('ক্যাশ অন ডেলিভারি') || q.includes('cod')) {
+  if (q.includes('cash on delivery') || q.includes('ক্যাশ অন ডেলিভারি') || q.includes('cod') || q.includes('advance') || q.includes('ogrim') || q.includes('অগ্রিম')) {
+    let reply = `হ্যাঁ, Maxora-তে সারা বাংলাদেশে Cash on Delivery (ক্যাশ অন ডেলিভারি) সুবিধা রয়েছে। সাধারণ অর্ডারে কোনো অগ্রিম পেমেন্টের প্রয়োজন নেই। পণ্য হাতে পেয়ে মূল্য পরিশোধ করতে পারবেন।`;
+    if (lang === 'en') {
+      reply = `Yes! Maxora provides 100% Cash on Delivery across all 64 districts in Bangladesh. No advance payment is needed for regular orders. Receive and verify at your doorstep!`;
+    } else if (lang === 'banglish') {
+      reply = `Ji haan! Maxora-te shara Bangladesh-e 100% Cash on Delivery (COD) ache. Kono advance taka lage na, parcel haate peye delivery man-ke taka dite parben.`;
+    }
     return {
-      reply: `হ্যাঁ, Maxora-তে সারা বাংলাদেশে Cash on Delivery (ক্যাশ অন ডেলিভারি) সুবিধা রয়েছে। পণ্য হাতে পেয়ে মূল্য পরিশোধ করতে পারবেন।`,
+      reply,
       recommendedProducts: [],
       needsWhatsApp: false,
     };
@@ -211,13 +252,19 @@ function clientFallbackAnswer(
     q.includes('order') ||
     q.includes('কিনব') ||
     q.includes('কিনতে চাই') ||
-    q.includes('how to buy')
+    q.includes('how to buy') ||
+    q.includes('how to order') ||
+    q.includes('kivabe order') ||
+    q.includes('kinbo kivabe')
   ) {
-    const prodText = currentProduct
-      ? `\n\nআপনি বর্তমানে **${currentProduct.name}** দেখছেন (মূল্য: ৳${Math.max(0, Number(currentProduct.selling_price || 0) - Number(currentProduct.discount || 0)).toLocaleString('en-BD')})। নিচে দেওয়া কার্ডের বা পেজের **"Buy Now"** বাটনে ট্যাপ করুন।`
-      : '';
+    let reply = `Maxora-তে অর্ডার করার নিয়ম খুবই সহজ:\n\n1. পছন্দের পণ্যটির পেজে গিয়ে **"Buy Now"** অথবা **"অর্ডার করুন"** বাটনে ক্লিক করুন।\n2. আপনার নাম, মোবাইল নম্বর ও পূর্ণাঙ্গ ডেলিভারি ঠিকানা লিখুন।\n3. ডেলিভারি এলাকা সিলেক্ট করে **"অর্ডার কনফার্ম করুন"** বাটনে ক্লিক করলেই আপনার অর্ডার সম্পন্ন হয়ে যাবে!\n\nসারা বাংলাদেশে **১০০% ক্যাশ অন ডেলিভারি** রয়েছে।`;
+    if (lang === 'en') {
+      reply = `Ordering on Maxora is fast and simple:\n\n1. Go to any product page and click **"Buy Now"**.\n2. Enter your Name, Mobile Number, and delivery Address.\n3. Choose your delivery zone and click **"Confirm Order"**!\n\nWe provide 100% Cash on Delivery across Bangladesh.`;
+    } else if (lang === 'banglish') {
+      reply = `Maxora-te order kora khub-i shohoj:\n\n1. Product page-e giye **"Buy Now"** batone click korun.\n2. Apnar Name, Mobile Number ebong Address likhun.\n3. Delivery Area select kore **"Confirm Order"** batone click korun!\n\n100% Cash on Delivery-te shara deshe delivery paben.`;
+    }
     return {
-      reply: `Maxora-তে অর্ডার করার নিয়ম খুবই সহজ:\n\n1. পছন্দের পণ্যটির পেজে গিয়ে **"Buy Now"** অথবা **"অর্ডার করুন"** বাটনে ক্লিক করুন।\n2. আপনার নাম, মোবাইল নম্বর ও পূর্ণাঙ্গ ডেলিভারি ঠিকানা লিখুন।\n3. ডেলিভারি এলাকা (ঢাকা সিটি ৳${insideDhaka} / সাব-ঢাকা ৳${subDhaka} / ঢাকার বাইরে ৳${outsideDhaka}) সিলেক্ট করুন।\n4. **"অর্ডার কনফার্ম করুন"** বাটনে ক্লিক করলেই আপনার অর্ডার সম্পন্ন হয়ে যাবে!${prodText}\n\nসারা বাংলাদেশে **১০০% ক্যাশ অন ডেলিভারি** রয়েছে—পণ্য হাতে পেয়ে চেক করে মূল্য পরিশোধ করতে পারবেন।`,
+      reply,
       recommendedProducts: currentProduct ? [currentProduct] : [],
       needsWhatsApp: false,
     };
@@ -229,10 +276,17 @@ function clientFallbackAnswer(
     q.includes('ওয়ারেন্টি') ||
     q.includes('গ্যারান্টি') ||
     q.includes('রিটার্ন') ||
-    q.includes('ফেরত')
+    q.includes('ফেরত') ||
+    q.includes('replacement')
   ) {
+    let reply = `Maxora-তে রয়েছে **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি**। পণ্যে কোনো উৎপাদনগত ত্রুটি থাকলে আমাদের WhatsApp সাপোর্টে জানালে তাৎক্ষণিক সমাধান বা রিপ্লেসমেন্ট দেওয়া হবে।`;
+    if (lang === 'en') {
+      reply = `Maxora provides a **7 Days Easy Replacement Warranty**! If you encounter any manufacturing defect, reach out to our WhatsApp support team for a quick replacement.`;
+    } else if (lang === 'banglish') {
+      reply = `Maxora-te royeche **7 Days Easy Replacement Warranty**! Product-e kono problem thakle 7 diner moddhe amader WhatsApp support-e janale replacement peye jaben.`;
+    }
     return {
-      reply: `Maxora-তে রয়েছে **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি**। পণ্যে কোনো উৎপাদনগত ত্রুটি থাকলে আমাদের WhatsApp সাপোর্টে জানালে তাৎক্ষণিক সমাধান বা রিপ্লেসমেন্ট দেওয়া হবে।`,
+      reply,
       recommendedProducts: [],
       needsWhatsApp: false,
     };
@@ -248,7 +302,8 @@ function clientFallbackAnswer(
     q.includes('পণ্য') ||
     q.includes('প্রোডাক্ট') ||
     q.includes('recommend') ||
-    q.includes('suggest')
+    q.includes('suggest') ||
+    q.includes('bhalo')
   ) {
     const inStock = allProducts.filter((p) => Number(p.stock || 0) > 0);
     const suggested = (inStock.length > 0 ? inStock : allProducts).slice(0, 3);
@@ -287,8 +342,15 @@ function clientFallbackAnswer(
   }
 
   // Default friendly fallback with WhatsApp button
+  let defaultReply = `Maxora-তে আপনাকে স্বাগতম! সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারিতে আসল গ্যাজেট ও লাইফস্টাইল পণ্য ডেলিভারি দেওয়া হয় (ঢাকা সিটি: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। যেকোনো পণ্য কিনতে সরাসরি পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো প্রশ্ন বা তথ্যের জন্য আমাদের WhatsApp সাপোর্ট টিম সদা প্রস্তুত।`;
+  if (lang === 'en') {
+    defaultReply = `Welcome to Maxora! We offer 100% Cash on Delivery across all 64 districts in Bangladesh (Dhaka: ৳${insideDhaka}, Outside Dhaka: ৳${outsideDhaka}). Feel free to ask about any product or policy, or connect directly with our WhatsApp support!`;
+  } else if (lang === 'banglish') {
+    defaultReply = `Maxora-te apnake shagotom! Shara Bangladesh-e 100% Cash on Delivery ebong fast delivery ache (Dhaka: ৳${insideDhaka}, Dhakar baire: ৳${outsideDhaka})। Website-er jekono product, dam ba policy somporke jante chaile prosno korun!`;
+  }
+
   return {
-    reply: `Maxora-তে আপনাকে স্বাগতম! সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারিতে আসল গ্যাজেট ও লাইফস্টাইল পণ্য ডেলিভারি দেওয়া হয় (ঢাকা সিটি: ৳${insideDhaka}, ঢাকার বাইরে: ৳${outsideDhaka})। যেকোনো পণ্য কিনতে সরাসরি পেজের "Buy Now" বাটন ব্যবহার করুন। যেকোনো প্রশ্ন বা তথ্যের জন্য আমাদের WhatsApp সাপোর্ট টিম সদা প্রস্তুত।`,
+    reply: defaultReply,
     recommendedProducts: currentProduct ? [currentProduct] : [],
     needsWhatsApp: true,
     whatsappPrefilledText: `হ্যালো Maxora, আমি এই বিষয়ে জানতে চাই: ${query}`,

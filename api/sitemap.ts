@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, getDocs, collection, setLogLevel } from 'firebase/firestore';
-import { CANONICAL_PRODUCTS, CANONICAL_CATEGORIES, CANONICAL_SUBCATEGORIES } from '../src/data/canonicalCatalog';
 
 try {
   setLogLevel('error');
@@ -95,9 +94,9 @@ function isPublicIndexableCategory(data: any): boolean {
 
 function buildSitemapXml(params: {
   baseUrl: string;
-  products: readonly any[] | any[];
-  categories: readonly any[] | any[];
-  subcategories: readonly any[] | any[];
+  products: any[];
+  categories: any[];
+  subcategories: any[];
 }): string {
   const { baseUrl, products, categories, subcategories } = params;
   const today = new Date().toISOString().split('T')[0];
@@ -182,31 +181,19 @@ ${categoryUrls ? `${categoryUrls}\n` : ''}${subcategoryUrls ? `${subcategoryUrls
 </urlset>`;
 }
 
-// Pre-computed fallback XML guaranteed to be available instantly in memory
-const EMERGENCY_CANONICAL_SITEMAP_XML = buildSitemapXml({
-  baseUrl: BASE_URL,
-  products: CANONICAL_PRODUCTS,
-  categories: CANONICAL_CATEGORIES,
-  subcategories: CANONICAL_SUBCATEGORIES,
-});
-
 // Server-side module cache to protect Firestore quota and deliver instant responses (<10ms)
-let cachedSitemapXml: string = EMERGENCY_CANONICAL_SITEMAP_XML;
+let cachedSitemapXml: string | null = null;
 let lastSuccessfulLiveXml: string | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 let firestoreCooldownUntil = 0;
 
-export function invalidateSitemapCache(): void {
-  cacheTimestamp = 0;
-  firestoreCooldownUntil = 0;
-}
-
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
     const now = Date.now();
     const reqUrl = req.url || '';
-    const isForceRefresh = reqUrl.includes('refresh=1') ||
+    const isForceRefresh =
+      reqUrl.includes('refresh=1') ||
       reqUrl.includes('refresh=true') ||
       req.headers['cache-control'] === 'no-cache' ||
       req.headers['pragma'] === 'no-cache';
@@ -233,13 +220,41 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     const firebaseConfig = {
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || rawConfig.projectId || DEFAULT_FIREBASE_CONFIG.projectId,
-      appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || rawConfig.appId || DEFAULT_FIREBASE_CONFIG.appId,
-      apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || rawConfig.apiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
-      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || rawConfig.authDomain || DEFAULT_FIREBASE_CONFIG.authDomain,
-      firestoreDatabaseId: process.env.VITE_FIRESTORE_DATABASE_ID || process.env.FIRESTORE_DATABASE_ID || rawConfig.firestoreDatabaseId || DEFAULT_FIREBASE_CONFIG.firestoreDatabaseId,
-      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || rawConfig.storageBucket || DEFAULT_FIREBASE_CONFIG.storageBucket,
-      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+      projectId:
+        process.env.VITE_FIREBASE_PROJECT_ID ||
+        process.env.FIREBASE_PROJECT_ID ||
+        rawConfig.projectId ||
+        DEFAULT_FIREBASE_CONFIG.projectId,
+      appId:
+        process.env.VITE_FIREBASE_APP_ID ||
+        process.env.FIREBASE_APP_ID ||
+        rawConfig.appId ||
+        DEFAULT_FIREBASE_CONFIG.appId,
+      apiKey:
+        process.env.VITE_FIREBASE_API_KEY ||
+        process.env.FIREBASE_API_KEY ||
+        rawConfig.apiKey ||
+        DEFAULT_FIREBASE_CONFIG.apiKey,
+      authDomain:
+        process.env.VITE_FIREBASE_AUTH_DOMAIN ||
+        process.env.FIREBASE_AUTH_DOMAIN ||
+        rawConfig.authDomain ||
+        DEFAULT_FIREBASE_CONFIG.authDomain,
+      firestoreDatabaseId:
+        process.env.VITE_FIRESTORE_DATABASE_ID ||
+        process.env.FIRESTORE_DATABASE_ID ||
+        rawConfig.firestoreDatabaseId ||
+        DEFAULT_FIREBASE_CONFIG.firestoreDatabaseId,
+      storageBucket:
+        process.env.VITE_FIREBASE_STORAGE_BUCKET ||
+        process.env.FIREBASE_STORAGE_BUCKET ||
+        rawConfig.storageBucket ||
+        DEFAULT_FIREBASE_CONFIG.storageBucket,
+      messagingSenderId:
+        process.env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
+        process.env.FIREBASE_MESSAGING_SENDER_ID ||
+        rawConfig.messagingSenderId ||
+        DEFAULT_FIREBASE_CONFIG.messagingSenderId,
     };
 
     let liveProducts: any[] = [];
@@ -304,13 +319,33 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       } catch (firestoreError: any) {
         const msg = firestoreError?.message || String(firestoreError);
         console.warn('[Sitemap] Firestore fetch bypassed:', msg);
-        // Quota exhaustion cooldown is 2 minutes; general timeout cooldown is 30 seconds
         const isQuota = msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted');
         firestoreCooldownUntil = Date.now() + (isQuota ? 2 * 60 * 1000 : 30 * 1000);
       }
     }
 
-    // 3. Generate compliant XML string with graceful fallback hierarchy
+    // 3. Fallback to local maxora_db.json if Firestore returned nothing
+    if (liveProducts.length === 0) {
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.products)) {
+            liveProducts = dbData.products.filter(isPublicIndexableProduct);
+          }
+          if (Array.isArray(dbData.categories)) {
+            liveCategories = dbData.categories.filter(isPublicIndexableCategory);
+          }
+          if (Array.isArray(dbData.subcategories)) {
+            liveSubcategories = dbData.subcategories.filter(isPublicIndexableCategory);
+          }
+        }
+      } catch (dbErr) {
+        console.error('[Sitemap] Local maxora_db.json read error:', dbErr);
+      }
+    }
+
+    // 4. Generate compliant XML string
     let sitemapXml: string;
     let sitemapSource: string;
 
@@ -327,35 +362,41 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       sitemapXml = lastSuccessfulLiveXml;
       sitemapSource = 'last-live-fallback';
     } else {
-      liveProducts = (CANONICAL_PRODUCTS as readonly any[]).filter(isPublicIndexableProduct);
-      liveCategories = (CANONICAL_CATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
-      liveSubcategories = (CANONICAL_SUBCATEGORIES as readonly any[]).filter(isPublicIndexableCategory);
       sitemapXml = buildSitemapXml({
         baseUrl: BASE_URL,
         products: liveProducts,
         categories: liveCategories,
         subcategories: liveSubcategories,
       });
-      sitemapSource = 'canonical-catalog';
+      sitemapSource = 'maxora-db-fallback';
     }
 
     // Update in-memory cache
     cachedSitemapXml = sitemapXml;
     cacheTimestamp = Date.now();
 
-    // 4. Send production HTTP 200 response with XML Content-Type and CDN headers
+    // 5. Send production HTTP 200 response with XML Content-Type and CDN headers
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
     res.setHeader('X-Sitemap-Source', sitemapSource);
     res.end(sitemapXml);
   } catch (error) {
-    // 6. Absolute safety guard: NEVER return 500, NEVER return text error, ALWAYS return valid XML 200
-    console.error('[Sitemap] Error intercepted, returning emergency canonical XML:', error);
+    // 6. Absolute safety guard: NEVER return 500, ALWAYS return valid XML 200
+    console.error('[Sitemap] Error intercepted, returning emergency XML:', error);
+    const emergencyXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${BASE_URL}/</loc>
+    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`;
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=60');
     res.setHeader('X-Sitemap-Source', 'emergency-fallback');
-    res.end(EMERGENCY_CANONICAL_SITEMAP_XML);
+    res.end(emergencyXml);
   }
 }

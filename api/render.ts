@@ -570,6 +570,145 @@ ${JSON.stringify(itemListLd, null, 2)}
       return;
     }
 
+    // ==========================================
+    // HOMEPAGE SSR
+    // ==========================================
+    if (type === 'home') {
+      const homeTitle = 'Maxora - Premium Online Store in Bangladesh';
+      const homeDesc = 'Full-featured e-commerce platform in Bangladesh. Shop authentic gadgets, accessories, and home items with Cash on Delivery nationwide.';
+      const canonicalUrl = `${BASE_URL}/`;
+
+      const activeProducts = products.filter(
+        (p) => p.active !== 0 && p.active !== false && String(p.active) !== '0'
+      );
+      const activeCategories = categories.filter(
+        (c) => c.active !== 0 && c.active !== false && String(c.active) !== '0'
+      );
+
+      const websiteSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Maxora Shop Bangladesh',
+        url: BASE_URL,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: `${BASE_URL}/?search={search_term_string}`,
+          'query-input': 'required name=search_term_string',
+        },
+      };
+
+      const orgSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'Maxora Shop Bangladesh',
+        url: BASE_URL,
+        logo: `${BASE_URL}/favicon.ico`,
+      };
+
+      const itemListSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: activeProducts.slice(0, 30).map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          url: `${BASE_URL}/product/${cleanSlug(p.slug || p.name || p.id)}`,
+          name: p.name,
+        })),
+      };
+
+      const seoHeadTags = `
+    <!-- Google Search Console & SEO Homepage Meta Tags -->
+    <title>${escapeHtml(homeTitle)}</title>
+    <meta name="description" content="${escapeHtml(homeDesc)}" />
+    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Maxora Shop" />
+    <meta property="og:title" content="${escapeHtml(homeTitle)}" />
+    <meta property="og:description" content="${escapeHtml(homeDesc)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(homeTitle)}" />
+    <meta name="twitter:description" content="${escapeHtml(homeDesc)}" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+${JSON.stringify(websiteSchema, null, 2)}
+    </script>
+    <script type="application/ld+json">
+${JSON.stringify(orgSchema, null, 2)}
+    </script>
+    <script type="application/ld+json">
+${JSON.stringify(itemListSchema, null, 2)}
+    </script>
+      `;
+
+      const semanticHomeBody = `
+    <main id="ssr-home-container" class="max-w-6xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
+      <header class="mb-8 border-b border-zinc-200 pb-4">
+        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">Maxora Shop Bangladesh</h1>
+        <p class="text-zinc-600 text-sm leading-relaxed">${escapeHtml(homeDesc)}</p>
+      </header>
+
+      <section class="mb-8">
+        <h2 class="text-xl font-bold text-zinc-900 mb-3">Shop by Category</h2>
+        <div class="flex flex-wrap gap-2">
+          ${activeCategories
+            .map((c) => {
+              const catSlug = cleanSlug(c.slug || c.name || c.id);
+              return `<a href="${BASE_URL}/category/${catSlug}" class="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold rounded-lg transition">${escapeHtml(c.name)}</a>`;
+            })
+            .join('')}
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-zinc-900 mb-4">Featured Products</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          ${activeProducts
+            .map((p) => {
+              const pSelling = Number(p.selling_price || 0);
+              const pDisc = Number(p.discount || 0);
+              const pFinal = Math.max(0, pSelling - pDisc);
+              const pSlug = cleanSlug(p.slug || p.name || p.id);
+              const pImg = p.image_url || '';
+              return `
+            <a href="${BASE_URL}/product/${pSlug}" class="group block border border-zinc-200 rounded-xl p-3 bg-white hover:shadow-md transition">
+              <div class="aspect-square w-full mb-3 overflow-hidden rounded-lg bg-zinc-50 flex items-center justify-center">
+                <img src="${escapeHtml(pImg)}" alt="${escapeHtml(p.name)}" class="h-full w-full object-contain group-hover:scale-105 transition" />
+              </div>
+              <h3 class="text-sm font-semibold text-zinc-800 line-clamp-2 mb-1">${escapeHtml(p.name)}</h3>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-emerald-600">৳${pFinal}</span>
+                ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">৳${pSelling}</span>` : ''}
+              </div>
+            </a>
+              `;
+            })
+            .join('')}
+        </div>
+      </section>
+    </main>
+      `;
+
+      let modifiedHtml = templateHtml
+        .replace(/<title>.*?<\/title>/i, '')
+        .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
+        .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
+        .replace(/<head>/i, `<head>${seoHeadTags}`)
+        .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticHomeBody}`);
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+      res.statusCode = 200;
+      res.end(modifiedHtml);
+      return;
+    }
+
     // Default fallback: serve standard template
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.statusCode = 200;
