@@ -179,9 +179,10 @@ export async function uploadProductImageToStorage(
   const storagePath = `products/${cleanId}/${cleanFileName}`;
 
   // Step 2: Primary Secure Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
+  let lastError = 'Image upload failed';
   try {
     const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 12000);
+    const abortTimeout = setTimeout(() => controller.abort(), 25000);
 
     const resp = await fetch('/api/upload-image', {
       method: 'POST',
@@ -195,74 +196,26 @@ export async function uploadProductImageToStorage(
     });
     clearTimeout(abortTimeout);
 
-    if (resp.ok) {
-      const contentType = resp.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await resp.json();
-        if (json.success && json.url && typeof json.url === 'string') {
-          let cleanUrl = json.url;
-          if (cleanUrl.includes('/api/product-image/')) {
-            cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
-          } else if (cleanUrl.includes('localhost:3000')) {
-            cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
-          }
-          return cleanUrl;
-        }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && json.url && typeof json.url === 'string') {
+      let cleanUrl = json.url;
+      if (cleanUrl.includes('localhost:3000')) {
+        cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
       }
+      return cleanUrl;
     }
-  } catch (serverErr) {
-    console.warn('Server upload error, evaluating fallbacks:', serverErr);
-  }
 
-  // Step 3: Optional Firebase Storage attempt (if configured)
-  if (storage) {
-    try {
-      const storageRef = ref(storage, storagePath);
-      const uploadPromise = (async () => {
-        const snapshot = await uploadBytes(storageRef, blob, {
-          contentType: mimeType,
-          cacheControl: 'public, max-age=31536000, s-maxage=31536000',
-        });
-        return await getDownloadURL(snapshot.ref);
-      })();
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage timeout')), 2500)
-      );
-
-      const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
-      if (downloadUrl && (downloadUrl.startsWith('https://') || downloadUrl.startsWith('http://'))) {
-        return downloadUrl.replace(/^http:\/\//i, 'https://');
-      }
-    } catch (storageErr: any) {
-      console.warn('Firebase Storage upload bypassed/timed out:', storageErr?.message || storageErr?.code);
+    if (json.error) {
+      lastError = json.error;
+    } else {
+      lastError = `Server returned HTTP status ${resp.status}`;
     }
+  } catch (serverErr: any) {
+    lastError = serverErr?.message || 'Server upload network error';
   }
 
-  // Step 4: Write image record directly to Firestore uploaded_images collection (if db available)
-  try {
-    if (db) {
-      const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-      await setDoc(doc(db, 'uploaded_images', imageId), {
-        id: imageId,
-        product_id: cleanId,
-        filename: cleanFileName,
-        data_url: dataUrl,
-        created_at: new Date().toISOString(),
-      });
-      return `/api/product-image/${imageId}`;
-    }
-  } catch (fsErr) {
-    console.warn('Direct Firestore uploaded_images save note:', fsErr);
-  }
-
-  // Step 5: Guaranteed return of the high-clarity, ultra-lightweight WebP data URL
-  if (dataUrl && dataUrl.startsWith('data:image/')) {
-    return dataUrl;
-  }
-
-
-  return dataUrl;
+  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
+  throw new Error(lastError || 'Cloudinary upload failed');
 }
 
 /**
@@ -275,41 +228,16 @@ export async function uploadCategoryImageToStorage(
   const cleanId = sanitizePathSegment(categoryId || `cat-${Date.now().toString(36)}`);
 
   // Step 1: Compress image to binary Blob (1000x1000 max, 0.82 quality)
-  const { blob, dataUrl, mimeType, extension } = await compressImageToBlob(file, 1000, 1000, 0.82);
+  const { dataUrl, extension } = await compressImageToBlob(file, 1000, 1000, 0.82);
 
   const timestamp = Date.now();
   const cleanFileName = `${timestamp}-category.${extension}`;
-  const storagePath = `categories/${cleanId}/${cleanFileName}`;
 
-  // Step 2: Attempt primary Firebase Storage upload with 2.5s race timeout
-  if (storage) {
-    try {
-      const storageRef = ref(storage, storagePath);
-      const uploadPromise = (async () => {
-        const snapshot = await uploadBytes(storageRef, blob, {
-          contentType: mimeType,
-          cacheControl: 'public, max-age=31536000, s-maxage=31536000',
-        });
-        return await getDownloadURL(snapshot.ref);
-      })();
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage timeout')), 2500)
-      );
-
-      const downloadUrl = await Promise.race([uploadPromise, timeoutPromise]);
-      if (downloadUrl && (downloadUrl.startsWith('https://') || downloadUrl.startsWith('http://'))) {
-        return downloadUrl.replace(/^http:\/\//i, 'https://');
-      }
-    } catch (storageErr: any) {
-      console.warn('Direct Firebase Storage category upload bypassed/timed out:', storageErr?.message);
-    }
-  }
-
-  // Step 3: Server Fallback Upload
+  // Step 2: Secure Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
+  let lastError = 'Category image upload failed';
   try {
     const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 2500);
+    const abortTimeout = setTimeout(() => controller.abort(), 25000);
 
     const resp = await fetch('/api/upload-image', {
       method: 'POST',
@@ -323,30 +251,25 @@ export async function uploadCategoryImageToStorage(
     });
     clearTimeout(abortTimeout);
 
-    if (resp.ok) {
-      const contentType = resp.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await resp.json();
-        if (json.success && json.url && typeof json.url === 'string') {
-          let cleanUrl = json.url;
-          if (cleanUrl.includes('/api/product-image/')) {
-            cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
-          } else if (cleanUrl.includes('localhost:3000')) {
-            cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
-          }
-          return cleanUrl;
-        }
+    const json = await resp.json().catch(() => ({}));
+    if (resp.ok && json.success && json.url && typeof json.url === 'string') {
+      let cleanUrl = json.url;
+      if (cleanUrl.includes('localhost:3000')) {
+        cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
       }
+      return cleanUrl;
     }
-  } catch (serverErr) {
-    console.warn('Server fallback category upload error:', serverErr);
+
+    if (json.error) {
+      lastError = json.error;
+    } else {
+      lastError = `Server returned HTTP status ${resp.status}`;
+    }
+  } catch (serverErr: any) {
+    lastError = serverErr?.message || 'Server upload network error';
   }
 
-  // Step 4: Final reliable return of optimized WebP data URL
-  if (dataUrl && dataUrl.startsWith('data:image/')) {
-    return dataUrl;
-  }
-
-  return dataUrl;
+  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
+  throw new Error(lastError || 'Cloudinary category upload failed');
 }
 

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import path from 'path';
@@ -523,14 +524,27 @@ async function uploadToCloudinary(
   dataUrl: string,
   productId: string
 ): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  let cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  // Support CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
+  if (!cloudName || !apiKey || !apiSecret) {
+    const cloudinaryUrl = process.env.CLOUDINARY_URL?.trim();
+    if (cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://')) {
+      const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+      if (match) {
+        apiKey = apiKey || match[1];
+        apiSecret = apiSecret || match[2];
+        cloudName = cloudName || match[3];
+      }
+    }
+  }
 
   if (!cloudName || !apiKey || !apiSecret) {
     return {
       success: false,
-      error: 'Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)',
+      error: 'Cloudinary credentials missing. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET or CLOUDINARY_URL in server environment.',
     };
   }
 
@@ -540,30 +554,26 @@ async function uploadToCloudinary(
   const folder = 'products';
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
-  // Cloudinary signature parameters sorted alphabetically: folder, overwrite, public_id, timestamp
-  const paramsToSign = `folder=${folder}&overwrite=false&public_id=${publicId}&timestamp=${timestamp}`;
+  // Cloudinary signature parameters sorted alphabetically: folder, public_id, timestamp
+  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = crypto
     .createHash('sha1')
     .update(paramsToSign + apiSecret)
     .digest('hex');
 
-  const payload = {
-    file: dataUrl,
-    api_key: apiKey,
-    timestamp,
-    public_id: publicId,
-    folder,
-    overwrite: false,
-    signature,
-  };
+  // Cloudinary image upload endpoint expects multipart/form-data with formData
+  const formData = new FormData();
+  formData.append('file', dataUrl);
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp);
+  formData.append('public_id', publicId);
+  formData.append('folder', folder);
+  formData.append('signature', signature);
 
   const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
+    body: formData,
   });
 
   const result = await response.json().catch(() => ({}));
@@ -579,6 +589,11 @@ async function uploadToCloudinary(
   };
 }
 
+// GET /api/health (Server healthcheck endpoint)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // POST /api/upload-image (Server-assisted image upload endpoint)
 app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) => {
   try {
@@ -593,53 +608,20 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
 
     // Step 1: Secure Cloudinary Upload (Zero Firestore storage, permanent CDN URL)
     const cloudResult = await uploadToCloudinary(data_url, product_id);
-    if (cloudResult.success && cloudResult.url) {
-      return res.json({
-        success: true,
-        url: cloudResult.url,
-        id: cloudResult.public_id,
-        provider: 'cloudinary',
+    if (!cloudResult.success || !cloudResult.url) {
+      // STRICT REQUIREMENT: No silent Base64 or Firestore fallback for new uploads.
+      console.error('Cloudinary upload failure:', cloudResult.error);
+      return res.status(400).json({
+        success: false,
+        error: cloudResult.error || 'Cloudinary upload failed',
       });
     }
 
-    if (cloudResult.error) {
-      console.warn('Cloudinary upload warning:', cloudResult.error);
-    }
-
-    // Step 2: Fallback to existing mechanism if Cloudinary is not configured yet
-    const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    const cleanProdId = (product_id || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-    const imagePayload = {
-      id: imageId,
-      product_id: cleanProdId,
-      filename: filename || 'image.webp',
-      data_url,
-      created_at: new Date().toISOString(),
-    };
-
-    // Save to local DB for instant fallback
-    if (!db.uploaded_images) db.uploaded_images = {};
-    db.uploaded_images[imageId] = imagePayload;
-    saveDB();
-
-    // Save to Firestore in background without blocking HTTP response
-    if (!isFirestoreQuotaCooldownActive()) {
-      try {
-        const firestoreDb = getFirestoreInstance();
-        setDoc(doc(firestoreDb, 'uploaded_images', imageId), imagePayload).catch((fsErr) => {
-          handleFirestoreError('Firestore upload image mirror', fsErr);
-        });
-      } catch (err) {
-        handleFirestoreError('Firestore upload instance', err);
-      }
-    }
-
-    const publicUrl = `/api/product-image/${imageId}`;
-
-    res.json({
+    return res.json({
       success: true,
-      url: publicUrl,
-      id: imageId,
+      url: cloudResult.url,
+      id: cloudResult.public_id,
+      provider: 'cloudinary',
     });
   } catch (err: any) {
     console.error('Server upload-image error:', err);

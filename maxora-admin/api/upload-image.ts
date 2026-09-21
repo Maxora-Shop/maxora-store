@@ -20,14 +20,27 @@ async function uploadToCloudinary(
   dataUrl: string,
   productId: string
 ): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  let cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+
+  // Support CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
+  if (!cloudName || !apiKey || !apiSecret) {
+    const cloudinaryUrl = process.env.CLOUDINARY_URL?.trim();
+    if (cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://')) {
+      const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+      if (match) {
+        apiKey = apiKey || match[1];
+        apiSecret = apiSecret || match[2];
+        cloudName = cloudName || match[3];
+      }
+    }
+  }
 
   if (!cloudName || !apiKey || !apiSecret) {
     return {
       success: false,
-      error: 'Cloudinary credentials missing (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)',
+      error: 'Cloudinary credentials missing. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET or CLOUDINARY_URL in server environment.',
     };
   }
 
@@ -37,30 +50,26 @@ async function uploadToCloudinary(
   const folder = 'products';
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
-  // Cloudinary signature parameters sorted alphabetically: folder, overwrite, public_id, timestamp
-  const paramsToSign = `folder=${folder}&overwrite=false&public_id=${publicId}&timestamp=${timestamp}`;
+  // Cloudinary signature parameters sorted alphabetically: folder, public_id, timestamp
+  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = crypto
     .createHash('sha1')
     .update(paramsToSign + apiSecret)
     .digest('hex');
 
-  const payload = {
-    file: dataUrl,
-    api_key: apiKey,
-    timestamp,
-    public_id: publicId,
-    folder,
-    overwrite: false,
-    signature,
-  };
+  // Cloudinary image upload endpoint expects multipart/form-data
+  const formData = new FormData();
+  formData.append('file', dataUrl);
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', timestamp);
+  formData.append('public_id', publicId);
+  formData.append('folder', folder);
+  formData.append('signature', signature);
 
   const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
+    body: formData,
   });
 
   const result = await response.json().catch(() => ({}));
@@ -110,61 +119,26 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     // Step 1: Secure Cloudinary Upload (Zero Firestore storage, Permanent CDN URL)
     const cloudResult = await uploadToCloudinary(data_url, product_id);
-    if (cloudResult.success && cloudResult.url) {
-      res.statusCode = 200;
+    if (!cloudResult.success || !cloudResult.url) {
+      // STRICT REQUIREMENT: No silent Base64 or Firestore fallback for new uploads.
+      console.error('Cloudinary upload failure:', cloudResult.error);
+      res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json');
-      res.end(
-        JSON.stringify({
-          success: true,
-          url: cloudResult.url,
-          id: cloudResult.public_id,
-          provider: 'cloudinary',
-        })
-      );
+      res.end(JSON.stringify({
+        success: false,
+        error: cloudResult.error || 'Cloudinary upload failed',
+      }));
       return;
     }
-
-    if (cloudResult.error) {
-      console.warn('Cloudinary upload warning:', cloudResult.error);
-    }
-
-    // Step 2: Fallback to existing mechanism if Cloudinary credentials are not configured yet
-    const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    const cleanProdId = (product_id || 'general').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-
-    // Save image in Firestore fallback
-    let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      try {
-        firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      } catch (err) {}
-    }
-
-    const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const db = firebaseConfig.firestoreDatabaseId
-      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-      : getFirestore(app);
-
-    await setDoc(doc(db, 'uploaded_images', imageId), {
-      id: imageId,
-      product_id: cleanProdId,
-      filename: filename || 'image.webp',
-      data_url,
-      created_at: new Date().toISOString(),
-    });
-
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'maxora-store-ruby.vercel.app';
-    const proto = req.headers['x-forwarded-proto'] || 'https';
-    const publicUrl = `${proto}://${host}/api/product-image/${imageId}`;
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(
       JSON.stringify({
         success: true,
-        url: publicUrl,
-        id: imageId,
+        url: cloudResult.url,
+        id: cloudResult.public_id,
+        provider: 'cloudinary',
       })
     );
   } catch (err: any) {

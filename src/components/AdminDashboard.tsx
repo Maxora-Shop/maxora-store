@@ -326,14 +326,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Step 2: Upload to Cloudinary via server endpoint
       try {
         const httpsUrl = await uploadProductImageToStorage(file, prodId, { isGallery: false });
-        if (httpsUrl && httpsUrl !== instantDataUrl) {
+        if (httpsUrl) {
           setEditingProduct((prev) => (prev ? { ...prev, image_url: httpsUrl } : prev));
           showToast('ছবি সফলভাবে ক্লাউডে সংরক্ষিত হয়েছে!', 'success');
-        } else {
-          showToast('ছবি সফলভাবে যুক্ত হয়েছে!', 'success');
         }
-      } catch (bgErr) {
-        console.warn('Background image upload note:', bgErr);
+      } catch (bgErr: any) {
+        setEditingProduct((prev) => (prev && prev.image_url === instantDataUrl ? { ...prev, image_url: '' } : prev));
+        showToast(`ছবি আপলোড ব্যর্থ হয়েছে: ${bgErr?.message || 'Error'}`, 'error');
       } finally {
         setIsUploadingImage(false);
       }
@@ -356,8 +355,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const current = Array.isArray(prev.images) ? prev.images : [];
         return { ...prev, id: prev.id || prodId, images: [...current, instantDataUrl] };
       });
-      setIsUploadingImage(false);
-      showToast('গ্যালারিতে ছবি যোগ হয়েছে!', 'success');
+      showToast('গ্যালারিতে ছবি যোগ হচ্ছে...', 'info');
 
       // Step 2: Background upload attempt
       try {
@@ -366,19 +364,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           isGallery: true,
           galleryIndex: currentImages.length + 1,
         });
-        if (httpsUrl && httpsUrl !== instantDataUrl) {
+        if (httpsUrl) {
           setEditingProduct((prev) => {
             if (!prev) return prev;
             const list = Array.isArray(prev.images) ? [...prev.images] : [];
             const idx = list.indexOf(instantDataUrl);
             if (idx !== -1) {
               list[idx] = httpsUrl;
+            } else {
+              list.push(httpsUrl);
             }
             return { ...prev, images: list };
           });
+          showToast('গ্যালারি ছবি সফলভাবে আপলোড হয়েছে!', 'success');
         }
-      } catch (bgErr) {
-        console.warn('Background gallery upload note:', bgErr);
+      } catch (bgErr: any) {
+        setEditingProduct((prev) => {
+          if (!prev) return prev;
+          const list = Array.isArray(prev.images) ? prev.images.filter(img => img !== instantDataUrl) : [];
+          return { ...prev, images: list };
+        });
+        showToast(`গ্যালারি ছবি আপলোড ব্যর্থ হয়েছে: ${bgErr?.message || 'Error'}`, 'error');
+      } finally {
+        setIsUploadingImage(false);
       }
     } catch (err: any) {
       showToast(err.message || 'Gallery image upload failed', 'error');

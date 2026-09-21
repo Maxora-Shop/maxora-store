@@ -222,28 +222,17 @@ export const AdminBanners: React.FC<AdminBannersProps> = ({
     if (!file) return;
     try {
       setIsUploading(true);
-      let uploadedUrl = '';
-      try {
-        uploadedUrl = await uploadProductImageToStorage(file, `hero-banner-${editingBanner?.id || Date.now()}`, {
-          customName: field,
-        });
-      } catch (e) {
-        console.warn('Banner upload to storage/API failed, using local compression fallback:', e);
+      const uploadedUrl = await uploadProductImageToStorage(file, `hero-banner-${editingBanner?.id || Date.now()}`, {
+        customName: field,
+      });
+
+      let finalUrl = uploadedUrl;
+      if (finalUrl && finalUrl.includes('localhost:3000')) {
+        finalUrl = finalUrl.replace(/^https?:\/\/localhost:3000/i, '');
       }
 
-      if (!uploadedUrl) {
-        // Fallback: WebP compression
-        uploadedUrl = await compressAndReadImage(file, 1600, 800, 0.80);
-      }
-
-      if (uploadedUrl && uploadedUrl.includes('/api/product-image/')) {
-        uploadedUrl = uploadedUrl.substring(uploadedUrl.indexOf('/api/product-image/'));
-      } else if (uploadedUrl && uploadedUrl.includes('localhost:3000')) {
-        uploadedUrl = uploadedUrl.replace(/^https?:\/\/localhost:3000/i, '');
-      }
-
-      setEditingBanner((prev) => (prev ? { ...prev, [field]: uploadedUrl } : prev));
-      showToast('ছবি সফলভাবে আপলোড হয়েছে!', 'success');
+      setEditingBanner((prev) => (prev ? { ...prev, [field]: finalUrl } : prev));
+      showToast('ছবি সফলভাবে ক্লাউডে আপলোড হয়েছে!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Image upload failed', 'error');
     } finally {
