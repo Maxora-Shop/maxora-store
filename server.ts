@@ -519,45 +519,82 @@ app.get('/api/product-image/:id', async (req, res) => {
   return res.status(404).type('text/plain').send('Unsupported image format');
 });
 
+// Helper to clean credentials (strip quotes, escaped quotes, spaces, and linebreaks)
+function cleanCredential(val: string | undefined): string {
+  if (!val || typeof val !== 'string') return '';
+  return val
+    .trim()
+    .replace(/^\\?["']+|\\?["']+$/g, '')
+    .trim();
+}
+
 // Extract and validate Cloudinary credentials from process.env
 function getCloudinaryCredentials() {
-  let cloudName = (
+  let cloudName = cleanCredential(
     process.env.CLOUDINARY_CLOUD_NAME ||
+    process.env.CLOUDINARY_NAME ||
     process.env.VITE_CLOUDINARY_CLOUD_NAME ||
-    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-    ''
-  ).trim();
-  let apiKey = (
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+  );
+  let apiKey = cleanCredential(
     process.env.CLOUDINARY_API_KEY ||
+    process.env.CLOUDINARY_KEY ||
     process.env.VITE_CLOUDINARY_API_KEY ||
-    process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY ||
-    ''
-  ).trim();
-  let apiSecret = (
+    process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY
+  );
+  let apiSecret = cleanCredential(
     process.env.CLOUDINARY_API_SECRET ||
-    process.env.VITE_CLOUDINARY_API_SECRET ||
-    ''
-  ).trim();
-
-  // Strip accidental quotes
-  cloudName = cloudName.replace(/^['"]+|['"]+$/g, '');
-  apiKey = apiKey.replace(/^['"]+|['"]+$/g, '');
-  apiSecret = apiSecret.replace(/^['"]+|['"]+$/g, '');
+    process.env.CLOUDINARY_SECRET ||
+    process.env.VITE_CLOUDINARY_API_SECRET
+  );
 
   // Support CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
   if (!cloudName || !apiKey || !apiSecret) {
-    const cloudinaryUrl = (process.env.CLOUDINARY_URL || '').trim().replace(/^['"]+|['"]+$/g, '');
+    const cloudinaryUrl = cleanCredential(process.env.CLOUDINARY_URL);
     if (cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://')) {
       const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
       if (match) {
-        apiKey = apiKey || match[1];
-        apiSecret = apiSecret || match[2];
-        cloudName = cloudName || match[3];
+        apiKey = apiKey || cleanCredential(match[1]);
+        apiSecret = apiSecret || cleanCredential(match[2]);
+        cloudName = cloudName || cleanCredential(match[3]);
       }
     }
   }
 
   return { cloudName, apiKey, apiSecret };
+}
+
+/**
+ * Generates Cloudinary upload signature following Cloudinary's exact specification:
+ * 1. Collect all parameters to be signed (excluding file, api_key, signature, resource_type, cloud_name).
+ * 2. Filter out undefined, null, or empty string parameters.
+ * 3. Sort parameter keys alphabetically.
+ * 4. Construct 'key=value' pairs joined by '&'.
+ * 5. Append CLOUDINARY_API_SECRET directly to the end of the string (without any separator).
+ * 6. Compute SHA-1 hex digest: crypto.createHash('sha1').update(stringToSign + apiSecret).digest('hex').
+ * Note: Never use HMAC-SHA1.
+ */
+function generateCloudinarySignature(
+  params: Record<string, string | number>,
+  apiSecret: string
+): { signature: string; stringToSign: string } {
+  const sortedKeys = Object.keys(params)
+    .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
+    .sort();
+
+  const pairs: string[] = [];
+  for (const key of sortedKeys) {
+    pairs.push(`${key}=${params[key]}`);
+  }
+
+  const stringToSign = pairs.join('&');
+
+  const signature = crypto
+    .createHash('sha1')
+    .update(stringToSign + apiSecret)
+    .digest('hex');
+
+  return { signature, stringToSign };
 }
 
 // Secure server-side Cloudinary upload helper
@@ -585,19 +622,22 @@ async function uploadToCloudinary(
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
   // Cloudinary signature parameters sorted alphabetically: folder, public_id, timestamp
-  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
-  const signature = crypto
-    .createHash('sha1')
-    .update(paramsToSign + apiSecret)
-    .digest('hex');
+  const uploadParams: Record<string, string> = {
+    folder,
+    public_id: publicId,
+    timestamp,
+  };
+
+  const { signature, stringToSign } = generateCloudinarySignature(uploadParams, apiSecret);
 
   // Cloudinary image upload endpoint expects multipart/form-data with formData
+  // Parameters must match exactly what was signed
   const formData = new FormData();
   formData.append('file', dataUrl);
   formData.append('api_key', apiKey);
-  formData.append('timestamp', timestamp);
-  formData.append('public_id', publicId);
-  formData.append('folder', folder);
+  formData.append('timestamp', uploadParams.timestamp);
+  formData.append('public_id', uploadParams.public_id);
+  formData.append('folder', uploadParams.folder);
   formData.append('signature', signature);
 
   const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
@@ -608,7 +648,11 @@ async function uploadToCloudinary(
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.secure_url) {
-    const errMsg = result.error?.message || `Cloudinary rejected upload (HTTP ${response.status}): ${JSON.stringify(result)}`;
+    const rawErrMsg = result.error?.message || `Cloudinary rejected upload (HTTP ${response.status}): ${JSON.stringify(result)}`;
+    let errMsg = rawErrMsg;
+    if (rawErrMsg.toLowerCase().includes('invalid signature')) {
+      errMsg = `Invalid signature from Cloudinary. String to sign was '${stringToSign}'. Please verify that CLOUDINARY_API_SECRET matches the exact API Secret for API Key '${apiKey.slice(0, 4)}***' in Cloud Name '${cloudName}'.`;
+    }
     return { success: false, error: errMsg };
   }
 
