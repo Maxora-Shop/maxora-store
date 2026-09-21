@@ -15,18 +15,34 @@ const DEFAULT_FIREBASE_CONFIG = {
   messagingSenderId: '69433257808',
 };
 
-// Secure server-side Cloudinary upload helper
-async function uploadToCloudinary(
-  dataUrl: string,
-  productId: string
-): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
-  let cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+// Extract and validate Cloudinary credentials from process.env
+function getCloudinaryCredentials() {
+  let cloudName = (
+    process.env.CLOUDINARY_CLOUD_NAME ||
+    process.env.VITE_CLOUDINARY_CLOUD_NAME ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    ''
+  ).trim();
+  let apiKey = (
+    process.env.CLOUDINARY_API_KEY ||
+    process.env.VITE_CLOUDINARY_API_KEY ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY ||
+    ''
+  ).trim();
+  let apiSecret = (
+    process.env.CLOUDINARY_API_SECRET ||
+    process.env.VITE_CLOUDINARY_API_SECRET ||
+    ''
+  ).trim();
+
+  // Strip accidental quotes
+  cloudName = cloudName.replace(/^['"]+|['"]+$/g, '');
+  apiKey = apiKey.replace(/^['"]+|['"]+$/g, '');
+  apiSecret = apiSecret.replace(/^['"]+|['"]+$/g, '');
 
   // Support CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
   if (!cloudName || !apiKey || !apiSecret) {
-    const cloudinaryUrl = process.env.CLOUDINARY_URL?.trim();
+    const cloudinaryUrl = (process.env.CLOUDINARY_URL || '').trim().replace(/^['"]+|['"]+$/g, '');
     if (cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://')) {
       const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
       if (match) {
@@ -37,10 +53,24 @@ async function uploadToCloudinary(
     }
   }
 
+  return { cloudName, apiKey, apiSecret };
+}
+
+// Secure server-side Cloudinary upload helper
+async function uploadToCloudinary(
+  dataUrl: string,
+  productId: string
+): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
+  const { cloudName, apiKey, apiSecret } = getCloudinaryCredentials();
+
   if (!cloudName || !apiKey || !apiSecret) {
+    const missing: string[] = [];
+    if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
+    if (!apiKey) missing.push('CLOUDINARY_API_KEY');
+    if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
     return {
       success: false,
-      error: 'Cloudinary credentials missing. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET or CLOUDINARY_URL in server environment.',
+      error: `Cloudinary credentials missing: ${missing.join(', ')}. Please verify that these variables are set in the Vercel project settings and the deployment has been rebuilt.`,
     };
   }
 
@@ -74,7 +104,7 @@ async function uploadToCloudinary(
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.secure_url) {
-    const errMsg = result.error?.message || `Cloudinary upload failed (status ${response.status})`;
+    const errMsg = result.error?.message || `Cloudinary rejected upload (HTTP ${response.status}): ${JSON.stringify(result)}`;
     return { success: false, error: errMsg };
   }
 
@@ -86,6 +116,16 @@ async function uploadToCloudinary(
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-password, x-admin-token');
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 200;
+    res.end();
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.setHeader('Content-Type', 'application/json');
@@ -94,13 +134,53 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   }
 
   try {
-    let body = '';
-    for await (const chunk of req) {
-      body += chunk;
+    let payload: any = (req as any).body;
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload);
+      } catch {
+        // keep as is
+      }
     }
 
-    const payload = JSON.parse(body || '{}');
-    const { data_url, filename, product_id } = payload;
+    if (!payload || typeof payload !== 'object' || Object.keys(payload).length === 0) {
+      const rawBody = await new Promise<string>((resolve) => {
+        let acc = '';
+        if (typeof (req as any).on === 'function') {
+          req.on('data', (chunk: any) => {
+            acc += chunk;
+          });
+          req.on('end', () => resolve(acc));
+          req.on('error', () => resolve(acc));
+        } else if (typeof (req as any)[Symbol.asyncIterator] === 'function') {
+          (async () => {
+            try {
+              for await (const chunk of req) {
+                acc += chunk;
+              }
+              resolve(acc);
+            } catch {
+              resolve(acc);
+            }
+          })();
+        } else {
+          resolve('');
+        }
+      });
+
+      if (rawBody) {
+        try {
+          payload = JSON.parse(rawBody);
+        } catch {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ success: false, error: 'Invalid JSON request payload' }));
+          return;
+        }
+      }
+    }
+
+    const { data_url, filename, product_id } = payload || {};
 
     if (!data_url || typeof data_url !== 'string') {
       res.statusCode = 400;

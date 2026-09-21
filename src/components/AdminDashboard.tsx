@@ -308,88 +308,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Image & Product Link States
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [imageInputMode, setImageInputMode] = useState<'upload' | 'url'>('upload');
   const [isDraggingImage, setIsDraggingImage] = useState(false);
 
   const handleMainImageFileChange = async (file?: File | null) => {
     if (!file) return;
+    setImageUploadError(null);
     try {
       setIsUploadingImage(true);
       const prodId = editingProduct?.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
 
-      // Step 1: Immediate local compression & instant preview (<100ms)
-      // Guarantees image displays instantly on screen with zero infinite spinning
-      const instantDataUrl = await compressAndReadImage(file);
-      setEditingProduct((prev) => (prev ? { ...prev, id: prev.id || prodId, image_url: instantDataUrl } : prev));
-      showToast('ছবি প্রক্রিয়াধীন...', 'info');
+      showToast('ছবি আপলোড হচ্ছে...', 'info');
 
-      // Step 2: Upload to Cloudinary via server endpoint
-      try {
-        const httpsUrl = await uploadProductImageToStorage(file, prodId, { isGallery: false });
-        if (httpsUrl) {
-          setEditingProduct((prev) => (prev ? { ...prev, image_url: httpsUrl } : prev));
-          showToast('ছবি সফলভাবে ক্লাউডে সংরক্ষিত হয়েছে!', 'success');
-        }
-      } catch (bgErr: any) {
-        setEditingProduct((prev) => (prev && prev.image_url === instantDataUrl ? { ...prev, image_url: '' } : prev));
-        showToast(`ছবি আপলোড ব্যর্থ হয়েছে: ${bgErr?.message || 'Error'}`, 'error');
-      } finally {
-        setIsUploadingImage(false);
+      // Upload directly to Cloudinary via server API
+      const httpsUrl = await uploadProductImageToStorage(file, prodId, { isGallery: false });
+      if (httpsUrl) {
+        setEditingProduct((prev) => (prev ? { ...prev, id: prev.id || prodId, image_url: httpsUrl } : prev));
+        showToast('ছবি সফলভাবে ক্লাউডে সংরক্ষিত হয়েছে!', 'success');
       }
     } catch (err: any) {
-      showToast(err.message || 'Image upload failed', 'error');
+      const msg = err?.message || 'Image upload failed';
+      setImageUploadError(msg);
+      showToast(`ছবি আপলোড ব্যর্থ হয়েছে: ${msg}`, 'error');
+    } finally {
       setIsUploadingImage(false);
     }
   };
 
   const handleGalleryImageUpload = async (file?: File | null) => {
     if (!file) return;
+    setImageUploadError(null);
     try {
       setIsUploadingImage(true);
       const prodId = editingProduct?.id || `prod-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+      showToast('গ্যালারিতে ছবি আপলোড হচ্ছে...', 'info');
 
-      // Step 1: Immediate local compression & instant gallery display (<100ms)
-      const instantDataUrl = await compressAndReadImage(file);
-      setEditingProduct((prev) => {
-        if (!prev) return prev;
-        const current = Array.isArray(prev.images) ? prev.images : [];
-        return { ...prev, id: prev.id || prodId, images: [...current, instantDataUrl] };
+      const currentImages = Array.isArray(editingProduct?.images) ? editingProduct.images : [];
+      const httpsUrl = await uploadProductImageToStorage(file, prodId, {
+        isGallery: true,
+        galleryIndex: currentImages.length + 1,
       });
-      showToast('গ্যালারিতে ছবি যোগ হচ্ছে...', 'info');
 
-      // Step 2: Background upload attempt
-      try {
-        const currentImages = Array.isArray(editingProduct?.images) ? editingProduct.images : [];
-        const httpsUrl = await uploadProductImageToStorage(file, prodId, {
-          isGallery: true,
-          galleryIndex: currentImages.length + 1,
-        });
-        if (httpsUrl) {
-          setEditingProduct((prev) => {
-            if (!prev) return prev;
-            const list = Array.isArray(prev.images) ? [...prev.images] : [];
-            const idx = list.indexOf(instantDataUrl);
-            if (idx !== -1) {
-              list[idx] = httpsUrl;
-            } else {
-              list.push(httpsUrl);
-            }
-            return { ...prev, images: list };
-          });
-          showToast('গ্যালারি ছবি সফলভাবে আপলোড হয়েছে!', 'success');
-        }
-      } catch (bgErr: any) {
+      if (httpsUrl) {
         setEditingProduct((prev) => {
           if (!prev) return prev;
-          const list = Array.isArray(prev.images) ? prev.images.filter(img => img !== instantDataUrl) : [];
+          const list = Array.isArray(prev.images) ? [...prev.images] : [];
+          list.push(httpsUrl);
           return { ...prev, images: list };
         });
-        showToast(`গ্যালারি ছবি আপলোড ব্যর্থ হয়েছে: ${bgErr?.message || 'Error'}`, 'error');
-      } finally {
-        setIsUploadingImage(false);
+        showToast('গ্যালারি ছবি সফলভাবে আপলোড হয়েছে!', 'success');
       }
     } catch (err: any) {
-      showToast(err.message || 'Gallery image upload failed', 'error');
+      const msg = err?.message || 'Gallery upload failed';
+      setImageUploadError(msg);
+      showToast(`গ্যালারি ছবি আপলোড ব্যর্থ: ${msg}`, 'error');
+    } finally {
       setIsUploadingImage(false);
     }
   };
@@ -5243,6 +5217,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
 
+                    {/* Upload Error Alert Banner */}
+                    {imageUploadError && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold">Image upload failed (ছবি আপলোড হয়নি)</p>
+                          <p className="mt-0.5 text-[11px] break-all">{imageUploadError}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setImageUploadError(null)}
+                          className="text-rose-400 hover:text-rose-600 font-bold text-xs cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
                     {/* Current Main Image Preview Card */}
                     {editingProduct?.image_url && (
                       <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-zinc-200 shadow-xs">
@@ -5321,10 +5313,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {isUploadingImage ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Camera className="w-6 h-6" />}
                         </div>
                         <p className="text-xs font-bold text-zinc-900">
-                          {isUploadingImage ? 'Processing & Optimizing Image...' : 'Click to Choose Photo from Device / Gallery'}
+                          {isUploadingImage ? 'Uploading directly to Cloudinary CDN...' : 'Click to Choose Photo from Device / Gallery'}
                         </p>
                         <p className="text-[11px] text-zinc-500 mt-1">
-                          সরাসরি মোবাইল বা কম্পিউটার থেকে ছবি সিলেক্ট বা ড্র্যাগ করুন (JPG, PNG, WEBP)
+                          {isUploadingImage ? 'অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করুন...' : 'সরাসরি মোবাইল বা কম্পিউটার থেকে ছবি সিলেক্ট বা ড্র্যাগ করুন (JPG, PNG, WEBP)'}
                         </p>
                       </label>
                     )}

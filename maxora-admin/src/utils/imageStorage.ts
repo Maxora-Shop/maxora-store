@@ -182,13 +182,16 @@ export async function uploadProductImageToStorage(
   let lastError = 'Image upload failed';
   try {
     const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 25000);
+    const abortTimeout = setTimeout(() => controller.abort(), 35000);
 
+    const endpoints: string[] = ['/api/upload-image'];
     const apiUrl = (import.meta as any)?.env?.VITE_API_URL;
-    const endpoints = [
-      '/api/upload-image',
-      apiUrl ? `${String(apiUrl).replace(/\/+$/, '')}/api/upload-image` : 'https://maxora-store-ruby.vercel.app/api/upload-image',
-    ];
+    if (apiUrl && typeof apiUrl === 'string') {
+      const cleanApi = apiUrl.replace(/\/+$/, '');
+      if (cleanApi && !endpoints.includes(`${cleanApi}/api/upload-image`)) {
+        endpoints.push(`${cleanApi}/api/upload-image`);
+      }
+    }
 
     for (const endpoint of endpoints) {
       try {
@@ -203,15 +206,30 @@ export async function uploadProductImageToStorage(
           }),
         });
 
-        const json = await resp.json().catch(() => ({}));
-        if (resp.ok && json.success && json.url && typeof json.url === 'string') {
-          clearTimeout(abortTimeout);
-          return json.url;
+        const status = resp.status;
+        const text = await resp.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(text);
+        } catch {
+          if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+            lastError = `Server returned HTML (HTTP ${status}) instead of JSON for ${endpoint}.`;
+          } else {
+            lastError = `Server returned HTTP ${status}: ${text.slice(0, 150)}`;
+          }
+          continue;
         }
 
-        if (json.error) {
-          lastError = json.error;
+        if (resp.ok && json.success && json.url && typeof json.url === 'string') {
+          clearTimeout(abortTimeout);
+          let cleanUrl = json.url;
+          if (cleanUrl.includes('localhost:3000')) {
+            cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
+          }
+          return cleanUrl;
         }
+
+        lastError = json.error ? `HTTP ${status}: ${json.error}` : `Upload failed with HTTP ${status}`;
       } catch (endpointErr: any) {
         lastError = endpointErr?.message || 'Network error';
       }
@@ -244,7 +262,7 @@ export async function uploadCategoryImageToStorage(
   let lastError = 'Category image upload failed';
   try {
     const controller = new AbortController();
-    const abortTimeout = setTimeout(() => controller.abort(), 25000);
+    const abortTimeout = setTimeout(() => controller.abort(), 35000);
 
     const resp = await fetch('/api/upload-image', {
       method: 'POST',
@@ -258,16 +276,25 @@ export async function uploadCategoryImageToStorage(
     });
     clearTimeout(abortTimeout);
 
-    const json = await resp.json().catch(() => ({}));
+    const status = resp.status;
+    const text = await resp.text();
+    let json: any = {};
+    try {
+      json = JSON.parse(text);
+    } catch {
+      if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+        lastError = `Server returned HTML (HTTP ${status}) instead of JSON for /api/upload-image.`;
+      } else {
+        lastError = `Server returned HTTP ${status}: ${text.slice(0, 150)}`;
+      }
+      throw new Error(lastError);
+    }
+
     if (resp.ok && json.success && json.url && typeof json.url === 'string') {
       return json.url;
     }
 
-    if (json.error) {
-      lastError = json.error;
-    } else {
-      lastError = `Server returned HTTP status ${resp.status}`;
-    }
+    lastError = json.error ? `HTTP ${status}: ${json.error}` : `Category upload failed with HTTP ${status}`;
   } catch (serverErr: any) {
     lastError = serverErr?.message || 'Network error';
   }

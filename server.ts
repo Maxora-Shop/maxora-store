@@ -519,18 +519,34 @@ app.get('/api/product-image/:id', async (req, res) => {
   return res.status(404).type('text/plain').send('Unsupported image format');
 });
 
-// Secure server-side Cloudinary upload helper
-async function uploadToCloudinary(
-  dataUrl: string,
-  productId: string
-): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
-  let cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
-  let apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  let apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+// Extract and validate Cloudinary credentials from process.env
+function getCloudinaryCredentials() {
+  let cloudName = (
+    process.env.CLOUDINARY_CLOUD_NAME ||
+    process.env.VITE_CLOUDINARY_CLOUD_NAME ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    ''
+  ).trim();
+  let apiKey = (
+    process.env.CLOUDINARY_API_KEY ||
+    process.env.VITE_CLOUDINARY_API_KEY ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY ||
+    ''
+  ).trim();
+  let apiSecret = (
+    process.env.CLOUDINARY_API_SECRET ||
+    process.env.VITE_CLOUDINARY_API_SECRET ||
+    ''
+  ).trim();
+
+  // Strip accidental quotes
+  cloudName = cloudName.replace(/^['"]+|['"]+$/g, '');
+  apiKey = apiKey.replace(/^['"]+|['"]+$/g, '');
+  apiSecret = apiSecret.replace(/^['"]+|['"]+$/g, '');
 
   // Support CLOUDINARY_URL format: cloudinary://<api_key>:<api_secret>@<cloud_name>
   if (!cloudName || !apiKey || !apiSecret) {
-    const cloudinaryUrl = process.env.CLOUDINARY_URL?.trim();
+    const cloudinaryUrl = (process.env.CLOUDINARY_URL || '').trim().replace(/^['"]+|['"]+$/g, '');
     if (cloudinaryUrl && cloudinaryUrl.startsWith('cloudinary://')) {
       const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
       if (match) {
@@ -541,10 +557,24 @@ async function uploadToCloudinary(
     }
   }
 
+  return { cloudName, apiKey, apiSecret };
+}
+
+// Secure server-side Cloudinary upload helper
+async function uploadToCloudinary(
+  dataUrl: string,
+  productId: string
+): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
+  const { cloudName, apiKey, apiSecret } = getCloudinaryCredentials();
+
   if (!cloudName || !apiKey || !apiSecret) {
+    const missing: string[] = [];
+    if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
+    if (!apiKey) missing.push('CLOUDINARY_API_KEY');
+    if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
     return {
       success: false,
-      error: 'Cloudinary credentials missing. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET or CLOUDINARY_URL in server environment.',
+      error: `Cloudinary credentials missing: ${missing.join(', ')}. Please configure them in the environment.`,
     };
   }
 
@@ -578,7 +608,7 @@ async function uploadToCloudinary(
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.secure_url) {
-    const errMsg = result.error?.message || `Cloudinary upload failed (status ${response.status})`;
+    const errMsg = result.error?.message || `Cloudinary rejected upload (HTTP ${response.status}): ${JSON.stringify(result)}`;
     return { success: false, error: errMsg };
   }
 
