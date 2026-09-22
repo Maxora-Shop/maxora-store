@@ -1636,9 +1636,9 @@ export default function App() {
               </div>
 
               {loadingProducts ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4 lg:gap-6">
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-4 space-y-3 animate-pulse">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 space-y-3 animate-pulse">
                       <div className="aspect-square bg-zinc-200 rounded-xl" />
                       <div className="h-4 bg-zinc-200 rounded w-3/4" />
                       <div className="h-4 bg-zinc-200 rounded w-1/2" />
@@ -1649,12 +1649,14 @@ export default function App() {
               ) : filteredProducts.length > 0 ? (
                 <>
                   <div
-                    className={`grid gap-2.5 sm:gap-4 lg:gap-6 ${
+                    className={`grid gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5 ${
                       paginatedProducts.length === 1
                         ? 'grid-cols-1 max-w-xs sm:max-w-sm'
                         : paginatedProducts.length === 2
-                        ? 'grid-cols-2'
-                        : 'grid-cols-2 sm:grid-cols-3'
+                        ? 'grid-cols-2 max-w-xl'
+                        : paginatedProducts.length === 3
+                        ? 'grid-cols-2 sm:grid-cols-3 max-w-3xl'
+                        : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
                     }`}
                   >
                     {paginatedProducts.map((product) => (

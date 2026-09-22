@@ -293,6 +293,15 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
     }
   };
 
+  // WhatsApp deep link for mobile product inquiry
+  const whatsappUrl = useMemo(() => {
+    const rawWaNum = (settings.whatsapp || settings.ai_whatsapp_number || settings.phone || '').replace(/[^0-9]/g, '');
+    if (!rawWaNum) return null;
+    const formattedNum = rawWaNum.startsWith('88') ? rawWaNum : `88${rawWaNum}`;
+    const text = `হ্যালো Maxora, আমি "${product.name}" (৳${finalPrice}) প্রোডাক্টটি সম্পর্কে জানতে চাচ্ছি। লিংক: ${fullProductUrl}`;
+    return `https://wa.me/${formattedNum}?text=${encodeURIComponent(text)}`;
+  }, [settings.whatsapp, settings.ai_whatsapp_number, settings.phone, product.name, finalPrice, fullProductUrl]);
+
   // Native share or copy fallback
   const handleShare = async () => {
     if (navigator.share) {
@@ -412,7 +421,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   }, [tabs, activeTab]);
 
   return (
-    <div className="py-4 sm:py-6 space-y-8 animate-fade-in">
+    <div className="py-4 sm:py-6 pb-24 sm:pb-6 space-y-8 animate-fade-in">
       {/* 1. BREADCRUMBS NAVIGATION */}
       <nav aria-label="Breadcrumb" className="flex items-center flex-wrap gap-1.5 text-xs text-zinc-500 font-medium">
         <button
@@ -1439,30 +1448,74 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
       )}
 
       {/* 6. MOBILE STICKY BOTTOM PURCHASE BAR */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200 p-3 shadow-lg flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <img
-            src={selectedImage}
-            alt={product.name}
-            className="w-10 h-10 rounded-xl object-contain bg-zinc-50 border border-zinc-200 shrink-0"
-          />
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200/90 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2.5">
+        {/* Left: Live Price & Cash On Delivery Note */}
+        <div className="flex items-center gap-2 min-w-0 pr-1">
           <div className="min-w-0">
-            <p className="text-xs font-bold text-zinc-950 truncate">{product.name}</p>
-            <p className="text-sm font-black text-emerald-700">
-              ৳{finalPrice.toLocaleString('en-BD')}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-black text-zinc-950 leading-tight">
+                ৳{finalPrice.toLocaleString('en-BD')}
+              </span>
+              {hasDiscount && (
+                <span className="text-[11px] text-zinc-400 line-through">
+                  ৳{sellingPrice.toLocaleString('en-BD')}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] font-bold text-emerald-700 leading-none mt-0.5">
+              ক্যাশ অন ডেলিভারি
             </p>
           </div>
         </div>
 
+        {/* Right: Actions (WhatsApp Inquiry + Add to Cart + Buy Now) */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-10 h-10 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center shrink-0 active:scale-95 transition-all cursor-pointer shadow-2xs"
+              title="WhatsApp-এ মেসেজ দিন"
+              aria-label="WhatsApp Support"
+            >
+              <MessageCircle className="w-5 h-5 fill-emerald-500 text-emerald-600" />
+            </a>
+          )}
+
+          <button
+            type="button"
+            disabled={isOutOfStock}
+            onClick={handleAddToCartClick}
+            className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 active:scale-95 transition-all cursor-pointer shadow-2xs ${
+              isAddedFeedback
+                ? 'bg-emerald-600 border-emerald-600 text-white'
+                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-800'
+            }`}
+            title="Add to Cart"
+            aria-label="Add to Cart"
+          >
+            {isAddedFeedback ? (
+              <Check className="w-4 h-4 stroke-[3]" />
+            ) : (
+              <ShoppingBag className="w-4 h-4" />
+            )}
+          </button>
+
           <button
             type="button"
             disabled={isOutOfStock}
             onClick={handleBuyNowClick}
-            className="px-4 py-2.5 rounded-xl bg-zinc-950 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 disabled:bg-zinc-200"
+            className="py-2.5 px-3.5 rounded-xl bg-zinc-950 hover:bg-zinc-900 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed"
           >
-            <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-            <span>Buy Now</span>
+            {isOutOfStock ? (
+              <span>স্টক নেই</span>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                <span className="whitespace-nowrap">অর্ডার করুন</span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -73,7 +73,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
         {hotDealsProducts.map((product) => {
           const sellingPrice = Number(product.selling_price || 0);
           const discount = Number(product.discount || 0);
