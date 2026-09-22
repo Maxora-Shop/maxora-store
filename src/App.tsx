@@ -1734,7 +1734,7 @@ export default function App() {
           </div>
         </section>
 
-            {/* Trust & Guarantee Section (Free Shipping, Secure Payment, 7-Day Returns, 24/7 Support) */}
+            {/* Trust & Guarantee Section (Free Shipping, Secure Payment, Check Before You Accept, 24/7 Support) */}
             <TrustBenefitsSection />
           </>
         )}

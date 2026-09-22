@@ -15,8 +15,8 @@ export const TrustBenefitsSection: React.FC = () => {
     },
     {
       icon: RefreshCw,
-      title: '7-Day Returns',
-      subtitle: 'Hassle-free return policy',
+      title: 'Check Before You Accept',
+      subtitle: 'পণ্য গ্রহণের আগে যাচাই করুন',
     },
     {
       icon: Headphones,
