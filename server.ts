@@ -603,10 +603,45 @@ async function uploadToCloudinary(
   productId: string
 ): Promise<{ success: boolean; url?: string; public_id?: string; error?: string }> {
   const { cloudName, apiKey, apiSecret } = getCloudinaryCredentials();
+  const uploadPreset = cleanCredential(
+    process.env.CLOUDINARY_UPLOAD_PRESET ||
+    process.env.VITE_CLOUDINARY_UPLOAD_PRESET
+  );
 
-  if (!cloudName || !apiKey || !apiSecret) {
+  if (!cloudName) {
+    return {
+      success: false,
+      error: 'Cloudinary credentials missing: CLOUDINARY_CLOUD_NAME. Please configure it in the environment.',
+    };
+  }
+
+  const cleanProdId = (productId || 'product').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const uniqueSuffix = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+  const publicId = `${cleanProdId}_${uniqueSuffix}`;
+  const folder = 'products';
+  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+
+  // If upload preset is provided, support unsigned upload
+  if (uploadPreset) {
+    try {
+      const presetFormData = new FormData();
+      presetFormData.append('file', dataUrl);
+      presetFormData.append('upload_preset', uploadPreset);
+      presetFormData.append('folder', folder);
+      presetFormData.append('public_id', publicId);
+
+      const res = await fetch(endpoint, { method: 'POST', body: presetFormData });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.secure_url) {
+        return { success: true, url: data.secure_url, public_id: data.public_id };
+      }
+    } catch {
+      // Fall through to authenticated upload
+    }
+  }
+
+  if (!apiKey || !apiSecret) {
     const missing: string[] = [];
-    if (!cloudName) missing.push('CLOUDINARY_CLOUD_NAME');
     if (!apiKey) missing.push('CLOUDINARY_API_KEY');
     if (!apiSecret) missing.push('CLOUDINARY_API_SECRET');
     return {
@@ -615,13 +650,37 @@ async function uploadToCloudinary(
     };
   }
 
-  const cleanProdId = (productId || 'product').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-  const uniqueSuffix = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
-  const publicId = `${cleanProdId}_${uniqueSuffix}`;
-  const folder = 'products';
   const timestamp = Math.floor(Date.now() / 1000).toString();
 
-  // Cloudinary signature parameters sorted alphabetically: folder, public_id, timestamp
+  // ATTEMPT 1: Cloudinary official Basic Authentication for server-side uploads
+  try {
+    const basicAuth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+    const basicFormData = new FormData();
+    basicFormData.append('file', dataUrl);
+    basicFormData.append('folder', folder);
+    basicFormData.append('public_id', publicId);
+
+    const basicRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: basicFormData,
+    });
+
+    const basicData = await basicRes.json().catch(() => ({}));
+    if (basicRes.ok && basicData.secure_url) {
+      return {
+        success: true,
+        url: basicData.secure_url,
+        public_id: basicData.public_id,
+      };
+    }
+  } catch (basicErr) {
+    console.warn('Basic auth attempt error, falling back to signature:', basicErr);
+  }
+
+  // ATTEMPT 2: Signature-based upload (Sorted alphabetically: folder, public_id, timestamp)
   const uploadParams: Record<string, string> = {
     folder,
     public_id: publicId,
@@ -640,7 +699,6 @@ async function uploadToCloudinary(
   formData.append('folder', uploadParams.folder);
   formData.append('signature', signature);
 
-  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
   const response = await fetch(endpoint, {
     method: 'POST',
     body: formData,
@@ -651,7 +709,7 @@ async function uploadToCloudinary(
     const rawErrMsg = result.error?.message || `Cloudinary rejected upload (HTTP ${response.status}): ${JSON.stringify(result)}`;
     let errMsg = rawErrMsg;
     if (rawErrMsg.toLowerCase().includes('invalid signature')) {
-      errMsg = `Invalid signature from Cloudinary. String to sign was '${stringToSign}'. Please verify that CLOUDINARY_API_SECRET matches the exact API Secret for API Key '${apiKey.slice(0, 4)}***' in Cloud Name '${cloudName}'.`;
+      errMsg = `Cloudinary Invalid Signature: Your CLOUDINARY_API_SECRET does not match your CLOUDINARY_API_KEY ('${apiKey.slice(0, 4)}***') in Cloud Name '${cloudName}'. Please copy the exact API Secret from Cloudinary Console (Settings > Access Keys / API Keys) and update it in Vercel Environment Variables, then redeploy.`;
     }
     return { success: false, error: errMsg };
   }

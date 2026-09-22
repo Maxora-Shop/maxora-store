@@ -1,6 +1,7 @@
 import { Product } from '../types';
 
 export const SITE_URL = 'https://maxora-store-ruby.vercel.app';
+export const CUSTOMER_STOREFRONT_URL = 'https://maxora-store-ruby.vercel.app';
 export const STORE_NAME = 'Maxora Shop';
 
 /**
@@ -56,6 +57,54 @@ export function getProductCanonicalUrl(
 ): string {
   const slug = getProductSlug(product);
   return `${baseUrl.replace(/\/$/, '')}/product/${slug}`;
+}
+
+/**
+ * Gets the public customer storefront product URL.
+ * Base URL: https://maxora-store-ruby.vercel.app
+ * Final Format: https://maxora-store-ruby.vercel.app/product/{product-slug}
+ * Example: https://maxora-store-ruby.vercel.app/product/golden-4-digit-password-combination-padlock-heavy-duty-keyless-metal-lock-for-locker-gate-luggage
+ * 
+ * Rules:
+ * 1. Uses existing product slug if available and valid.
+ * 2. If no slug, generates clean slug from product name.
+ * 3. Never uses internal ID (e.g. prod-mucxnobc-429), admin URLs, or ?product= query strings.
+ */
+export function getProductStorefrontUrl(
+  product?: { slug?: string; name?: string; sku?: string; id?: string | number } | null,
+  baseUrl = CUSTOMER_STOREFRONT_URL
+): string {
+  if (!product) return `${baseUrl.replace(/\/$/, '')}/product/product`;
+
+  // 1. If valid slug exists, strictly use that exact slug
+  if (product.slug && product.slug.trim()) {
+    const rawSlug = product.slug.trim();
+    // Do not use internal random product ID as slug if name is available
+    if (!rawSlug.startsWith('prod-') || !product.name) {
+      const cleaned = generateSlug(rawSlug);
+      if (cleaned) {
+        return `${baseUrl.replace(/\/$/, '')}/product/${cleaned}`;
+      }
+    }
+  }
+
+  // 2. Generate slug from product name
+  if (product.name && product.name.trim()) {
+    const cleaned = generateSlug(product.name);
+    if (cleaned) {
+      return `${baseUrl.replace(/\/$/, '')}/product/${cleaned}`;
+    }
+  }
+
+  // 3. Fallback to existing slug or SKU
+  if (product.slug && product.slug.trim()) {
+    return `${baseUrl.replace(/\/$/, '')}/product/${generateSlug(product.slug)}`;
+  }
+  if (product.sku && product.sku.trim()) {
+    return `${baseUrl.replace(/\/$/, '')}/product/${generateSlug(product.sku)}`;
+  }
+
+  return `${baseUrl.replace(/\/$/, '')}/product/product`;
 }
 
 /**

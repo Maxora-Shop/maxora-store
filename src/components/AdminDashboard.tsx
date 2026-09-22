@@ -84,7 +84,7 @@ import { AdminAiAssistant } from './AdminAiAssistant';
 import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
-import { generateSlug, getProductSlug } from '../utils/seo';
+import { generateSlug, getProductSlug, getProductStorefrontUrl, CUSTOMER_STOREFRONT_URL } from '../utils/seo';
 import { isProductInCategory } from '../utils/categoryCompatibility';
 import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
@@ -1173,11 +1173,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     try {
       setLoading(true);
-      const cleanedSlug = generateSlug(editingProduct.slug || editingProduct.name);
+      const cleanedSlug = (editingProduct.slug && editingProduct.slug.trim())
+        ? generateSlug(editingProduct.slug)
+        : generateSlug(editingProduct.name);
       const publicImage = editingProduct.image_url || (Array.isArray(editingProduct.images) && editingProduct.images.length > 0 ? editingProduct.images[0] : '');
+      
+      // Ensure customer storefront product URL is correctly saved
+      let finalProductLink = editingProduct.product_link?.trim() || '';
+      if (!finalProductLink || finalProductLink.includes('?product=') || finalProductLink.includes('maxora-admin')) {
+        finalProductLink = `${CUSTOMER_STOREFRONT_URL}/product/${cleanedSlug}`;
+      } else if (finalProductLink.startsWith(`${CUSTOMER_STOREFRONT_URL}/product/`)) {
+        const [, searchParams] = finalProductLink.split('?');
+        const query = searchParams ? `?${searchParams}` : '';
+        finalProductLink = `${CUSTOMER_STOREFRONT_URL}/product/${cleanedSlug}${query}`;
+      }
+
       const productToSave: Product = {
         ...editingProduct,
         slug: cleanedSlug,
+        product_link: finalProductLink,
         og_image: editingProduct.og_image?.trim() || publicImage || '',
         meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
@@ -2950,29 +2964,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => {
-                                  const directLink = p.product_link || `${window.location.origin}/?product=${p.id}`;
+                                  const directLink = (p.product_link && !p.product_link.includes('?product=') && !p.product_link.includes('maxora-admin'))
+                                    ? p.product_link
+                                    : getProductStorefrontUrl(p);
                                   navigator.clipboard.writeText(directLink);
                                   showToast('Product link copied to clipboard! (প্রোডাক্ট লিংক কপি হয়েছে)', 'success');
                                 }}
                                 className="p-1.5 text-zinc-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                title="Copy Product Direct Link (ক্লিক করে সরাসরি প্রোডাক্টের লিংক কপি করুন)"
+                                title="Copy Product Direct Link (ক্লিক করে সরাসরি কাস্টমার স্টোরের লিংক কপি করুন)"
                               >
                                 <Link2 className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => {
+                                  const validSlug = p.slug?.trim() || (p.name ? generateSlug(p.name) : '');
+                                  const currentLink = p.product_link?.trim() || '';
+                                  const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                                    ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                                    : currentLink;
+
                                   setEditingProduct({
                                     ...p,
                                     sub_category: p.sub_category || '',
                                     child_category: p.child_category || '',
                                     product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
-                                    product_link: p.product_link || '',
+                                    product_link: initialLink,
                                     images: p.images || [],
                                     colors: p.colors || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
-                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    slug: validSlug,
                                     brand: p.brand || 'Maxora',
                                     og_image: p.og_image || p.image_url || '',
                                   });
@@ -2991,18 +3013,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </button>
                               <button
                                 onClick={() => {
+                                  const validSlug = p.slug?.trim() || (p.name ? generateSlug(p.name) : '');
+                                  const currentLink = p.product_link?.trim() || '';
+                                  const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                                    ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                                    : currentLink;
+
                                   setEditingProduct({
                                     ...p,
                                     sub_category: p.sub_category || '',
                                     child_category: p.child_category || '',
                                     product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
-                                    product_link: p.product_link || '',
+                                    product_link: initialLink,
                                     images: p.images || [],
                                     colors: p.colors || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
-                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    slug: validSlug,
                                     brand: p.brand || 'Maxora',
                                     og_image: p.og_image || p.image_url || '',
                                   });
@@ -3021,18 +3049,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </button>
                               <button
                                 onClick={() => {
+                                  const validSlug = p.slug?.trim() || (p.name ? generateSlug(p.name) : '');
+                                  const currentLink = p.product_link?.trim() || '';
+                                  const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                                    ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                                    : currentLink;
+
                                   setEditingProduct({
                                     ...p,
                                     sub_category: p.sub_category || '',
                                     child_category: p.child_category || '',
                                     product_type: p.product_type || availableProductTypes[0] || 'Standard Product',
-                                    product_link: p.product_link || '',
+                                    product_link: initialLink,
                                     images: p.images || [],
                                     colors: p.colors || [],
                                     meta_title: p.meta_title || '',
                                     meta_description: p.meta_description || '',
                                     meta_keywords: p.meta_keywords || '',
-                                    slug: p.slug || (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                                    slug: validSlug,
                                     brand: p.brand || 'Maxora',
                                     og_image: p.og_image || p.image_url || '',
                                   });
@@ -3084,18 +3118,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onSettingsUpdated();
               }}
               onSelectProduct={(prod) => {
+                const validSlug = prod.slug?.trim() || (prod.name ? generateSlug(prod.name) : '');
+                const currentLink = prod.product_link?.trim() || '';
+                const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                  ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                  : currentLink;
+
                 setEditingProduct({
                   ...prod,
                   sub_category: prod.sub_category || '',
                   child_category: prod.child_category || '',
                   product_type: prod.product_type || availableProductTypes[0] || 'Standard Product',
-                  product_link: prod.product_link || '',
+                  product_link: initialLink,
                   images: prod.images || [],
                   colors: prod.colors || [],
                   meta_title: prod.meta_title || '',
                   meta_description: prod.meta_description || '',
                   meta_keywords: prod.meta_keywords || '',
-                  slug: prod.slug || (prod.name ? prod.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : ''),
+                  slug: validSlug,
                   brand: prod.brand || 'Maxora',
                   og_image: prod.og_image || prod.image_url || '',
                 });
@@ -4598,10 +4638,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const newName = e.target.value;
                         const prevNameSlug = generateSlug(editingProduct?.name || '');
                         const shouldUpdateSlug = !editingProduct?.slug || editingProduct.slug === prevNameSlug;
+                        const newSlug = shouldUpdateSlug ? generateSlug(newName) : editingProduct.slug;
+
+                        const prevStorefrontUrl = `${CUSTOMER_STOREFRONT_URL}/product/${editingProduct?.slug || prevNameSlug}`;
+                        const isAutoLink = !editingProduct?.product_link ||
+                          editingProduct.product_link === prevStorefrontUrl ||
+                          editingProduct.product_link.includes('?product=') ||
+                          editingProduct.product_link.includes('maxora-admin');
+
+                        const newProductLink = (shouldUpdateSlug && isAutoLink && newSlug)
+                          ? `${CUSTOMER_STOREFRONT_URL}/product/${newSlug}`
+                          : (editingProduct?.product_link || (newSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${newSlug}` : ''));
+
                         setEditingProduct({
                           ...editingProduct,
                           name: newName,
-                          slug: shouldUpdateSlug ? generateSlug(newName) : editingProduct.slug,
+                          slug: newSlug,
+                          product_link: newProductLink,
                         });
                       }}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
@@ -5146,8 +5199,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const directId = editingProduct?.id || (editingProduct?.name ? editingProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : 'product');
-                          const autoLink = `${window.location.origin}/?product=${directId}`;
+                          const autoLink = getProductStorefrontUrl(editingProduct);
                           setEditingProduct({ ...editingProduct, product_link: autoLink });
                           showToast('Storefront direct product link generated!', 'success');
                         }}
@@ -5161,10 +5213,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="relative flex-1">
                         <input
                           type="text"
-                          placeholder="e.g. https://yourdomain.com/?product=watch-01 or custom landing link"
+                          placeholder="https://maxora-store-ruby.vercel.app/product/your-product-slug"
                           value={editingProduct?.product_link || ''}
                           onChange={(e) => setEditingProduct({ ...editingProduct, product_link: e.target.value })}
-                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"
                         />
                         <Link2 className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
                       </div>
@@ -5172,7 +5224,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(editingProduct.product_link || '');
+                            const linkToCopy = (editingProduct.product_link && !editingProduct.product_link.includes('?product=') && !editingProduct.product_link.includes('maxora-admin'))
+                              ? editingProduct.product_link
+                              : getProductStorefrontUrl(editingProduct);
+                            navigator.clipboard.writeText(linkToCopy);
                             showToast('Product link copied to clipboard!', 'success');
                           }}
                           className="px-3.5 py-2.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
@@ -5184,7 +5239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       )}
                     </div>
                     <p className="text-[11px] text-zinc-500">
-                      Facebook বা WhatsApp ক্যাম্পেইনের জন্য সরাসরি এই প্রোডাক্ট পেজে কাস্টমার আনার লিংক।
+                      Facebook বা WhatsApp ক্যাম্পেইনের জন্য সরাসরি এই প্রোডাক্ট পেজে কাস্টমার আনার লিংক (Customer Storefront URL)।
                     </p>
                   </div>
 
@@ -6106,7 +6161,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onClick={() => {
                           if (!editingProduct?.name) return;
                           const slug = generateSlug(editingProduct.name);
-                          setEditingProduct({ ...editingProduct, slug });
+                          const newProductLink = `${CUSTOMER_STOREFRONT_URL}/product/${slug}`;
+                          setEditingProduct({ ...editingProduct, slug, product_link: newProductLink });
                         }}
                         className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
                       >
@@ -6117,7 +6173,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       type="text"
                       placeholder="ultra-smart-watch-series-9"
                       value={editingProduct?.slug || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })}
+                      onChange={(e) => {
+                        const rawSlug = e.target.value;
+                        const cleanedSlug = generateSlug(rawSlug);
+                        const prevStorefrontUrl = `${CUSTOMER_STOREFRONT_URL}/product/${editingProduct?.slug || ''}`;
+                        const isAutoLink = !editingProduct?.product_link ||
+                          editingProduct.product_link === prevStorefrontUrl ||
+                          editingProduct.product_link.includes('?product=') ||
+                          editingProduct.product_link.includes('maxora-admin');
+
+                        setEditingProduct({
+                          ...editingProduct,
+                          slug: rawSlug,
+                          product_link: isAutoLink && cleanedSlug
+                            ? `${CUSTOMER_STOREFRONT_URL}/product/${cleanedSlug}`
+                            : editingProduct?.product_link,
+                        });
+                      }}
                       className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-mono"
                     />
                   </div>
