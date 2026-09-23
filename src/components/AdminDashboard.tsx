@@ -2319,6 +2319,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* Quick Promotion Banner: Free Delivery Campaign */}
+            <div className="bg-gradient-to-r from-emerald-950 via-zinc-900 to-zinc-900 text-white p-4 sm:p-5 rounded-2xl border border-emerald-500/30 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">
+                      Free Delivery Campaign (ফ্রি ডেলিভারি অফার)
+                    </h3>
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                      settingsForm.free_delivery_enabled !== false
+                        ? 'bg-emerald-500 text-zinc-950'
+                        : 'bg-zinc-700 text-zinc-300'
+                    }`}>
+                      {settingsForm.free_delivery_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 mt-0.5">
+                    {settingsForm.free_delivery_enabled !== false ? (
+                      <>
+                        কাস্টমার কার্টে <strong className="text-emerald-400 font-bold">৳{(settingsForm.free_delivery_threshold || 1500).toLocaleString('en-BD')}</strong> বা তার বেশি মূল্যের পণ্য থাকলে স্বয়ংক্রিয়ভাবে ফ্রি ডেলিভারি পাবেন।
+                      </>
+                    ) : (
+                      <>
+                        বর্তমানে ফ্রি ডেলিভারি অফার বন্ধ আছে। কাস্টমারদের কাছ থেকে রেগুলার ডেলিভারি চার্জ প্রযোজ্য হচ্ছে।
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange('settings')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs transition-all shadow-xs shrink-0 cursor-pointer"
+              >
+                <SettingsIcon className="w-3.5 h-3.5" />
+                <span>Manage in Settings</span>
+              </button>
+            </div>
+
             {/* Order Status Breakdown Bar */}
             <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
