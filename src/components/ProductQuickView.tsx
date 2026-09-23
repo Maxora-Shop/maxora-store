@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   ShoppingBag,
+  ShoppingCart,
   Truck,
   ShieldCheck,
   Check,
@@ -605,10 +606,10 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                       );
                       onClose();
                     }}
-                    className="flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+                    className="flex-1 py-3 px-4 rounded-xl font-black text-xs sm:text-sm bg-yellow-400 hover:bg-yellow-500 text-zinc-950 border border-yellow-500/50 shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
                   >
-                    <ShoppingBag className="w-4 h-4" />
-                    Add to Cart
+                    <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
+                    <span className="font-black text-zinc-950">Add to Cart</span>
                   </button>
 
                   <button

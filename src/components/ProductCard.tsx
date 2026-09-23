@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle, Flame } from 'lucide-react';
+import { ShoppingBag, ShoppingCart, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -343,31 +343,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {onBuyNow ? (
-            <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
+            <div className="grid grid-cols-2 gap-1 sm:gap-1.5 items-stretch">
               <button
                 type="button"
                 disabled={isOutOfStock}
                 onClick={() => onAddToCart(product)}
-                className={`w-full min-h-[36px] sm:min-h-[40px] py-1.5 px-1.5 xs:px-2 rounded-xl font-bold text-[10px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                className={`w-full h-9 sm:h-10 px-1 xs:px-1.5 sm:px-2 rounded-xl font-black text-[10.5px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 ${
                   isOutOfStock
-                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200"
                     : isAdded
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "bg-zinc-100 hover:bg-zinc-200 text-zinc-800 active:scale-98"
+                    ? "bg-emerald-600 text-white border border-emerald-600"
+                    : "bg-yellow-400 hover:bg-yellow-500 text-zinc-950 border border-yellow-500/50 shadow-xs"
                 }`}
                 title="Add to Cart"
               >
                 {isAdded ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-200" />
-                    <span>Added</span>
+                    <Check className="w-3.5 h-3.5 stroke-[3] text-white shrink-0" />
+                    <span className="font-black whitespace-nowrap">Added</span>
                   </>
                 ) : isOutOfStock ? (
-                  <span>Stock Out</span>
+                  <span className="font-bold whitespace-nowrap">Stock Out</span>
                 ) : (
                   <>
-                    <ShoppingBag className="w-3.5 h-3.5" />
-                    <span>Cart</span>
+                    <ShoppingCart className="w-3.5 h-3.5 stroke-[2.4] shrink-0 text-zinc-950" />
+                    <span className="font-black tracking-tight text-zinc-950 whitespace-nowrap">Cart</span>
                   </>
                 )}
               </button>
@@ -376,15 +376,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 type="button"
                 disabled={isOutOfStock}
                 onClick={() => onBuyNow(product)}
-                className={`w-full min-h-[36px] sm:min-h-[40px] py-1.5 px-1.5 xs:px-2 rounded-xl font-black text-[10px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs active:scale-98 ${
+                className={`w-full h-9 sm:h-10 px-1 xs:px-1.5 sm:px-2 rounded-xl font-black text-[10.5px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-98 ${
                   isOutOfStock
                     ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
                     : "bg-zinc-950 hover:bg-zinc-800 text-white"
                 }`}
                 title="Buy Now with Instant Checkout"
               >
-                <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
-                <span>Buy Now</span>
+                <Zap className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
+                <span className="font-black tracking-tight whitespace-nowrap">Buy Now</span>
               </button>
             </div>
           ) : (

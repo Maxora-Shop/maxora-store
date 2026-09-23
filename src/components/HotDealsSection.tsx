@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flame, ArrowRight, ShoppingBag, Eye, Check, Star, Heart, ExternalLink } from 'lucide-react';
+import { Flame, ArrowRight, ShoppingBag, ShoppingCart, Eye, Check, Star, Heart, ExternalLink } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -227,7 +227,7 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                   </div>
 
                   {/* Dual Action: Cart + Buy Now */}
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 items-stretch">
                     <button
                       type="button"
                       disabled={isOutOfStock}
@@ -235,24 +235,24 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                         e.stopPropagation();
                         onAddToCart(product);
                       }}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      className={`h-9 px-1.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
                           : isAdded
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 active:scale-95'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-yellow-400 hover:bg-yellow-500 text-zinc-950 border border-yellow-500/50'
                       }`}
                       title="Add to shopping cart"
                     >
                       {isAdded ? (
                         <>
-                          <Check className="w-3.5 h-3.5 text-emerald-200" />
-                          <span>Added</span>
+                          <Check className="w-3.5 h-3.5 stroke-[3] text-white shrink-0" />
+                          <span className="whitespace-nowrap">Added</span>
                         </>
                       ) : (
                         <>
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>Cart</span>
+                          <ShoppingCart className="w-3.5 h-3.5 stroke-[2.4] shrink-0 text-zinc-950" />
+                          <span className="whitespace-nowrap">Cart</span>
                         </>
                       )}
                     </button>
@@ -264,15 +264,15 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                         e.stopPropagation();
                         onBuyNow(product);
                       }}
-                      className={`py-2 px-2 rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 ${
+                      className={`h-9 px-1.5 rounded-xl text-xs font-black flex items-center justify-center gap-1 whitespace-nowrap transition-all shadow-xs cursor-pointer active:scale-95 ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                          : 'bg-rose-600 hover:bg-rose-700 text-white'
+                          : 'bg-zinc-950 hover:bg-zinc-800 text-white'
                       }`}
                       title="Buy now with 1-click checkout"
                     >
-                      <span>Buy Now</span>
-                      <ArrowRight className="w-3 h-3" />
+                      <span className="whitespace-nowrap">Buy Now</span>
+                      <ArrowRight className="w-3 h-3 text-yellow-400 shrink-0" />
                     </button>
                   </div>
                 </div>

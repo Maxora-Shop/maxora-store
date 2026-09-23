@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ShoppingBag,
+  ShoppingCart,
   Zap,
   Heart,
   Share2,
@@ -1061,7 +1062,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                 className={`w-full py-4 px-6 rounded-2xl border-2 font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 disabled:cursor-not-allowed ${
                   isAddedFeedback
                     ? 'border-emerald-600 bg-emerald-600 text-white'
-                    : 'border-zinc-950 bg-white hover:bg-zinc-100 text-zinc-950'
+                    : 'border-yellow-400 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 shadow-sm'
                 }`}
               >
                 {isAddedFeedback ? (
@@ -1071,8 +1072,8 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                   </>
                 ) : (
                   <>
-                    <ShoppingBag className="w-5 h-5" />
-                    <span>Add to Cart</span>
+                    <ShoppingCart className="w-5 h-5 stroke-[2.5] text-zinc-950" />
+                    <span className="font-black text-zinc-950">Add to Cart</span>
                   </>
                 )}
               </button>
@@ -1969,7 +1970,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 active:scale-95 transition-all cursor-pointer shadow-2xs ${
               isAddedFeedback
                 ? 'bg-emerald-600 border-emerald-600 text-white'
-                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-800'
+                : 'bg-yellow-400 hover:bg-yellow-500 border-yellow-500/50 text-zinc-950'
             }`}
             title="Add to Cart"
             aria-label="Add to Cart"
@@ -1977,7 +1978,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             {isAddedFeedback ? (
               <Check className="w-4 h-4 stroke-[3]" />
             ) : (
-              <ShoppingBag className="w-4 h-4" />
+              <ShoppingCart className="w-4 h-4 stroke-[2.5]" />
             )}
           </button>
 
