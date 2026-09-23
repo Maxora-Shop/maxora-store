@@ -157,7 +157,7 @@
     "seeded_v1": true,
     "tiktok": "https://tiktok.com/@maxorashop",
     "instagram": "https://instagram.com/maxora.store",
-    "updated_at": "2026-09-18T08:23:11.989Z",
+    "updated_at": "2026-09-23T04:07:19.142Z",
     "ai_faqs": [
       {
         "active": true,
@@ -201,7 +201,7 @@
       }
     ],
     "free_delivery_enabled": true,
-    "free_delivery_threshold": 2000
+    "free_delivery_threshold": 2500
   },
   "products": [
     {

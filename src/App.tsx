@@ -444,7 +444,10 @@ export default function App() {
       fetchProducts();
     };
 
-    const handleSettingsUpdated = () => {
+    const handleSettingsUpdated = (e?: any) => {
+      if (e?.detail) {
+        setSettings(e.detail);
+      }
       fetchSettings();
     };
 

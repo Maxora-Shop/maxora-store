@@ -267,6 +267,7 @@ export interface StoreSettings {
   custom_head_code?: string;
   custom_body_code?: string;
   custom_product_types?: string[];
+  updated_at?: string;
 }
 
 export interface DailySalesMetric {

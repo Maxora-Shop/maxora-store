@@ -73,14 +73,14 @@ function notifyProductsChanged(): void {
   }
 }
 
-function notifySettingsChanged(): void {
+function notifySettingsChanged(settings?: StoreSettings): void {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_settings_updated', { detail: settings }));
     try {
       localStorage.setItem('maxora_settings_sync', Date.now().toString());
     } catch {}
     try {
-      syncChannel?.postMessage({ type: 'settings' });
+      syncChannel?.postMessage({ type: 'settings', settings });
     } catch {}
   }
 }
@@ -828,7 +828,7 @@ export const storeService = {
     }
 
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    const updated = { ...current, ...settingsToSave };
+    const updated = { ...current, ...settingsToSave, updated_at: new Date().toISOString() };
     setLocal(SETTINGS_KEY, updated);
 
     // 1. Update Firestore (Await write as primary source of truth)
@@ -839,13 +839,24 @@ export const storeService = {
     }
 
     // 2. Persist to Backend API
-    tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(settingsToSave),
-    }).catch(() => {});
+    try {
+      const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
+        method: 'PUT',
+        headers: getAuthHeaders(adminPassword),
+        body: JSON.stringify(updated),
+      });
+      if (!apiRes.success) {
+        await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
+          method: 'PUT',
+          headers: getAuthHeaders(adminPassword),
+          body: JSON.stringify(updated),
+        });
+      }
+    } catch (err) {
+      console.warn('Backend API settings save error:', err);
+    }
 
-    notifySettingsChanged();
+    notifySettingsChanged(updated);
     return { success: true, settings: updated };
   },
 

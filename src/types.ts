@@ -309,6 +309,7 @@ export interface StoreSettings {
   ai_faqs?: AiFaqItem[];
   ai_custom_commands?: AiCustomCommand[];
   ai_system_instructions?: string;
+  updated_at?: string;
 }
 
 export interface DailySalesMetric {

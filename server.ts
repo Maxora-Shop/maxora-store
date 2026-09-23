@@ -356,6 +356,20 @@ app.post('/api/admin/login', (req, res) => {
 
 // GET /api/settings
 app.get('/api/settings', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json({
+    success: true,
+    settings: db.settings
+  });
+});
+
+// GET /api/admin/settings
+app.get('/api/admin/settings', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.json({
     success: true,
     settings: db.settings
@@ -1985,8 +1999,8 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
   });
 });
 
-// PUT /api/admin/settings
-app.put('/api/admin/settings', requireAdmin, async (req, res) => {
+// Unified Settings Save Handler (supports both /api/admin/settings and /api/settings)
+const handleSaveSettingsRoute = async (req: express.Request, res: express.Response) => {
   const body = req.body || {};
 
   // Safeguard: Automatically offload any raw data:image/ in hero_banners into db.uploaded_images
@@ -2013,12 +2027,21 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
     });
   }
 
+  // Coerce free_delivery_threshold to number if provided
+  if (body.free_delivery_threshold !== undefined && body.free_delivery_threshold !== null && body.free_delivery_threshold !== '') {
+    body.free_delivery_threshold = Number(body.free_delivery_threshold);
+  }
+
   db.settings = {
     ...db.settings,
-    ...body
+    ...body,
+    updated_at: new Date().toISOString()
   };
   saveDB();
 
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.json({
     success: true,
     message: "Settings saved successfully.",
@@ -2034,7 +2057,13 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   } catch (err) {
     console.warn('Firestore settings instance note:', err);
   }
-});
+};
+
+// Route bindings for Admin & Public Settings persistence
+app.put('/api/admin/settings', requireAdmin, handleSaveSettingsRoute);
+app.post('/api/admin/settings', requireAdmin, handleSaveSettingsRoute);
+app.put('/api/settings', handleSaveSettingsRoute);
+app.post('/api/settings', handleSaveSettingsRoute);
 
 // GET /api/categories
 app.get('/api/categories', (req, res) => {

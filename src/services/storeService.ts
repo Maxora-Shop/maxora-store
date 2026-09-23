@@ -42,7 +42,7 @@ if (syncChannel && typeof window !== 'undefined') {
     if (type === 'products') {
       window.dispatchEvent(new CustomEvent('maxora_products_updated'));
     } else if (type === 'settings') {
-      window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+      window.dispatchEvent(new CustomEvent('maxora_settings_updated', { detail: event.data?.settings }));
     } else if (type === 'categories') {
       window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
     } else if (type === 'orders') {
@@ -73,14 +73,14 @@ function notifyProductsChanged(): void {
   }
 }
 
-function notifySettingsChanged(): void {
+function notifySettingsChanged(settings?: StoreSettings): void {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+    window.dispatchEvent(new CustomEvent('maxora_settings_updated', { detail: settings }));
     try {
       localStorage.setItem('maxora_settings_sync', Date.now().toString());
     } catch {}
     try {
-      syncChannel?.postMessage({ type: 'settings' });
+      syncChannel?.postMessage({ type: 'settings', settings });
     } catch {}
   }
 }
@@ -803,26 +803,40 @@ export const storeService = {
     try {
       const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
       if (apiResult.success && apiResult.data?.settings) {
-        const merged = { ...current, ...apiResult.data.settings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
+        const serverSettings = apiResult.data.settings;
+        const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
+        const serverTime = serverSettings.updated_at ? new Date(serverSettings.updated_at).getTime() : 0;
+
+        if (serverTime >= localTime || !localTime) {
+          current = { ...current, ...serverSettings };
+          setLocal(SETTINGS_KEY, current);
+        } else {
+          // If local has newer updates (e.g. from an immediate save), don't wipe it with stale server data
+          this.updateSettings(current).catch(() => {});
+        }
+        return current;
       }
     } catch (apiErr) {
       console.warn('API getSettings error:', apiErr);
     }
     
     // 2. Query Firestore directly (single doc read, ultra-lightweight)
-    try {
-      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-      if (docSnap.exists()) {
-        const firestoreSettings = docSnap.data() as StoreSettings;
-        current = { ...current, ...firestoreSettings };
-        setLocal(SETTINGS_KEY, current);
-        return current;
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (docSnap.exists()) {
+          const firestoreSettings = docSnap.data() as StoreSettings;
+          const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
+          const fsTime = firestoreSettings.updated_at ? new Date(firestoreSettings.updated_at).getTime() : 0;
+          if (fsTime >= localTime || !localTime) {
+            current = { ...current, ...firestoreSettings };
+            setLocal(SETTINGS_KEY, current);
+          }
+          return current;
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getSettings note', e);
       }
-    } catch (e) {
-      // Only log if not generic quota notice
-      console.warn('Firestore getSettings note:', e);
     }
 
     return current;
@@ -900,21 +914,29 @@ export const storeService = {
       });
       if (apiRes.success && apiRes.data?.settings) {
         updated = { ...updated, ...apiRes.data.settings };
+      } else {
+        const altRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
+          method: 'PUT',
+          headers: getAuthHeaders(adminPassword),
+          body: JSON.stringify(updated),
+        });
+        if (altRes.success && altRes.data?.settings) {
+          updated = { ...updated, ...altRes.data.settings };
+        }
       }
     } catch (e) {
       console.warn('API updateSettings notice:', e);
     }
 
+    updated.updated_at = new Date().toISOString();
     setLocal(SETTINGS_KEY, updated);
 
-    // 2. Mirror to Firestore in background without blocking UI
-    if (!isClientQuotaCooldownActive()) {
-      setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
-        handleStoreFirestoreError('Firestore updateSettings mirror', e);
-      });
-    }
+    // 2. Mirror to Firestore in background without blocking UI (writes never blocked)
+    setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
+      console.warn('Firestore updateSettings mirror note:', e?.message || e);
+    });
 
-    notifySettingsChanged();
+    notifySettingsChanged(updated);
     return { success: true, settings: updated };
   },
 

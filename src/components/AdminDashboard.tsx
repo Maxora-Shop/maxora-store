@@ -1531,14 +1531,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveFreeDeliverySettings = async () => {
     try {
       setLoading(true);
-      const threshold = Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 2000;
+      const val = Number(settingsForm.free_delivery_threshold);
+      const threshold = !isNaN(val) && val > 0 ? val : 2500;
       const updated = {
         ...settingsForm,
         free_delivery_enabled: settingsForm.free_delivery_enabled !== false,
         free_delivery_threshold: threshold,
+        updated_at: new Date().toISOString(),
       };
       setSettingsForm(updated);
-      await storeService.saveSettings(updated, password);
+      const res = await storeService.saveSettings(updated, password);
+      if (res?.settings) {
+        setSettingsForm(res.settings);
+      }
       showToast(`ফ্রি ডেলিভারি অফার সংরক্ষিত হয়েছে! (টার্গেট: ৳${threshold.toLocaleString('en-BD')})`, 'success');
       onSettingsUpdated();
     } catch (err: any) {
@@ -4445,10 +4450,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <input
                                 type="number"
                                 min="1"
-                                value={settingsForm.free_delivery_threshold ?? 2000}
-                                onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_threshold: Number(e.target.value) })}
+                                value={settingsForm.free_delivery_threshold !== undefined && settingsForm.free_delivery_threshold !== null ? settingsForm.free_delivery_threshold : ''}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_threshold: e.target.value === '' ? '' as any : Number(e.target.value) })}
                                 className="w-full bg-white text-zinc-900 text-sm pl-7 pr-3 py-2 rounded-xl border border-emerald-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-black shadow-2xs"
-                                placeholder="2000"
+                                placeholder="e.g. 2000 or 2500"
                               />
                             </div>
                           </div>
@@ -4458,7 +4463,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Instant Save Button inside Free Delivery card */}
                       <div className="pt-3 border-t border-emerald-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="text-[11px] text-emerald-800 font-medium text-center sm:text-left">
-                          বর্তমান ফ্রি ডেলিভারি টার্গেট: <strong className="font-extrabold text-emerald-950">৳{(settingsForm.free_delivery_threshold || 2000).toLocaleString('en-BD')}</strong>
+                          বর্তমান ফ্রি ডেলিভারি টার্গেট: <strong className="font-extrabold text-emerald-950">৳{Number(settingsForm.free_delivery_threshold || 0).toLocaleString('en-BD')}</strong>
                         </div>
                         <button
                           type="button"
