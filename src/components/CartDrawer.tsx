@@ -104,9 +104,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     )}
                   </span>
                 </div>
-                <span className="text-[10px] sm:text-[11px] font-black text-zinc-600 shrink-0 bg-white px-2 py-0.5 rounded-full border border-zinc-200/80 shadow-2xs">
-                  {progressPercent}%
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isFreeShippingUnlocked ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-100 text-emerald-800 font-black px-2 py-0.5 rounded-full shadow-2xs">
+                      <Sparkles className="w-3 h-3 text-emerald-600 animate-spin-slow" /> চার্জ ৳০
+                    </span>
+                  ) : progressPercent >= 70 ? (
+                    <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                      কাছাকাছি! 🔥
+                    </span>
+                  ) : null}
+                  <span className="text-[10px] sm:text-[11px] font-black text-zinc-600 shrink-0 bg-white px-2 py-0.5 rounded-full border border-zinc-200/80 shadow-2xs">
+                    {progressPercent}%
+                  </span>
+                </div>
               </div>
 
               {/* Progress Track */}

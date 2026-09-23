@@ -513,11 +513,11 @@ export function clientFallbackAnswer(
     q.includes('ফেরত') ||
     q.includes('replacement')
   ) {
-    let reply = `Maxora-তে রয়েছে **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি**। পণ্যে কোনো উৎপাদনগত ত্রুটি থাকলে আমাদের WhatsApp সাপোর্টে জানালে তাৎক্ষণিক সমাধান বা রিপ্লেসমেন্ট দেওয়া হবে।`;
+    let reply = `Maxora-তে আপনি ডেলিভারি ম্যানের সামনে পার্সেলটি সম্পূর্ণ চেক করে নিশ্চিত হয়ে মূল্য পরিশোধ করতে পারবেন। পণ্যে কোনো ডিফেক্ট থাকলে সাথে সাথে রিটার্ন করার সুযোগ রয়েছে।`;
     if (lang === 'en') {
-      reply = `Maxora provides a **7 Days Easy Replacement Warranty**! If you encounter any manufacturing defect, reach out to our WhatsApp support team for a quick replacement.`;
+      reply = `Maxora offers 100% Cash on Delivery with full parcel inspection in front of the courier agent! If you notice any defect or issue upon delivery, you can return it instantly.`;
     } else if (lang === 'banglish') {
-      reply = `Maxora-te royeche **7 Days Easy Replacement Warranty**! Product-e kono problem thakle 7 diner moddhe amader WhatsApp support-e janale replacement peye jaben.`;
+      reply = `Maxora-te apni delivery man-er samne parcel check kore confirm hoye payment korte parben. Kono defect ba problem thakle instant return korar shubidha ache.`;
     }
     return {
       reply,

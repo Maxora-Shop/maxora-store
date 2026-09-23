@@ -155,7 +155,7 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
 </ul>
 
 <h3 style="color: #7c3aed; font-weight: bold;">স্পেসিফিকেশন (Specifications)</h3>
-<p><strong>মডেল:</strong> অফিসিয়াল সংস্করণ<br><strong>কালার:</strong> ব্ল্যাক / হোয়াইট<br><strong>ওয়ারেন্টি:</strong> ৭ দিনের রিপ্লেসমেন্ট ও অফিসিয়াল সার্ভিস ওয়ারেন্টি</p>
+<p><strong>মডেল:</strong> অফিসিয়াল সংস্করণ<br><strong>কালার:</strong> ব্ল্যাক / হোয়াইট<br><strong>ওয়ারেন্টি:</strong> অফিসিয়াল সার্ভিস ওয়ারেন্টি ও অথেনটিক পণ্য গ্যারান্টি</p>
     `.trim();
 
     if (isHtmlMode) {

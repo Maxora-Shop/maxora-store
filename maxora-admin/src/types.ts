@@ -138,6 +138,7 @@ export interface Product {
   flash_sale_start?: string;
   flash_sale_end?: string;
   sold_count?: number;
+  video_url?: string;
   rating?: number;
   rating_count?: number;
 }

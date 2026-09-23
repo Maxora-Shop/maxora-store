@@ -404,11 +404,11 @@ function matchLocalIntent(
   ) {
     let reply = '';
     if (lang === 'en') {
-      reply = `Maxora offers a **7 Days Easy Replacement Warranty**!\n\nIf you receive a defective or damaged product, simply contact our WhatsApp support team within 7 days of receiving the delivery with an unboxing photo/video. We will immediately replace it for you with zero hassle.`;
+      reply = `Maxora offers 100% Cash on Delivery with the freedom to inspect your parcel in front of the courier delivery agent! If you find any defect or damage upon delivery, you can return it right then and there with zero hassle.`;
     } else if (lang === 'banglish') {
-      reply = `Maxora-te royeche **7 Days Easy Replacement Warranty**!\n\nDelivery paowar por product-e kono manufacturing defect ba damage thakle 7 diner moddhe amader WhatsApp support-e janale druto replacement peye jaben.`;
+      reply = `Maxora-te apni delivery man-er samne parcel open kore product check kore dekhe payment korte parben. Kono defect ba shomoshya thakle delivery man-er kachei instant return korte parben.`;
     } else {
-      reply = `Maxora-তে আপনি পাবেন **৭ দিনের সহজ রিপ্লেসমেন্ট ওয়ারেন্টি (7 Days Replacement Warranty)**।\n\nপণ্য ডেলিভারি পাওয়ার পর কোনো ম্যানুফ্যাকচারিং ত্রুটি বা সমস্যা থাকলে ৭ দিনের মধ্যে আমাদের হেল্পলাইন বা WhatsApp-এ জানালে সাথে সাথে সমাধান বা রিপ্লেসমেন্ট প্রদান করা হবে।`;
+      reply = `Maxora-তে আপনি ডেলিভারি ম্যানের সামনে পার্সেলটি সম্পূর্ণ চেক করে নিশ্চিত হয়ে মূল্য পরিশোধ করতে পারবেন। ডেলিভারি পাওয়ার সময় কোনো সমস্যা বা ডিফেক্ট থাকলে সাথে সাথে ডেলিভারি ম্যানের কাছে রিটার্ন করার সুযোগ রয়েছে।`;
     }
     return {
       reply,
@@ -476,11 +476,11 @@ function matchLocalIntent(
   ) {
     let reply = '';
     if (lang === 'en') {
-      reply = `Yes, 100%! All products sold on Maxora are guaranteed authentic, brand new, and thoroughly inspected before dispatch. You get 100% Cash on Delivery and a 7 Days Replacement Warranty so you can shop with complete peace of mind.`;
+      reply = `Yes, 100%! All products sold on Maxora are guaranteed authentic, brand new, and thoroughly inspected before dispatch. You get 100% Cash on Delivery and full parcel inspection upon delivery so you can shop with complete peace of mind.`;
     } else if (lang === 'banglish') {
-      reply = `Ji haan, 100%! Maxora-r shob product shoto-bhaag original, authentic ebong quality check kore pathano hoy. Sathe 100% Cash on Delivery ebong 7 Days Replacement Warranty royeche, tai kono risk nei!`;
+      reply = `Ji haan, 100%! Maxora-r shob product shoto-bhaag original, authentic ebong quality check kore pathano hoy. Sathe 100% Cash on Delivery ebong delivery-r shomoy parcel check korar shubidha royeche!`;
     } else {
-      reply = `জি হ্যাঁ, শতভাগ নিশ্চিত থাকুন! Maxora-র সকল পণ্য ১০০% আসল, নতুন ও কোয়ালিটি টেস্ট করা। সাথে পাচ্ছেন সারা বাংলাদেশে ক্যাশ অন ডেলিভারি এবং ৭ দিনের রিপ্লেসমেন্ট ওয়ারেন্টি—তাই নিশ্চিন্তে অর্ডার করতে পারেন।`;
+      reply = `জি হ্যাঁ, শতভাগ নিশ্চিত থাকুন! Maxora-র সকল পণ্য ১০০% আসল, নতুন ও কোয়ালিটি টেস্ট করা। সাথে পাচ্ছেন সারা বাংলাদেশে ক্যাশ অন ডেলিভারি এবং ডেলিভারি ম্যানের সামনে পণ্য চেক করে নেওয়ার সুবিধা—তাই নিশ্চিন্তে অর্ডার করতে পারেন।`;
     }
     return {
       reply,
@@ -925,9 +925,9 @@ You know EVERYTHING about the Maxora e-commerce store and website:
 5. **ORDER TRACKING**:
    - Customers can track their placed order anytime directly on the website at the "Track Order" page (/track-order) using their phone number or Order ID.
 
-6. **WARRANTY, RETURNS & REPLACEMENT**:
-   - Maxora provides a 7 Days Easy Replacement Warranty for manufacturing defects.
-   - If a product is defective or damaged during courier shipping, the customer simply contacts WhatsApp support within 7 days (with parcel unboxing photo/video) for a quick replacement.
+6. **WARRANTY, RETURNS & INSPECTION**:
+   - Customers can inspect their parcel directly in front of the delivery courier before making payment.
+   - If a product is defective or damaged during courier shipping, the customer can return it immediately with the courier or contact WhatsApp support for resolution.
 
 7. **AUTHENTICITY & STORE TRUST**:
    - Maxora is a trusted, registered online retailer in Bangladesh. All products are 100% authentic, brand-new, and strictly quality-tested before packaging.

@@ -62,9 +62,9 @@ A: Yes! You can inspect the package in front of the courier delivery agent befor
         content: `
 At Maxora Shop BD, customer satisfaction is our top priority:
 
-1. **7-Day Replacement Guarantee**: If the product is defective, damaged, or does not match the description upon arrival, notify us within 7 days for a hassle-free replacement.
-2. **Defect Inspection**: Please check the product thoroughly upon delivery. If any defect is noticed, you can return it directly with the delivery agent or contact our hotline.
-3. **Condition**: The item must be in its original packaging with all included accessories and intact warranty stickers.
+1. **Delivery Inspection & Return**: Please check the product thoroughly in front of the courier delivery agent. If any defect or issue is noticed upon delivery, you can return it directly with the delivery agent or contact our hotline immediately.
+2. **Authenticity Guarantee**: All products on Maxora are 100% brand new, authentic, and inspected prior to shipping.
+3. **Condition**: If returned at delivery, the item must be in its original packaging with all included accessories intact.
         `,
       });
     } else if (type === 'privacy') {

@@ -452,7 +452,7 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-800 shrink-0" />
-                    <span>7 days easy return & replacement warranty</span>
+                    <span>100% authentic product & check parcel upon delivery</span>
                   </div>
                 </div>
 

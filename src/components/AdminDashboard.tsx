@@ -58,6 +58,7 @@ import {
   Loader2,
   Bot,
   KeyRound,
+  Film,
   Mail,
   ArrowLeft,
   CheckCircle2,
@@ -5512,6 +5513,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <p className="text-[11px] text-zinc-500">
                       Facebook বা WhatsApp ক্যাম্পেইনের জন্য সরাসরি এই প্রোডাক্ট পেজে কাস্টমার আনার লিংক (Customer Storefront URL)।
+                    </p>
+                  </div>
+
+                  {/* Product Video / YouTube URL */}
+                  <div className="bg-zinc-50/90 p-4 rounded-2xl border border-zinc-200/90 space-y-2.5">
+                    <label className="block text-xs font-bold text-zinc-800 flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Product Video / YouTube Unboxing URL (ভিডিও লিংক)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=... or https://youtu.be/..."
+                        value={editingProduct?.video_url || ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, video_url: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-500 font-mono"
+                      />
+                      <Film className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      ইউটিউব বা ভিডিও লিংক দিলে প্রোডাক্ট পেজে "ভিডিও ডেমো" বাটন এবং লাইভ আনবক্সিং ট্যাব চালু হবে।
                     </p>
                   </div>
 

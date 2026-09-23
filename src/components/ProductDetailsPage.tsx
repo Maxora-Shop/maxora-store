@@ -31,6 +31,8 @@ import {
   Flame,
   Camera,
   Image as ImageIcon,
+  Play,
+  Film,
 } from 'lucide-react';
 import { Product, StoreSettings, Review, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
@@ -40,6 +42,9 @@ import { storeService } from '../services/storeService';
 import { ProductCard } from './ProductCard';
 import { recordProductView } from '../utils/recentViews';
 import { RecentlyViewedSection } from './RecentlyViewedSection';
+import { DeliveryEstimator } from './DeliveryEstimator';
+import { ProductVideoModal, getEmbedUrl } from './ProductVideoModal';
+import { FrequentlyBoughtTogether } from './FrequentlyBoughtTogether';
 
 interface ProductDetailsPageProps {
   product: Product;
@@ -129,6 +134,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   const [showShareMenu, setShowShareMenu] = useState<boolean>(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [lightboxIndex, setLightboxIndex] = useState<number>(0);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState<boolean>(false);
   const [isAddedFeedback, setIsAddedFeedback] = useState<boolean>(false);
 
   // Zoom magnifier states
@@ -541,6 +547,11 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
       list.push({ id: 'policy', label: 'Return & Warranty', icon: <ShieldCheck className="w-4 h-4" /> });
     }
     list.push({
+      id: 'video',
+      label: 'Video & Unboxing',
+      icon: <Film className="w-4 h-4 text-rose-500" />,
+    });
+    list.push({
       id: 'reviews',
       label: 'Verified Reviews',
       icon: <Star className="w-4 h-4" />,
@@ -644,6 +655,17 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
 
             {/* Lightbox / Zoom Action Buttons */}
             <div className="absolute top-4 right-4 flex items-center gap-1.5 z-10">
+              <button
+                type="button"
+                onClick={() => setIsVideoModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-rose-600/95 hover:bg-rose-600 text-white font-black text-[11px] shadow-sm flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95 backdrop-blur-xs"
+                title="Watch Product Video & Unboxing Demo"
+                aria-label="Watch Video Demo"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span className="hidden sm:inline">ভিডিও ডেমো</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1057,45 +1079,8 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             </div>
           </div>
 
-          {/* Trust Guarantees & Delivery Benefits Card */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 border border-zinc-200/90 divide-y divide-zinc-200/60 text-xs">
-            <div className="pb-3 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 mt-0.5">
-                <Truck className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="font-extrabold text-zinc-900">Fast Nationwide Delivery (৬৪ জেলায় দ্রুত ডেলিভারি)</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  Dhaka: ৳{settings.delivery_inside_dhaka || '70'} (24-48 Hours) • Outside Dhaka: ৳
-                  {settings.delivery_outside_dhaka || '130'} (48-72 Hours)
-                </p>
-              </div>
-            </div>
-
-            <div className="py-3 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 mt-0.5">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="font-extrabold text-zinc-900">100% Cash on Delivery & Tested Quality</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  প্যাকেজ রিসিভ করার সময় দেখে পেমেন্ট করার সুযোগ। কোয়ালিটি পরীক্ষিত আসল পণ্য।
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-3 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
-                <RotateCcw className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="font-extrabold text-zinc-900">7 Days Easy Replacement Warranty</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  যেকোনো ত্রুটি থাকলে ৭ দিনের মধ্যে সরাসরি রিপ্লেসমেন্ট সুবিধা।
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* Dynamic Delivery Calculator & Shipping Estimator */}
+          <DeliveryEstimator settings={settings} productPrice={finalPrice} />
 
           {/* Hotline Quick Call (if available in settings) */}
           {settings.phone && (
@@ -1114,6 +1099,22 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
           )}
         </div>
       </div>
+
+      {/* FREQUENTLY BOUGHT TOGETHER / COMBO BUNDLE OFFER */}
+      <FrequentlyBoughtTogether
+        mainProduct={product}
+        allProducts={allProducts}
+        onAddBundleToCart={(bundle) => {
+          bundle.forEach((p) => {
+            onAddToCart(p, 1);
+          });
+        }}
+        onSelectProduct={(p) => {
+          if (onSelectProduct) {
+            onSelectProduct(p);
+          }
+        }}
+      />
 
       {/* 3. FULL-WIDTH PRODUCT DETAILS / DESCRIPTION SECTION */}
       <section
@@ -1311,11 +1312,11 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-2">
                   <h4 className="font-extrabold text-amber-950 text-xs sm:text-sm flex items-center gap-1.5">
-                    <RotateCcw className="w-4 h-4 text-amber-700" />
-                    <span>7-Day Replacement Policy</span>
+                    <ShieldCheck className="w-4 h-4 text-amber-700" />
+                    <span>Inspection on Delivery (পণ্য দেখে গ্রহণের সুযোগ)</span>
                   </h4>
                   <p className="text-xs text-amber-900 leading-relaxed font-medium">
-                    প্রোডাক্টে কোনো ম্যানুফ্যাকচারিং ত্রুটি থাকলে ডেলিভারি পাওয়ার ৭ দিনের মধ্যে আমাদের কাস্টমার সাপোর্টে কল করে তাৎক্ষণিক রিপ্লেসমেন্ট গ্রহণ করতে পারবেন।
+                    ডেলিভারি ম্যানের সামনে পার্সেলটি খুলে পণ্য সম্পূর্ণ চেক করে নিশ্চিত হয়ে মূল্য পরিশোধ করুন। কোনো সমস্যা থাকলে তাৎক্ষণিক রিটার্ন করার সুযোগ রয়েছে।
                   </p>
                 </div>
 
@@ -1328,6 +1329,61 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                     <li>প্রোডাক্টের আসল বক্স ও এক্সেসরিজ অক্ষত থাকতে হবে।</li>
                     <li>ফিজিক্যাল ড্যামেজ বা পানিতে ভেজার ক্ষেত্রে রিটার্ন প্রযোজ্য নয়।</li>
                   </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: VIDEO & LIVE UNBOXING DEMO */}
+          {activeTab === 'video' && (
+            <div className="space-y-6 max-w-4xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-2 border-b border-zinc-150">
+                <div className="flex items-center gap-2">
+                  <Film className="w-5 h-5 text-rose-600" />
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-zinc-950">
+                      Product Video & Live Unboxing Demo (ভিডিও ডেমো)
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      প্রোডাক্টটির আসল লুক, ফিনিশিং ও কাজের লাইভ ভিডিও ডেমোস্ট্রেশন
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsVideoModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>ফুলস্ক্রিন দেখুন</span>
+                </button>
+              </div>
+
+              {/* Embedded Video Showcase Player */}
+              <div className="relative aspect-video w-full rounded-3xl overflow-hidden bg-black border border-zinc-200 shadow-md">
+                <iframe
+                  src={getEmbedUrl(product.video_url).url}
+                  title={`${product.name} Video Showcase`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  className="w-full h-full border-0"
+                />
+              </div>
+
+              {/* Feature inspection cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center gap-2.5 text-xs text-zinc-800">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-bold">১০০% অথেনটিক রিয়েল ডিভাইস</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center gap-2.5 text-xs text-zinc-800">
+                  <Package className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="font-bold">অরিজিনাল ইন-বক্স এক্সেসরিজ</span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 flex items-center gap-2.5 text-xs text-zinc-800">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="font-bold">টেস্টেড ও ভেরিফাইড পারফরম্যান্স</span>
                 </div>
               </div>
             </div>
@@ -1861,6 +1917,14 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
           )}
         </div>
       )}
+
+      {/* PRODUCT VIDEO / UNBOXING MODAL */}
+      <ProductVideoModal
+        isOpen={isVideoModalOpen}
+        onClose={() => setIsVideoModalOpen(false)}
+        videoUrl={product.video_url}
+        productName={product.name}
+      />
 
       {/* 8. MOBILE STICKY BOTTOM PURCHASE BAR */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200/90 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2.5">
