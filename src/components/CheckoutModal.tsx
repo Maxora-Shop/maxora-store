@@ -265,6 +265,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           ) : (
             /* Checkout Form */
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Quick Trust Banner inside Checkout */}
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/90 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-emerald-950 truncate">
+                      ১০০% ক্যাশ অন ডেলিভারি (Cash on Delivery)
+                    </p>
+                    <p className="text-[11px] text-emerald-800/90 font-medium truncate">
+                      ডেলিভারিম্যানের কাছ থেকে পণ্য বুঝে পেয়ে পেমেন্ট করুন
+                    </p>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex text-[10px] font-black uppercase tracking-wider bg-emerald-200/70 text-emerald-900 px-2.5 py-1 rounded-full shrink-0">
+                  Verified Order
+                </span>
+              </div>
+
               {errorMessage && (
                 <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />

@@ -8,6 +8,9 @@ import {
   ShoppingBag,
   Banknote,
   ShieldCheck,
+  Sparkles,
+  Zap,
+  Tag,
 } from 'lucide-react';
 import { Product, StoreSettings, HeroBanner } from '../types';
 import { DEFAULT_HERO_BANNERS } from '../data/initialData';
@@ -395,7 +398,7 @@ export const Hero: React.FC<HeroProps> = ({
 
         {/* Carousel Pagination Dots at Bottom */}
         {slides.length > 1 && (
-          <div className="flex items-center justify-center gap-1.5 mt-4 sm:mt-6">
+          <div className="flex items-center justify-center gap-1.5 mt-4 sm:mt-5">
             {slides.map((_, idx) => (
               <button
                 key={idx}
@@ -409,6 +412,81 @@ export const Hero: React.FC<HeroProps> = ({
             ))}
           </div>
         )}
+
+        {/* Hero Highlight Promo Cards (Admin Configurable) */}
+        <div className="mt-4 sm:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3.5">
+          {/* Promo Card 1 */}
+          <div
+            onClick={onExploreClick}
+            className="group relative overflow-hidden p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-emerald-50/40 border border-emerald-200/90 shadow-2xs hover:shadow-xs transition-all duration-300 cursor-pointer flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md mb-0.5">
+                  {settings.hero_promo_card_1_badge || 'Free Shipping'}
+                </span>
+                <h4 className="text-xs sm:text-sm font-black text-zinc-900 leading-tight truncate">
+                  {settings.hero_promo_card_1_title || (settings.free_delivery_enabled !== false ? `Orders Over ৳${Number(settings.free_delivery_threshold || 2000).toLocaleString('en-BD')}` : 'Fast Nationwide Delivery')}
+                </h4>
+                <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
+                  {settings.hero_promo_card_1_subtitle || 'সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি'}
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-emerald-700 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+          </div>
+
+          {/* Promo Card 2 */}
+          <div
+            onClick={onExploreClick}
+            className="group relative overflow-hidden p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-white to-amber-50/40 border border-amber-200/90 shadow-2xs hover:shadow-xs transition-all duration-300 cursor-pointer flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-zinc-950 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-block text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-md mb-0.5">
+                  {settings.hero_promo_card_2_badge || '100% Trust'}
+                </span>
+                <h4 className="text-xs sm:text-sm font-black text-zinc-900 leading-tight truncate">
+                  {settings.hero_promo_card_2_title || 'Cash on Delivery'}
+                </h4>
+                <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
+                  {settings.hero_promo_card_2_subtitle || 'পণ্য হাতে পেয়ে চেক করে পেমেন্ট করুন'}
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-amber-700 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+          </div>
+
+          {/* Promo Card 3 */}
+          <div
+            onClick={onExploreClick}
+            className="group relative overflow-hidden p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-purple-50/40 border border-indigo-200/90 shadow-2xs hover:shadow-xs transition-all duration-300 cursor-pointer flex items-center justify-between gap-3 sm:col-span-1"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-zinc-950 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                <Zap className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+              </div>
+              <div className="min-w-0">
+                <span className="inline-block text-[10px] font-black uppercase tracking-wider text-indigo-900 bg-indigo-100/90 px-2 py-0.5 rounded-md mb-0.5">
+                  {settings.hero_promo_card_3_badge || 'Hot Deals'}
+                </span>
+                <h4 className="text-xs sm:text-sm font-black text-zinc-900 leading-tight truncate">
+                  {settings.hero_promo_card_3_title || 'Mega Flash Discount'}
+                </h4>
+                <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
+                  {settings.hero_promo_card_3_subtitle || 'বেস্ট কোয়ালিটি গ্যাজেট ও লাইফস্টাইল'}
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-zinc-900 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all shrink-0" />
+          </div>
+        </div>
         </div>
       )}
     </section>

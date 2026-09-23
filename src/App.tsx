@@ -1754,7 +1754,7 @@ export default function App() {
             />
 
             {/* Trust & Guarantee Section (Free Shipping, Secure Payment, Check Before You Accept, 24/7 Support) */}
-            <TrustBenefitsSection />
+            <TrustBenefitsSection settings={settings} />
           </>
         )}
       </main>

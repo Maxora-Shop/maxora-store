@@ -62,6 +62,8 @@ import {
   Mail,
   ArrowLeft,
   CheckCircle2,
+  Headphones,
+  Zap,
 } from 'lucide-react';
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
@@ -4551,6 +4553,246 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* Trust Benefits & Guarantee Badges Customization */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 border border-zinc-200/90 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-black text-zinc-900">
+                          Trust & Guarantee Badges (ট্রাস্ট ও সিকিউরিটি কার্ড কাস্টমাইজেশন)
+                        </h4>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          ওয়েবসাইটের ফুটারের উপরের ৪টি ট্রাস্ট ব্যাজের টাইটেল ও সাবটাইটেল নিজের মতো লিখে সেভ করুন।
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-zinc-200/80">
+                      {/* Badge 1 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-emerald-700 flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5" />
+                          Badge 1 (ডেলিভারি সংক্রান্ত)
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Free & Fast Delivery"
+                          value={settingsForm.trust_badge_1_title || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_1_title: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold"
+                        />
+                        <input
+                          type="text"
+                          placeholder="e.g. সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি"
+                          value={settingsForm.trust_badge_1_subtitle || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_1_subtitle: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200"
+                        />
+                      </div>
+
+                      {/* Badge 2 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-amber-700 flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Badge 2 (পেমেন্ট ও বিশ্বাসযোগ্যতা)
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="e.g. 100% Cash on Delivery"
+                          value={settingsForm.trust_badge_2_title || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_2_title: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold"
+                        />
+                        <input
+                          type="text"
+                          placeholder="e.g. পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন"
+                          value={settingsForm.trust_badge_2_subtitle || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_2_subtitle: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200"
+                        />
+                      </div>
+
+                      {/* Badge 3 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-blue-700 flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Badge 3 (রিপ্লেসমেন্ট / যাচাই)
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Check Before Accept"
+                          value={settingsForm.trust_badge_3_title || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_3_title: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold"
+                        />
+                        <input
+                          type="text"
+                          placeholder="e.g. ডেলিভারিম্যানের সামনে যাচাইয়ের সুবিধা"
+                          value={settingsForm.trust_badge_3_subtitle || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_3_subtitle: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200"
+                        />
+                      </div>
+
+                      {/* Badge 4 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-purple-700 flex items-center gap-1.5">
+                          <Headphones className="w-3.5 h-3.5" />
+                          Badge 4 (কাস্টমার সাপোর্ট)
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="e.g. 24/7 Dedicated Support"
+                          value={settingsForm.trust_badge_4_title || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_4_title: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold"
+                        />
+                        <input
+                          type="text"
+                          placeholder="e.g. অর্ডার ও বিক্রয়োত্তর সার্বক্ষণিক সেবা"
+                          value={settingsForm.trust_badge_4_subtitle || ''}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, trust_badge_4_subtitle: e.target.value })}
+                          className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hero Highlight Promo Cards Customization */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 border border-zinc-200/90 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Sparkles className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-black text-zinc-900">
+                          Hero Promo Highlight Cards (হিরো ব্যানারের নিচের ৩টি অফার কার্ড)
+                        </h4>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">
+                          হোমপেজে হিরো স্লাইডারের ঠিক নিচে ৩টি আকর্ষণীয় প্রমোশনাল হাইলাইট বক্সের ব্যাজ ও টেক্সট কাস্টমাইজ করুন।
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-zinc-200/80">
+                      {/* Card 1 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-emerald-700 flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5" />
+                          Promo Card 1
+                        </span>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Badge Text</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Free Shipping"
+                            value={settingsForm.hero_promo_card_1_badge || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_1_badge: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Main Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Orders Over ৳২,০০০"
+                            value={settingsForm.hero_promo_card_1_title || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_1_title: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Subtitle</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি"
+                            value={settingsForm.hero_promo_card_1_subtitle || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_1_subtitle: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200 mt-0.5"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Card 2 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-amber-700 flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Promo Card 2
+                        </span>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Badge Text</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 100% Trust"
+                            value={settingsForm.hero_promo_card_2_badge || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_2_badge: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Main Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Cash on Delivery"
+                            value={settingsForm.hero_promo_card_2_title || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_2_title: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Subtitle</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. পণ্য হাতে পেয়ে চেক করে পেমেন্ট করুন"
+                            value={settingsForm.hero_promo_card_2_subtitle || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_2_subtitle: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200 mt-0.5"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Card 3 */}
+                      <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <span className="text-[11px] font-extrabold text-indigo-700 flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5" />
+                          Promo Card 3
+                        </span>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Badge Text</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Hot Deals"
+                            value={settingsForm.hero_promo_card_3_badge || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_3_badge: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Main Title</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mega Flash Discount"
+                            value={settingsForm.hero_promo_card_3_title || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_3_title: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-lg border border-zinc-200 font-bold mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-500">Subtitle</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. বেস্ট কোয়ালিটি গ্যাজেট ও লাইফস্টাইল"
+                            value={settingsForm.hero_promo_card_3_subtitle || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, hero_promo_card_3_subtitle: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-[11px] p-2 rounded-lg border border-zinc-200 mt-0.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Footer Copyright Text */}

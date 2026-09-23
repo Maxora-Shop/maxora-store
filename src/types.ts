@@ -313,6 +313,25 @@ export interface StoreSettings {
   // Social Proof & Live Sales Notification
   live_sales_popup_enabled?: boolean;
   live_sales_popup_interval?: number;
+  // Trust Benefits Customization
+  trust_badge_1_title?: string;
+  trust_badge_1_subtitle?: string;
+  trust_badge_2_title?: string;
+  trust_badge_2_subtitle?: string;
+  trust_badge_3_title?: string;
+  trust_badge_3_subtitle?: string;
+  trust_badge_4_title?: string;
+  trust_badge_4_subtitle?: string;
+  // Hero Promo Highlight Cards
+  hero_promo_card_1_badge?: string;
+  hero_promo_card_1_title?: string;
+  hero_promo_card_1_subtitle?: string;
+  hero_promo_card_2_badge?: string;
+  hero_promo_card_2_title?: string;
+  hero_promo_card_2_subtitle?: string;
+  hero_promo_card_3_badge?: string;
+  hero_promo_card_3_title?: string;
+  hero_promo_card_3_subtitle?: string;
   updated_at?: string;
 }
 
