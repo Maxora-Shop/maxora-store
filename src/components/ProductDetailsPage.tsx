@@ -28,6 +28,9 @@ import {
   Send,
   User,
   Tag,
+  Flame,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Product, StoreSettings, Review, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
@@ -35,6 +38,8 @@ import { parseProductDescription } from '../utils/productDescriptionParser';
 import { sanitizeSafeHtml } from '../utils/sanitizeHtml';
 import { storeService } from '../services/storeService';
 import { ProductCard } from './ProductCard';
+import { recordProductView } from '../utils/recentViews';
+import { RecentlyViewedSection } from './RecentlyViewedSection';
 
 interface ProductDetailsPageProps {
   product: Product;
@@ -53,6 +58,8 @@ interface ProductDetailsPageProps {
   isWishlisted?: boolean;
   onToggleWishlist?: (product: Product) => void;
   ratingStats?: ProductRatingStats;
+  ratingStatsMap?: Record<string, ProductRatingStats>;
+  wishlistIds?: string[];
   onBackToHome: () => void;
   onSelectProduct: (product: Product) => void;
   initialTab?: 'details' | 'reviews';
@@ -75,6 +82,8 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   isWishlisted = false,
   onToggleWishlist,
   ratingStats,
+  ratingStatsMap = {},
+  wishlistIds = [],
   onBackToHome,
   onSelectProduct,
   initialTab = 'details',
@@ -135,12 +144,28 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   const [reviewHoverRating, setReviewHoverRating] = useState<number>(0);
   const [reviewComment, setReviewComment] = useState<string>('');
   const [reviewerName, setReviewerName] = useState<string>('');
+  const [reviewImages, setReviewImages] = useState<string[]>([]);
+  const [isProcessingPhotos, setIsProcessingPhotos] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState<boolean>(false);
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string>('');
   const [reviewErrorMsg, setReviewErrorMsg] = useState<string>('');
 
+  // Customer photo lightbox modal state
+  const [activePhotoModal, setActivePhotoModal] = useState<{
+    isOpen: boolean;
+    photoIndex: number;
+  }>({ isOpen: false, photoIndex: 0 });
+
   const descriptionSectionRef = useRef<HTMLDivElement>(null);
   const reviewsSectionRef = useRef<HTMLDivElement>(null);
+
+  // Record this product view in user's recent history
+  useEffect(() => {
+    if (product.id) {
+      recordProductView(product.id);
+    }
+  }, [product.id]);
 
   // Synchronize initial image & color when product changes
   useEffect(() => {
@@ -319,6 +344,115 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
     }
   };
 
+  // Flatten all photos submitted in reviews for this product
+  const allBuyerPhotos = useMemo(() => {
+    const list: {
+      url: string;
+      reviewerName: string;
+      rating: number;
+      comment: string;
+      date: string;
+    }[] = [];
+
+    reviews.forEach((r) => {
+      if (r.images && Array.isArray(r.images)) {
+        r.images.forEach((imgUrl) => {
+          if (imgUrl) {
+            list.push({
+              url: imgUrl,
+              reviewerName: r.user_name || 'Verified Customer',
+              rating: Number(r.rating) || 5,
+              comment: r.comment || '',
+              date: r.created_at || '',
+            });
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [reviews]);
+
+  // Customer photo file selection & canvas compression
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessingPhotos(true);
+    setReviewErrorMsg('');
+    const maxPhotos = 4;
+    const remainingSlots = maxPhotos - reviewImages.length;
+    if (remainingSlots <= 0) {
+      setReviewErrorMsg('Maximum 4 photos allowed per review.');
+      setIsProcessingPhotos(false);
+      return;
+    }
+
+    const filesToProcess: File[] = (Array.from(files) as File[]).slice(0, remainingSlots);
+    let completed = 0;
+    const newPhotos: string[] = [];
+
+    filesToProcess.forEach((file: File) => {
+      if (!file.type.startsWith('image/')) {
+        completed++;
+        if (completed === filesToProcess.length) setIsProcessingPhotos(false);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxDimension = 900;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height && width > maxDimension) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else if (height > maxDimension) {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              newPhotos.push(canvas.toDataURL('image/jpeg', 0.8));
+            } else {
+              newPhotos.push(result);
+            }
+
+            completed++;
+            if (completed === filesToProcess.length) {
+              setReviewImages((prev) => [...prev, ...newPhotos]);
+              setIsProcessingPhotos(false);
+            }
+          };
+          img.onerror = () => {
+            completed++;
+            if (completed === filesToProcess.length) setIsProcessingPhotos(false);
+          };
+          img.src = result;
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveReviewPhoto = (indexToRemove: number) => {
+    setReviewImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
   // Review submission
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -336,12 +470,14 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
         rating: reviewRating,
         comment: cleanComment,
         user_name: reviewerName.trim() || 'Verified Customer',
+        images: reviewImages.length > 0 ? reviewImages : undefined,
       });
 
       if (res.success) {
-        setReviewSuccessMsg('Thank you! Your verified review has been submitted successfully.');
+        setReviewSuccessMsg('Thank you! Your verified review and photo(s) have been submitted.');
         setReviewComment('');
         setReviewerName('');
+        setReviewImages([]);
         setShowReviewForm(false);
         loadProductReviews();
         setTimeout(() => setReviewSuccessMsg(''), 5000);
@@ -656,6 +792,16 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             >
               + Write a Review
             </button>
+
+            {Number(product.sold_count || 0) > 0 && (
+              <>
+                <span className="text-zinc-300">•</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-900 border border-amber-500/20 text-xs font-bold">
+                  <Flame className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                  <span>{Number(product.sold_count).toLocaleString('en-BD')}+ Sold (বিক্রি হয়েছে)</span>
+                </span>
+              </>
+            )}
           </div>
 
           {/* Pricing Box */}
@@ -681,7 +827,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
           </div>
 
           {/* Stock Status Indicator */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs flex-wrap">
             {isOutOfStock ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-200">
                 <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -699,6 +845,22 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
               </span>
             )}
           </div>
+
+          {/* Social Proof & Orders Progress Callout */}
+          {Number(product.sold_count || 0) > 0 && (
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-950 font-medium">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-700">
+                <Flame className="w-4 h-4 fill-amber-500 text-amber-600" />
+              </div>
+              <div className="leading-snug">
+                <span className="font-extrabold text-amber-900">জনপ্রিয় চয়েস!</span> এ পর্যন্ত{' '}
+                <strong className="font-black text-amber-950">
+                  {Number(product.sold_count).toLocaleString('en-BD')}+ পিস
+                </strong>{' '}
+                সফলভাবে বিক্রি ও ডেলিভারি হয়েছে।
+              </div>
+            </div>
+          )}
 
           {/* Color Variants (if configured) */}
           {Array.isArray(product.colors) && product.colors.length > 0 && (
@@ -1277,6 +1439,55 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                     />
                   </div>
 
+                  {/* Photo Upload Section */}
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-zinc-600" />
+                        <span>Add Unboxing / Product Photos (ছবি যুক্ত করুন)</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-normal">Max 4 photos</span>
+                    </label>
+
+                    {reviewImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2.5">
+                        {reviewImages.map((img, index) => (
+                          <div key={index} className="relative w-16 h-16 rounded-xl border border-zinc-200 overflow-hidden group">
+                            <img src={img} alt="review preview" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveReviewPhoto(index)}
+                              className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center hover:bg-rose-700 transition-colors cursor-pointer shadow-xs"
+                              title="Remove photo"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {reviewImages.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isProcessingPhotos}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-zinc-300 hover:border-zinc-500 bg-white hover:bg-zinc-50 text-xs font-bold text-zinc-700 transition-all cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>{isProcessingPhotos ? 'প্রসেসিং হচ্ছে...' : 'ছবি আপলোড করুন (Upload Photo)'}</span>
+                      </button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </div>
+
                   <button
                     type="submit"
                     disabled={isSubmittingReview}
@@ -1286,6 +1497,39 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                     <span>{isSubmittingReview ? 'Submitting...' : 'Post Review'}</span>
                   </button>
                 </form>
+              )}
+
+              {/* Customer Photos & Unboxing Gallery */}
+              {allBuyerPhotos.length > 0 && (
+                <div className="p-4 rounded-2xl bg-zinc-50/80 border border-zinc-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-zinc-700" />
+                      <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900">
+                        Customer Photos & Unboxing (ক্রেতাদের পাঠানো ছবি)
+                      </h4>
+                    </div>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white border border-zinc-200 text-zinc-700 shadow-2xs">
+                      📸 {allBuyerPhotos.length} {allBuyerPhotos.length === 1 ? 'Photo' : 'Photos'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-thin">
+                    {allBuyerPhotos.map((photo, pIdx) => (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        onClick={() => setActivePhotoModal({ isOpen: true, photoIndex: pIdx })}
+                        className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden shrink-0 border border-zinc-200 hover:border-zinc-900 shadow-2xs group cursor-pointer transition-all hover:scale-105"
+                      >
+                        <img src={photo.url} alt={`Buyer photo by ${photo.reviewerName}`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* Reviews List */}
@@ -1328,6 +1572,33 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                       <p className="text-xs text-zinc-700 pl-9 leading-relaxed">
                         {rev.comment}
                       </p>
+
+                      {/* Attached Customer Photos */}
+                      {rev.images && rev.images.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pl-9 pt-1">
+                          {rev.images.map((imgUrl, imgIdx) => {
+                            const globalIdx = allBuyerPhotos.findIndex((p) => p.url === imgUrl);
+                            return (
+                              <button
+                                key={imgIdx}
+                                type="button"
+                                onClick={() =>
+                                  setActivePhotoModal({
+                                    isOpen: true,
+                                    photoIndex: globalIdx >= 0 ? globalIdx : 0,
+                                  })
+                                }
+                                className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border border-zinc-200 hover:border-zinc-900 shadow-2xs cursor-pointer group transition-transform hover:scale-105"
+                              >
+                                <img src={imgUrl} alt="Customer review photo" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                  <Maximize2 className="w-3.5 h-3.5 text-white opacity-0 group-hover:opacity-100 drop-shadow" />
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1389,7 +1660,19 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
         </section>
       )}
 
-      {/* 5. FULLSCREEN LIGHTBOX MODAL */}
+      {/* 5. RECENTLY VIEWED PRODUCTS */}
+      <RecentlyViewedSection
+        products={allProducts}
+        currentProductId={product.id}
+        onAddToCart={(p) => onAddToCart(p, 1)}
+        onBuyNow={(p) => onBuyNow(p, 1)}
+        onQuickView={(p) => onSelectProduct(p)}
+        ratingStatsMap={ratingStatsMap}
+        wishlistIds={wishlistIds}
+        onToggleWishlist={onToggleWishlist}
+      />
+
+      {/* 6. FULLSCREEN LIGHTBOX MODAL */}
       {isLightboxOpen && (
         <div
           onClick={() => setIsLightboxOpen(false)}
@@ -1447,7 +1730,139 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
         </div>
       )}
 
-      {/* 6. MOBILE STICKY BOTTOM PURCHASE BAR */}
+      {/* 7. CUSTOMER PHOTO REVIEWS LIGHTBOX MODAL */}
+      {activePhotoModal.isOpen && allBuyerPhotos.length > 0 && (
+        <div
+          onClick={() => setActivePhotoModal({ isOpen: false, photoIndex: 0 })}
+          className="fixed inset-0 z-50 bg-zinc-950/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+        >
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => setActivePhotoModal({ isOpen: false, photoIndex: 0 })}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer z-50"
+            title="Close photo viewer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Navigation Arrows */}
+          {allBuyerPhotos.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActivePhotoModal((prev) => ({
+                  ...prev,
+                  photoIndex: prev.photoIndex > 0 ? prev.photoIndex - 1 : allBuyerPhotos.length - 1,
+                }));
+              }}
+              className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer z-50"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-4xl w-full bg-zinc-900/90 rounded-2xl sm:rounded-3xl border border-zinc-800 overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]"
+          >
+            {/* Image viewer */}
+            <div className="flex-1 bg-black flex items-center justify-center p-2 sm:p-4 min-h-[300px] md:min-h-[450px]">
+              <img
+                src={allBuyerPhotos[activePhotoModal.photoIndex]?.url}
+                alt="Buyer photo"
+                className="max-w-full max-h-[70vh] object-contain rounded-xl"
+              />
+            </div>
+
+            {/* Buyer review details */}
+            <div className="w-full md:w-80 p-5 bg-zinc-900 border-t md:border-t-0 md:border-l border-zinc-800 text-white flex flex-col justify-between shrink-0">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 rounded-full">
+                    Verified Buyer Photo
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    {activePhotoModal.photoIndex + 1} / {allBuyerPhotos.length}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="font-extrabold text-sm text-zinc-100">
+                    {allBuyerPhotos[activePhotoModal.photoIndex]?.reviewerName}
+                  </h4>
+                  <p className="text-[11px] text-zinc-400">
+                    {allBuyerPhotos[activePhotoModal.photoIndex]?.date
+                      ? new Date(allBuyerPhotos[activePhotoModal.photoIndex]?.date).toLocaleDateString()
+                      : 'Recent Buyer'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-0.5 text-amber-400">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={`w-3.5 h-3.5 ${
+                        s <= (allBuyerPhotos[activePhotoModal.photoIndex]?.rating || 5)
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-zinc-600'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {allBuyerPhotos[activePhotoModal.photoIndex]?.comment && (
+                  <p className="text-xs text-zinc-300 leading-relaxed italic border-l-2 border-amber-400/60 pl-3 py-1">
+                    "{allBuyerPhotos[activePhotoModal.photoIndex]?.comment}"
+                  </p>
+                )}
+              </div>
+
+              {/* Thumbnails rail in modal */}
+              {allBuyerPhotos.length > 1 && (
+                <div className="pt-4 mt-4 border-t border-zinc-800/80">
+                  <p className="text-[10px] font-bold text-zinc-400 mb-2">All Buyer Photos ({allBuyerPhotos.length})</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                    {allBuyerPhotos.map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActivePhotoModal((prev) => ({ ...prev, photoIndex: idx }))}
+                        className={`w-12 h-12 rounded-lg overflow-hidden border shrink-0 transition-all cursor-pointer ${
+                          idx === activePhotoModal.photoIndex
+                            ? 'border-amber-400 ring-2 ring-amber-400/30 scale-105'
+                            : 'border-zinc-700 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={p.url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {allBuyerPhotos.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActivePhotoModal((prev) => ({
+                  ...prev,
+                  photoIndex: prev.photoIndex < allBuyerPhotos.length - 1 ? prev.photoIndex + 1 : 0,
+                }));
+              }}
+              className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer z-50"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 8. MOBILE STICKY BOTTOM PURCHASE BAR */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-zinc-200/90 px-3.5 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-2.5">
         {/* Left: Live Price & Cash On Delivery Note */}
         <div className="flex items-center gap-2 min-w-0 pr-1">

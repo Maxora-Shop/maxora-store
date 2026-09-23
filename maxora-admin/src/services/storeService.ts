@@ -1317,8 +1317,13 @@ export const storeService = {
 
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
-        // update stock in Firestore
-        setDoc(doc(db, 'products', String(prod.id)), { stock: prod.stock }, { merge: true }).catch(() => {});
+        prod.sold_count = (Number(prod.sold_count) || 0) + qty;
+        // update stock and sold_count in Firestore
+        setDoc(
+          doc(db, 'products', String(prod.id)),
+          { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
+          { merge: true }
+        ).catch(() => {});
       }
     }
     setLocal(PRODUCTS_KEY, products);

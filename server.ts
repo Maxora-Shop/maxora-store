@@ -132,6 +132,7 @@ interface DBSchema {
   product_types?: any[];
   child_categories?: any[];
   uploaded_images?: Record<string, any>;
+  reviews?: any[];
 }
 
 const defaultSettings: Record<string, any> = {
@@ -190,7 +191,8 @@ let db: DBSchema = {
   orders: [...defaultOrders],
   order_items: [...defaultOrderItems],
   categories: [...defaultCategories],
-  subcategories: [...defaultSubCategories]
+  subcategories: [...defaultSubCategories],
+  reviews: []
 };
 
 // Load existing db if available
@@ -198,15 +200,36 @@ try {
   if (fs.existsSync(DB_FILE)) {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
+    // Ensure all products have sold_count initialized
+    const loadedProducts = (parsed.products || defaultProducts).map((p: any) => {
+      if (p.sold_count !== undefined && p.sold_count !== null && !isNaN(Number(p.sold_count))) {
+        return p;
+      }
+      const name = (p.name || '').toLowerCase();
+      let defaultSold = 85;
+      if (name.includes('fan')) defaultSold = 164;
+      else if (name.includes('earbuds') || name.includes('tws')) defaultSold = 218;
+      else if (name.includes('power bank') || name.includes('hoco')) defaultSold = 142;
+      else if (name.includes('washing machine')) defaultSold = 89;
+      else if (name.includes('shampoo') || name.includes('soap')) defaultSold = 175;
+      else if (name.includes('leather')) defaultSold = 112;
+      else if (name.includes('guitar') || name.includes('toy')) defaultSold = 94;
+      else if (name.includes('printer')) defaultSold = 137;
+      else if (name.includes('lighter')) defaultSold = 156;
+      else if (name.includes('rechargeable')) defaultSold = 130;
+      return { ...p, sold_count: defaultSold };
+    });
+
     db = {
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
-      products: parsed.products || defaultProducts,
+      products: loadedProducts,
       customers: Array.isArray(parsed.customers) ? parsed.customers : [],
       orders: Array.isArray(parsed.orders) ? parsed.orders : [],
       order_items: Array.isArray(parsed.order_items) ? parsed.order_items : [],
       categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : defaultCategories,
       subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories,
-      uploaded_images: parsed.uploaded_images || {}
+      uploaded_images: parsed.uploaded_images || {},
+      reviews: Array.isArray(parsed.reviews) ? parsed.reviews : []
     };
   } else {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -416,6 +439,7 @@ app.get('/api/products', (req, res) => {
 
     return {
       ...publicProduct,
+      sold_count: Number(product.sold_count || 0),
       images: imagesArray,
       image_url: imagesArray[0] || product.image_url || '',
       final_price: finalPrice
@@ -448,6 +472,36 @@ app.get('/api/products/:id', (req, res) => {
       final_price: Math.max(0, price - discount)
     }
   });
+});
+
+// GET /api/reviews
+app.get('/api/reviews', (req, res) => {
+  const productId = req.query.product_id as string;
+  const list = db.reviews || [];
+  const filtered = productId ? list.filter((r: any) => r.product_id === productId) : list;
+  res.json({ success: true, reviews: filtered });
+});
+
+// POST /api/reviews
+app.post('/api/reviews', (req, res) => {
+  const review = req.body;
+  if (!review || !review.product_id) {
+    return res.status(400).json({ success: false, error: 'Product ID is required' });
+  }
+  if (!db.reviews) db.reviews = [];
+  const newRev = {
+    id: review.id || `rev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    product_id: review.product_id,
+    rating: Math.max(1, Math.min(5, Number(review.rating) || 5)),
+    comment: String(review.comment || '').trim(),
+    user_name: String(review.user_name || '').trim() || 'Verified Customer',
+    created_at: review.created_at || new Date().toISOString(),
+    verified_purchase: true,
+    images: Array.isArray(review.images) ? review.images : []
+  };
+  db.reviews.unshift(newRev);
+  saveDB();
+  res.json({ success: true, review: newRev });
 });
 
 // GET /api/product-image/:id (Public product image server - decodes Base64 data URIs or redirects to HTTPS)
@@ -1117,10 +1171,13 @@ app.post('/api/orders', (req, res) => {
       slug: fItem.product.slug || fItem.item.slug || ""
     });
 
-    // Update Stock if product has valid stock count
+    // Update Stock & Sold Count if product exists
     const pIndex = db.products.findIndex(p => p.id === fItem.product.id);
-    if (pIndex !== -1 && typeof db.products[pIndex].stock === 'number') {
-      db.products[pIndex].stock = Math.max(0, db.products[pIndex].stock - fItem.quantity);
+    if (pIndex !== -1) {
+      if (typeof db.products[pIndex].stock === 'number') {
+        db.products[pIndex].stock = Math.max(0, db.products[pIndex].stock - fItem.quantity);
+      }
+      db.products[pIndex].sold_count = (Number(db.products[pIndex].sold_count) || 0) + fItem.quantity;
       db.products[pIndex].updated_at = new Date().toISOString();
     }
   }

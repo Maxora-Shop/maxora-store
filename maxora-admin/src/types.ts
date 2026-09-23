@@ -267,6 +267,9 @@ export interface StoreSettings {
   custom_head_code?: string;
   custom_body_code?: string;
   custom_product_types?: string[];
+  // Social Proof & Live Sales Notification
+  live_sales_popup_enabled?: boolean;
+  live_sales_popup_interval?: number;
   updated_at?: string;
 }
 
@@ -347,6 +350,7 @@ export interface Review {
   user_name: string;
   created_at: string;
   verified_purchase?: boolean;
+  images?: string[];
 }
 
 export interface ProductRatingStats {

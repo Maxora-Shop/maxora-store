@@ -675,7 +675,11 @@ export const INITIAL_REVIEWS: Review[] = [
     comment: "The AMOLED display is stunning and responsive! Battery easily lasts a week. Excellent build quality for this price.",
     user_name: "Tanvir Ahmed",
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    verified_purchase: true
+    verified_purchase: true,
+    images: [
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=600&auto=format&fit=crop&q=80"
+    ]
   },
   {
     id: "rev-002",
@@ -684,7 +688,10 @@ export const INITIAL_REVIEWS: Review[] = [
     comment: "Very smooth Bluetooth calling and accurate step tracking. Delivery was fast inside Dhaka.",
     user_name: "Mahmudul Hasan",
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    verified_purchase: true
+    verified_purchase: true,
+    images: [
+      "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=600&auto=format&fit=crop&q=80"
+    ]
   },
   {
     id: "rev-003",

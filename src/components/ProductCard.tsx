@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle } from 'lucide-react';
+import { ShoppingBag, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
 
@@ -221,43 +221,56 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {product.sku && <span className="text-zinc-400 font-mono hidden sm:inline truncate">{product.sku}</span>}
           </div>
 
-          {/* Average Rating Display */}
-          <div className="flex items-center gap-1.5 mb-1.5 min-h-[20px] min-w-0">
-            {ratingStats && ratingStats.count > 0 ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onQuickView(product, 'reviews');
-                }}
-                className="inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group/rating text-left truncate min-w-0"
-                title={`${ratingStats.average.toFixed(1)} out of 5 stars (${ratingStats.count} review${ratingStats.count > 1 ? 's' : ''})`}
+          {/* Average Rating & Sold Count Display */}
+          <div className="flex items-center justify-between gap-1 mb-1.5 min-h-[20px] min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 truncate">
+              {ratingStats && ratingStats.count > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onQuickView(product, 'reviews');
+                  }}
+                  className="inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer group/rating text-left truncate min-w-0"
+                  title={`${ratingStats.average.toFixed(1)} out of 5 stars (${ratingStats.count} review${ratingStats.count > 1 ? 's' : ''})`}
+                >
+                  <div className="flex items-center shrink-0">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                  </div>
+                  <span className="text-xs font-black text-zinc-900 shrink-0">
+                    {ratingStats.average.toFixed(1)}
+                  </span>
+                  <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium group-hover/rating:text-amber-700 truncate">
+                    ({ratingStats.count})
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onQuickView(product, 'reviews');
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-400 hover:text-amber-600 transition-colors cursor-pointer text-left truncate min-w-0"
+                  title="No reviews yet. Be the first to review!"
+                >
+                  <Star className="w-3 h-3 text-zinc-300 shrink-0" />
+                  <span className="truncate">No reviews</span>
+                </button>
+              )}
+            </div>
+
+            {/* Sold Count Badge (e.g. 🔥 140+ sold) */}
+            {Number(product.sold_count || 0) > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-amber-800 bg-amber-50/90 border border-amber-200/70 px-1.5 py-0.5 rounded-md shrink-0 shadow-2xs"
+                title={`${product.sold_count} pieces sold`}
               >
-                <div className="flex items-center shrink-0">
-                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
-                </div>
-                <span className="text-xs font-black text-zinc-900 shrink-0">
-                  {ratingStats.average.toFixed(1)}
-                </span>
-                <span className="text-[10px] sm:text-[11px] text-zinc-500 font-medium group-hover/rating:text-amber-700 truncate">
-                  ({ratingStats.count})
-                </span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onQuickView(product, 'reviews');
-                }}
-                className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] text-zinc-400 hover:text-amber-600 transition-colors cursor-pointer text-left truncate min-w-0"
-                title="No reviews yet. Be the first to review!"
-              >
-                <Star className="w-3 h-3 text-zinc-300 shrink-0" />
-                <span className="truncate">No reviews</span>
-              </button>
+                <Flame className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />
+                <span>{Number(product.sold_count).toLocaleString('en-BD')}+ sold</span>
+              </span>
             )}
           </div>
 

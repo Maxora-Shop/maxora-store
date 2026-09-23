@@ -47,6 +47,7 @@ import {
   X,
   Tag,
   Hash,
+  Flame,
   Palette,
   Sliders,
   FolderTree,
@@ -2670,6 +2671,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       selling_price: 0,
                       discount: 0,
                       stock: 10,
+                      sold_count: 0,
                       badge: 'NEW',
                       image_url: '',
                       images: [],
@@ -2853,6 +2855,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-4">Selling Price</th>
                       <th className="p-4">Discount</th>
                       <th className="p-4">Stock</th>
+                      <th className="p-4">Sold</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Actions</th>
                     </tr>
@@ -2946,6 +2949,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }`}
                             >
                               {p.stock} units
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md text-xs whitespace-nowrap">
+                              <Flame className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              <span>{Number(p.sold_count || 0).toLocaleString('en-BD')}</span>
                             </span>
                           </td>
                           <td className="p-4">
@@ -4478,6 +4487,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
+                  {/* Live Sales Notification Popup Control Card */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 shadow-xs space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-zinc-950 flex items-center justify-center shrink-0 shadow-xs">
+                          <Flame className="w-5 h-5 text-zinc-950" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-xs sm:text-sm font-black text-amber-950">
+                              Live Sales Notification Popup (সাম্প্রতিক সেলস পপআপ)
+                            </h4>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              settingsForm.live_sales_popup_enabled !== false
+                                ? 'bg-amber-500 text-zinc-950'
+                                : 'bg-zinc-200 text-zinc-600'
+                            }`}>
+                              {settingsForm.live_sales_popup_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-900/80 mt-1 max-w-xl leading-relaxed">
+                            ওয়েবসাইটের নিচে সাম্প্রতিক অর্ডারের সুন্দর পপআপ দেখায় ("Someone from Mirpur, Dhaka just purchased..."), যা সোশ্যাল প্রুফ বৃদ্ধি করে কনভার্সন রেট বহু গুণ বাড়িয়ে দেয়।
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Toggle Switch */}
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm.live_sales_popup_enabled !== false}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, live_sales_popup_enabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-zinc-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                      </label>
+                    </div>
+
+                    {settingsForm.live_sales_popup_enabled !== false && (
+                      <div className="pt-3 border-t border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-amber-950 mb-0.5">
+                            Popup Interval Time (কত সেকেন্ড পরপর পপআপ আসবে)
+                          </label>
+                          <span className="text-[10px] text-amber-800">
+                            প্রতিটি নোটিফিকেশন কত সেকেন্ড পর পর স্ক্রিনে ভেসে উঠবে তা নির্বাচন করুন
+                          </span>
+                        </div>
+                        <div className="w-full sm:w-48">
+                          <select
+                            value={settingsForm.live_sales_popup_interval || 24}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, live_sales_popup_interval: Number(e.target.value) })}
+                            className="w-full bg-white text-zinc-900 text-xs font-bold p-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-600 shadow-2xs cursor-pointer"
+                          >
+                            <option value={15}>15 Seconds (Fast)</option>
+                            <option value={20}>20 Seconds</option>
+                            <option value={24}>24 Seconds (Recommended)</option>
+                            <option value={30}>30 Seconds</option>
+                            <option value={45}>45 Seconds (Relaxed)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Footer Copyright Text */}
                   <div className="pt-4 border-t border-zinc-200">
                     <label className="block text-xs font-bold text-zinc-700 mb-1">
@@ -5332,7 +5406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 mb-1">
                         SKU / Code
@@ -5348,13 +5422,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 mb-1">
-                        Stock Quantity (Units)
+                        Stock Quantity (ইনভেন্টরি)
                       </label>
                       <input
                         type="number"
                         value={editingProduct?.stock || 0}
                         onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center justify-between">
+                        <span>Sold Count (বিক্রি)</span>
+                        <span className="text-[10px] text-amber-600 font-bold">Social Proof</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 150"
+                        value={editingProduct?.sold_count !== undefined ? editingProduct.sold_count : 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, sold_count: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold text-amber-900"
                       />
                     </div>
 

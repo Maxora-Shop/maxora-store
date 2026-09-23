@@ -47,6 +47,7 @@ import {
   X,
   Tag,
   Hash,
+  Flame,
   Palette,
   Sliders,
   FolderTree,
@@ -2322,6 +2323,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       selling_price: 0,
                       discount: 0,
                       stock: 10,
+                      sold_count: 0,
                       badge: 'NEW',
                       image_url: '',
                       images: [],
@@ -2505,6 +2507,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-4">Selling Price</th>
                       <th className="p-4">Discount</th>
                       <th className="p-4">Stock</th>
+                      <th className="p-4">Sold</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-right">Actions</th>
                     </tr>
@@ -2598,6 +2601,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               }`}
                             >
                               {p.stock} units
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md text-xs whitespace-nowrap">
+                              <Flame className="w-3 h-3 text-amber-500 fill-amber-500" />
+                              <span>{Number(p.sold_count || 0).toLocaleString('en-BD')}</span>
                             </span>
                           </td>
                           <td className="p-4">
@@ -4799,7 +4808,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 mb-1">
                         SKU / Code
@@ -4815,13 +4824,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 mb-1">
-                        Stock Quantity (Units)
+                        Stock Quantity (ইনভেন্টরি)
                       </label>
                       <input
                         type="number"
                         value={editingProduct?.stock || 0}
                         onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center justify-between">
+                        <span>Sold Count (বিক্রি)</span>
+                        <span className="text-[10px] text-amber-600 font-bold">Social Proof</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 150"
+                        value={editingProduct?.sold_count !== undefined ? editingProduct.sold_count : 0}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, sold_count: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold text-amber-900"
                       />
                     </div>
 

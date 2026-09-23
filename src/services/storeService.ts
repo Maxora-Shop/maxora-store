@@ -1480,9 +1480,14 @@ export const storeService = {
 
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
-        // update stock in Firestore
+        prod.sold_count = (Number(prod.sold_count) || 0) + qty;
+        // update stock and sold_count in Firestore
         stockUpdatePromises.push(
-          setDoc(doc(db, 'products', String(prod.id)), { stock: prod.stock, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {})
+          setDoc(
+            doc(db, 'products', String(prod.id)),
+            { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
+            { merge: true }
+          ).catch(() => {})
         );
       }
     }
@@ -3152,6 +3157,7 @@ export const storeService = {
     rating: number;
     comment: string;
     user_name?: string;
+    images?: string[];
   }): Promise<{ success: boolean; review: Review; error?: string }> {
     if (!reviewData.product_id) {
       return { success: false, error: 'Product ID is required.', review: null as any };
@@ -3171,6 +3177,7 @@ export const storeService = {
       user_name: cleanName,
       created_at: new Date().toISOString(),
       verified_purchase: true,
+      images: Array.isArray(reviewData.images) && reviewData.images.length > 0 ? reviewData.images : undefined,
     };
 
     // 1. Optimistically update local storage

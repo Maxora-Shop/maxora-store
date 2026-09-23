@@ -33,6 +33,8 @@ import { CategoryFilter } from './components/CategoryFilter';
 import { ShopByCategorySection } from './components/ShopByCategorySection';
 import { PromoTripleSection } from './components/PromoTripleSection';
 import { BestSellersSection } from './components/BestSellersSection';
+import { RecentlyViewedSection } from './components/RecentlyViewedSection';
+import { LiveSalesNotification } from './components/LiveSalesNotification';
 import { TrustBenefitsSection } from './components/TrustBenefitsSection';
 import { FooterSection } from './components/FooterSection';
 import { ProductPagination } from './components/ProductPagination';
@@ -1272,6 +1274,8 @@ export default function App() {
             isWishlisted={quickViewProduct ? wishlistIds.includes(quickViewProduct.id) : false}
             onToggleWishlist={handleToggleWishlist}
             ratingStats={quickViewProduct ? ratingStatsMap[quickViewProduct.id] : undefined}
+            ratingStatsMap={ratingStatsMap}
+            wishlistIds={wishlistIds}
             onBackToHome={handleCloseProductDetail}
             onSelectProduct={(p) => handleOpenProductDetail(p, true)}
             initialTab={quickViewInitialTab}
@@ -1737,6 +1741,18 @@ export default function App() {
           </div>
         </section>
 
+            {/* Recently Viewed Products */}
+            <RecentlyViewedSection
+              products={products}
+              onAddToCart={(p) => handleAddToCart(p, 1)}
+              onBuyNow={(p) => handleBuyNow(p, 1)}
+              onQuickView={(p) => handleOpenProductDetail(p)}
+              ratingStatsMap={ratingStatsMap}
+              wishlistIds={wishlistIds}
+              onToggleWishlist={handleToggleWishlist}
+              recentlyAddedId={recentlyAddedId}
+            />
+
             {/* Trust & Guarantee Section (Free Shipping, Secure Payment, Check Before You Accept, 24/7 Support) */}
             <TrustBenefitsSection />
           </>
@@ -1892,6 +1908,13 @@ export default function App() {
           onNavigateToProduct={(p) => handleOpenProductDetail(p)}
         />
       </React.Suspense>
+
+      {/* Live Recent Order Notification Social Proof Popup */}
+      <LiveSalesNotification
+        products={products}
+        onSelectProduct={(p) => handleOpenProductDetail(p)}
+        enabled={settings.live_sales_popup_enabled !== false}
+      />
     </div>
   );
 }

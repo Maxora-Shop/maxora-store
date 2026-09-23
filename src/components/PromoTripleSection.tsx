@@ -409,13 +409,17 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         )}
                       </div>
 
-                      {/* Rating Row */}
-                      <div className="flex items-center gap-1 text-[10px] text-zinc-600 mb-2">
+                      {/* Rating & Sold Row */}
+                      <div className="flex items-center justify-between gap-1 text-[10px] text-zinc-600 mb-2 flex-wrap">
                         <span className="text-amber-500 font-bold flex items-center gap-0.5">
                           <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                           <span>{ratingInfo.star}</span>
                         </span>
-                        <span className="text-zinc-400 text-[9px]">({ratingInfo.count})</span>
+                        {Number(product.sold_count || 0) > 0 && (
+                          <span className="text-rose-700 bg-rose-50 px-1 py-0.2 rounded text-[9px] font-bold">
+                            {product.sold_count}+ sold
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -569,13 +573,20 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                       </h4>
 
                       {/* Price Row */}
-                      <div className="flex items-baseline gap-1 flex-wrap mb-2">
-                        <span className="text-xs sm:text-sm font-black text-red-600 leading-tight">
-                          ৳{finalPrice.toLocaleString('en-BD')}
-                        </span>
-                        {sellingPrice > finalPrice && (
-                          <span className="text-[10px] text-zinc-400 line-through">
-                            ৳{sellingPrice.toLocaleString('en-BD')}
+                      <div className="flex items-baseline justify-between gap-1 flex-wrap mb-2">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xs sm:text-sm font-black text-red-600 leading-tight">
+                            ৳{finalPrice.toLocaleString('en-BD')}
+                          </span>
+                          {sellingPrice > finalPrice && (
+                            <span className="text-[10px] text-zinc-400 line-through">
+                              ৳{sellingPrice.toLocaleString('en-BD')}
+                            </span>
+                          )}
+                        </div>
+                        {Number(product.sold_count || 0) > 0 && (
+                          <span className="text-red-700 bg-red-50 px-1 py-0.2 rounded text-[9px] font-bold">
+                            {product.sold_count}+ sold
                           </span>
                         )}
                       </div>
@@ -684,10 +695,17 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         <span className="text-xs sm:text-sm font-black text-zinc-950 leading-tight">
                           ৳{sellingPrice.toLocaleString('en-BD')}
                         </span>
-                        <span className="text-amber-500 font-bold text-[10px] flex items-center gap-0.5 shrink-0">
-                          <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                          <span>{ratingScore}</span>
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {Number(product.sold_count || 0) > 0 && (
+                            <span className="text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded text-[9px] font-bold">
+                              {product.sold_count}+ sold
+                            </span>
+                          )}
+                          <span className="text-amber-500 font-bold text-[10px] flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                            <span>{ratingScore}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
 

@@ -309,6 +309,9 @@ export interface StoreSettings {
   ai_faqs?: AiFaqItem[];
   ai_custom_commands?: AiCustomCommand[];
   ai_system_instructions?: string;
+  // Social Proof & Live Sales Notification
+  live_sales_popup_enabled?: boolean;
+  live_sales_popup_interval?: number;
   updated_at?: string;
 }
 
@@ -389,6 +392,7 @@ export interface Review {
   user_name: string;
   created_at: string;
   verified_purchase?: boolean;
+  images?: string[];
 }
 
 export interface ProductRatingStats {

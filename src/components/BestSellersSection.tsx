@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, ArrowRight, Star } from 'lucide-react';
+import { Award, ArrowRight, Star, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 
 interface BestSellersSectionProps {
@@ -115,9 +115,17 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({
                   <div className="text-xs sm:text-sm font-black text-rose-600 mt-0.5">
                     ৳{finalPrice.toLocaleString('en-BD')}
                   </div>
-                  <div className="flex items-center gap-1 text-amber-500 text-[10px] font-bold mt-0.5">
-                    <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                    <span>4.8</span>
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold mt-0.5 flex-wrap">
+                    <span className="flex items-center gap-0.5 text-amber-500">
+                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                      <span>4.8</span>
+                    </span>
+                    {Number(product.sold_count || 0) > 0 && (
+                      <span className="flex items-center gap-0.5 text-amber-700 bg-amber-50 px-1 py-0.2 rounded font-semibold text-[9px]">
+                        <Flame className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                        <span>{product.sold_count}+ sold</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
