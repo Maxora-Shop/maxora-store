@@ -3764,6 +3764,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span className="text-[10px] text-zinc-400 block mt-1">Narayanganj & 63 districts (130 BDT)</span>
                       </div>
                     </div>
+
+                    {/* Free Delivery Campaign On/Off & Minimum Order Threshold Controller */}
+                    <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-200/90 space-y-3 mt-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                            <Sparkles className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xs font-black text-emerald-950">
+                                Free Delivery Promotion (ফ্রি ডেলিভারি অফার)
+                              </h4>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                settingsForm.free_delivery_enabled !== false
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-zinc-200 text-zinc-600'
+                              }`}>
+                                {settingsForm.free_delivery_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-800/80 mt-0.5">
+                              চালু থাকলে নির্দিষ্ট টাকার কেনাকাটায় কাস্টমার কার্ট এবং চেকআউটে ফ্রি ডেলিভারি পাবেন। অফার বন্ধ করতে চাইলে টগল বন্ধ করুন।
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Switch Button */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={settingsForm.free_delivery_enabled !== false}
+                              onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_enabled: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-zinc-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {settingsForm.free_delivery_enabled !== false && (
+                        <div className="pt-3 border-t border-emerald-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in-50 duration-200">
+                          <div>
+                            <label className="block text-xs font-bold text-emerald-950 mb-0.5">
+                              Minimum Order Amount for Free Delivery (৳)
+                            </label>
+                            <span className="text-[10px] text-emerald-700">
+                              কার্টে এই টাকার সমপরিমাণ বা বেশি মূল্যের পণ্য থাকলে স্বয়ংক্রিয়ভাবে ফ্রি ডেলিভারি আনলক হবে (ডিফল্ট: ৳১৫০০)
+                            </span>
+                          </div>
+                          <div className="w-full sm:w-52">
+                            <div className="relative">
+                              <span className="absolute left-3 top-2.5 text-xs font-bold text-emerald-700">৳</span>
+                              <input
+                                type="number"
+                                min="1"
+                                value={settingsForm.free_delivery_threshold ?? 1500}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_threshold: Number(e.target.value) })}
+                                className="w-full bg-white text-zinc-900 text-sm pl-7 pr-3 py-2 rounded-xl border border-emerald-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-black shadow-2xs"
+                                placeholder="1500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Footer Copyright Text */}

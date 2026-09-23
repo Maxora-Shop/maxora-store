@@ -18,6 +18,8 @@ import {
   Shirt,
   Sparkles,
   Baby,
+  ArrowRight,
+  Tag,
 } from 'lucide-react';
 import { StoreSettings, Category, Product, Customer } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState, matchesTaxonomyField } from '../utils/taxonomy';
@@ -83,25 +85,37 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const mobileSearchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Close mega menu on escape or click outside
+  // Close mega menu and search dropdown on escape or click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // If clicking inside the nav container or mega menu, do not close here
+      // If clicking inside the nav container or mega menu, do not close mega menu here
       if (
         navContainerRef.current &&
         (navContainerRef.current.contains(target) || target.closest('[data-mega-menu="true"]'))
       ) {
-        return;
+        // keep menu
+      } else {
+        setActiveMegaMenu(null);
       }
-      setActiveMegaMenu(null);
+
+      // Close instant search dropdown if clicked outside
+      const inDesktopSearch = searchContainerRef.current && searchContainerRef.current.contains(target);
+      const inMobileSearch = mobileSearchContainerRef.current && mobileSearchContainerRef.current.contains(target);
+      if (!inDesktopSearch && !inMobileSearch) {
+        setIsSearchFocused(false);
+      }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActiveMegaMenu(null);
+        setIsSearchFocused(false);
       }
     };
 
@@ -112,6 +126,39 @@ export const Navbar: React.FC<NavbarProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  // Compute live instant search results (top 6 matches)
+  const instantSearchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || q.length < 1) return [];
+    return products
+      .filter((p) => {
+        const name = (p.name || '').toLowerCase();
+        const brand = (p.brand || '').toLowerCase();
+        const cat = (p.category || '').toLowerCase();
+        const sub = (p.subcategory || '').toLowerCase();
+        const sku = (p.sku || '').toLowerCase();
+        return name.includes(q) || brand.includes(q) || cat.includes(q) || sub.includes(q) || sku.includes(q);
+      })
+      .slice(0, 6);
+  }, [products, searchQuery]);
+
+  const handleSelectInstantProduct = (prod: Product) => {
+    setIsSearchFocused(false);
+    setMobileSearchOpen(false);
+    if (onSelectProduct) {
+      onSelectProduct(prod);
+    }
+  };
+
+  const handleViewAllResults = () => {
+    setIsSearchFocused(false);
+    setMobileSearchOpen(false);
+    const el = document.getElementById('products-catalog-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   const handleLogoClick = () => {
     if (onSelectTaxonomy) {
@@ -421,19 +468,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </button>
 
-        {/* Center Search Bar matching screenshot */}
-        <div className="flex-1 max-w-2xl mx-2 hidden sm:block">
+        {/* Center Search Bar with Live Instant Results Dropdown */}
+        <div className="flex-1 max-w-2xl mx-2 hidden sm:block relative" ref={searchContainerRef}>
           <div className="relative flex items-center w-full">
             <input
               type="text"
               placeholder="Search for products, categories, brands..."
               value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onChange={(e) => {
+                onSearchChange(e.target.value);
+                setIsSearchFocused(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsSearchFocused(false);
+                } else if (e.key === 'Enter') {
+                  handleViewAllResults();
+                }
+              }}
               className="w-full bg-zinc-50 hover:bg-white focus:bg-white text-zinc-900 text-sm pl-4 pr-14 py-2.5 rounded-xl border border-zinc-200 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-none transition-all placeholder:text-zinc-400 shadow-2xs"
             />
             {searchQuery && (
               <button
-                onClick={() => onSearchChange('')}
+                type="button"
+                onClick={() => {
+                  onSearchChange('');
+                  setIsSearchFocused(false);
+                }}
                 className="absolute right-14 text-xs text-zinc-400 hover:text-zinc-700 bg-zinc-200 rounded-full w-5 h-5 flex items-center justify-center cursor-pointer"
               >
                 ✕
@@ -441,12 +503,101 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
             <button
               type="button"
+              onClick={handleViewAllResults}
               className="absolute right-1 top-1 bottom-1 px-4 bg-[#0f172a] hover:bg-zinc-800 text-white rounded-lg flex items-center justify-center transition-colors cursor-pointer"
               aria-label="Search"
             >
               <Search className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Live Instant Search Dropdown (Desktop) */}
+          {isSearchFocused && searchQuery.trim().length >= 1 && (
+            <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-zinc-200/90 shadow-2xl z-50 overflow-hidden animate-in fade-in-50 slide-in-from-top-1 duration-150 divide-y divide-zinc-100">
+              <div className="px-4 py-2.5 bg-zinc-50/90 flex items-center justify-between text-xs font-bold text-zinc-600">
+                <span className="flex items-center gap-1.5">
+                  <Search className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>ম্যাচিং প্রোডাক্ট ({instantSearchResults.length})</span>
+                </span>
+                <span className="text-[11px] text-zinc-400 font-normal">ESC দিয়ে বন্ধ করুন</span>
+              </div>
+
+              {instantSearchResults.length > 0 ? (
+                <div className="max-h-[380px] overflow-y-auto divide-y divide-zinc-100">
+                  {instantSearchResults.map((prod) => {
+                    const sellingPrice = Number(prod.selling_price || 0);
+                    const discount = Number(prod.discount || 0);
+                    const finalPrice = Math.max(0, sellingPrice - discount);
+                    const thumb =
+                      prod.image_url ||
+                      (prod.images && prod.images[0]) ||
+                      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&auto=format&fit=crop&q=80';
+
+                    return (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => handleSelectInstantProduct(prod)}
+                        className="w-full text-left p-3 hover:bg-emerald-50/50 flex items-center gap-3 transition-colors cursor-pointer group"
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200/80 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                          <img
+                            src={thumb}
+                            alt={prod.name}
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-zinc-900 group-hover:text-emerald-700 truncate leading-snug">
+                            {prod.name}
+                          </h4>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-500">
+                            {prod.category && (
+                              <span className="truncate max-w-[120px] bg-zinc-100 px-1.5 py-0.2 rounded text-[10px] font-medium text-zinc-700">
+                                {prod.category}
+                              </span>
+                            )}
+                            {prod.brand && (
+                              <span className="font-semibold text-zinc-600 truncate max-w-[100px]">
+                                {prod.brand}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-black text-zinc-950">
+                            ৳{finalPrice.toLocaleString('en-BD')}
+                          </div>
+                          {discount > 0 && (
+                            <div className="text-[10px] text-zinc-400 line-through">
+                              ৳{sellingPrice.toLocaleString('en-BD')}
+                            </div>
+                          )}
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-zinc-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-zinc-500">
+                  <p className="text-xs font-semibold text-zinc-700">"{searchQuery}" দিয়ে কোনো প্রোডাক্ট মেলেনি</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">অন্য কোনো প্রোডাক্টের নাম বা ব্র্যান্ড লিখে চেষ্টা করুন</p>
+                </div>
+              )}
+
+              {instantSearchResults.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleViewAllResults}
+                  className="w-full py-2.5 px-4 bg-zinc-50 hover:bg-zinc-100 text-center text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <span>সবগুলো সার্চ ফলাফল দেখুন ({instantSearchResults.length}+)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right utility items: [Login/Register] [Wishlist] [Cart] */}
@@ -595,26 +746,126 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Search Bar Expandable */}
       {mobileSearchOpen && (
-        <div className="sm:hidden px-3 pb-3 pt-2 border-t border-zinc-100 bg-white animate-in slide-in-from-top-2 duration-200">
+        <div
+          ref={mobileSearchContainerRef}
+          className="sm:hidden px-3 pb-3 pt-2 border-t border-zinc-150 bg-white animate-in slide-in-from-top-2 duration-200 relative shadow-md"
+        >
           <div className="relative w-full">
             <input
               type="text"
               placeholder="Search products by name..."
               value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onChange={(e) => {
+                onSearchChange(e.target.value);
+                setIsSearchFocused(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setIsSearchFocused(false);
+                  setMobileSearchOpen(false);
+                } else if (e.key === 'Enter') {
+                  handleViewAllResults();
+                }
+              }}
               autoFocus
-              className="w-full bg-zinc-100 text-zinc-900 text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-950"
+              className="w-full bg-zinc-100 text-zinc-900 text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-950 focus:bg-white"
             />
             <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-3 shrink-0" />
             {searchQuery && (
               <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-3 top-2.5 text-xs text-zinc-400 hover:text-zinc-600 bg-zinc-200 rounded-full w-4 h-4 flex items-center justify-center"
+                type="button"
+                onClick={() => {
+                  onSearchChange('');
+                  setIsSearchFocused(false);
+                }}
+                className="absolute right-3 top-2.5 text-xs text-zinc-400 hover:text-zinc-600 bg-zinc-200 rounded-full w-4 h-4 flex items-center justify-center cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
+
+          {/* Mobile Instant Search Dropdown */}
+          {isSearchFocused && searchQuery.trim().length >= 1 && (
+            <div className="mt-2 bg-white rounded-xl border border-zinc-200 shadow-xl overflow-hidden divide-y divide-zinc-100 max-h-[60vh] overflow-y-auto">
+              <div className="px-3 py-2 bg-zinc-50 flex items-center justify-between text-[11px] font-bold text-zinc-500">
+                <span>ম্যাচিং প্রোডাক্ট ({instantSearchResults.length})</span>
+                <button
+                  type="button"
+                  onClick={() => setIsSearchFocused(false)}
+                  className="text-zinc-400 hover:text-zinc-700"
+                >
+                  ✕ বন্ধ করুন
+                </button>
+              </div>
+
+              {instantSearchResults.length > 0 ? (
+                <div className="divide-y divide-zinc-100">
+                  {instantSearchResults.map((prod) => {
+                    const sellingPrice = Number(prod.selling_price || 0);
+                    const discount = Number(prod.discount || 0);
+                    const finalPrice = Math.max(0, sellingPrice - discount);
+                    const thumb =
+                      prod.image_url ||
+                      (prod.images && prod.images[0]) ||
+                      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&auto=format&fit=crop&q=80';
+
+                    return (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => handleSelectInstantProduct(prod)}
+                        className="w-full text-left p-2.5 hover:bg-emerald-50/50 flex items-center gap-2.5 active:bg-zinc-100 transition-colors cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-zinc-50 border border-zinc-200/80 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                          <img
+                            src={thumb}
+                            alt={prod.name}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-xs font-bold text-zinc-900 truncate">
+                            {prod.name}
+                          </h4>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-zinc-500">
+                            {prod.category && <span className="truncate max-w-[100px]">{prod.category}</span>}
+                            {prod.brand && <span>• {prod.brand}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-black text-zinc-950">
+                            ৳{finalPrice.toLocaleString('en-BD')}
+                          </div>
+                          {discount > 0 && (
+                            <div className="text-[9px] text-zinc-400 line-through">
+                              ৳{sellingPrice.toLocaleString('en-BD')}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-zinc-500 text-xs">
+                  কোনো প্রোডাক্ট মেলেনি
+                </div>
+              )}
+
+              {instantSearchResults.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleViewAllResults}
+                  className="w-full py-2.5 px-3 bg-zinc-50 hover:bg-zinc-100 text-center text-xs font-bold text-emerald-700 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>সবগুলো প্রোডাক্ট দেখুন ({instantSearchResults.length}+)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </header>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Trash2, ArrowRight, ShoppingBag, Truck } from 'lucide-react';
+import { X, Trash2, ArrowRight, ShoppingBag, Truck, CheckCircle2, Sparkles } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
 
 interface CartDrawerProps {
@@ -29,6 +29,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   );
 
   const totalItemsCount = cart.reduce((total, item) => total + Number(item.quantity), 0);
+
+  // Free delivery toggle & threshold from store settings
+  const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
+  const FREE_SHIPPING_THRESHOLD =
+    Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+  const amountRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const progressPercent = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+  const isFreeShippingUnlocked = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -63,6 +71,64 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Free Shipping Dynamic Progress Bar (Controlled from Admin) */}
+          {isFreeDeliveryFeatureEnabled && cart.length > 0 && (
+            <div
+              className={`p-3.5 sm:p-4 border-b transition-all ${
+                isFreeShippingUnlocked
+                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                  : 'bg-gradient-to-r from-amber-50/80 via-orange-50/60 to-emerald-50/70 border-zinc-200/80 text-zinc-900'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 text-xs font-black min-w-0">
+                  {isFreeShippingUnlocked ? (
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0">
+                      <Truck className="w-3.5 h-3.5 text-amber-600" />
+                    </div>
+                  )}
+                  <span className="truncate">
+                    {isFreeShippingUnlocked ? (
+                      <span className="text-emerald-900 font-black">
+                        🎉 অভিনন্দন! <span className="underline decoration-emerald-500 underline-offset-2">ফ্রি ডেলিভারি</span> আনলক হয়েছে!
+                      </span>
+                    ) : (
+                      <span>
+                        আর মাত্র <strong className="text-emerald-700 font-black text-xs sm:text-sm">৳{amountRemaining.toLocaleString('en-BD')}</strong> টাকার কেনাকাটায় <strong className="text-zinc-950 font-black">ফ্রি ডেলিভারি!</strong>
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <span className="text-[10px] sm:text-[11px] font-black text-zinc-600 shrink-0 bg-white px-2 py-0.5 rounded-full border border-zinc-200/80 shadow-2xs">
+                  {progressPercent}%
+                </span>
+              </div>
+
+              {/* Progress Track */}
+              <div className="w-full bg-zinc-200/80 rounded-full h-2 overflow-hidden shadow-inner">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ease-out ${
+                    isFreeShippingUnlocked
+                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-xs'
+                      : 'bg-gradient-to-r from-amber-500 via-emerald-500 to-emerald-600'
+                  }`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              {!isFreeShippingUnlocked && (
+                <div className="text-[10px] text-zinc-500 font-medium mt-1.5 flex items-center justify-between">
+                  <span>৳{subtotal.toLocaleString('en-BD')}</span>
+                  <span>ফ্রি ডেলিভারি টার্গেট: ৳{FREE_SHIPPING_THRESHOLD.toLocaleString('en-BD')}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Cart Items List */}
           <div className="flex-1 overflow-y-auto p-5 divide-y divide-zinc-100">
@@ -169,13 +235,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           {/* Drawer Footer */}
           {cart.length > 0 && (
             <div className="p-5 bg-zinc-50 border-t border-zinc-200 space-y-4">
-              <div className="flex items-center justify-between text-xs text-zinc-600 bg-emerald-50 text-emerald-800 p-2.5 rounded-xl border border-emerald-200">
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Truck className="w-4 h-4 text-emerald-600" />
-                  <span>Cash on Delivery nationwide</span>
+              {isFreeShippingUnlocked ? (
+                <div className="flex items-center justify-between text-xs text-emerald-900 bg-emerald-100/70 p-2.5 rounded-xl border border-emerald-300/80">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>Free Home Delivery Unlocked!</span>
+                  </div>
+                  <span className="font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-200">
+                    ৳0 (FREE)
+                  </span>
                 </div>
-                <span className="font-bold">Inside Dhaka ৳{settings.delivery_inside_dhaka || 70}</span>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs text-zinc-600 bg-emerald-50 text-emerald-800 p-2.5 rounded-xl border border-emerald-200">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <Truck className="w-4 h-4 text-emerald-600" />
+                    <span>Cash on Delivery nationwide</span>
+                  </div>
+                  <span className="font-bold">Inside Dhaka ৳{settings.delivery_inside_dhaka || 70}</span>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm text-zinc-600">
@@ -186,7 +264,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-xs text-zinc-500">
                   <span>Delivery Charge</span>
-                  <span>Calculated at checkout</span>
+                  <span className={isFreeShippingUnlocked ? 'font-bold text-emerald-700' : ''}>
+                    {isFreeShippingUnlocked ? '৳0 (Free Delivery)' : 'Calculated at checkout'}
+                  </span>
                 </div>
               </div>
 
@@ -194,7 +274,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <div className="flex items-center justify-between text-base font-black text-zinc-950 mb-3">
                   <span>Estimated Total</span>
                   <span className="text-lg text-emerald-700">
-                    ৳{subtotal.toLocaleString('en-BD')} + Delivery
+                    ৳{subtotal.toLocaleString('en-BD')} {isFreeShippingUnlocked ? '(Free Delivery)' : '+ Delivery'}
                   </span>
                 </div>
 

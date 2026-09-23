@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, Copy, Check, Truck, ShieldCheck, MapPin, Phone, User, Mail, AlertCircle, ShoppingBag } from 'lucide-react';
+import { X, CheckCircle2, Copy, Check, Truck, ShieldCheck, MapPin, Phone, User, Mail, AlertCircle, ShoppingBag, Sparkles } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict, SUB_DHAKA_AREAS } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
@@ -63,8 +63,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [district, area]);
 
-  // Delivery charge calculation
+  // Free delivery toggle & threshold from store settings (Admin controlled)
+  const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
+  const FREE_SHIPPING_THRESHOLD =
+    Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+
+  const subtotal = cart.reduce(
+    (acc, item) => acc + Number(item.unit_price) * Number(item.quantity),
+    0
+  );
+
+  const isFreeShipping = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;
+
+  // Delivery charge calculation (0 if free shipping unlocked)
   const getDeliveryCharge = () => {
+    if (isFreeShipping) return 0;
     if (deliveryArea === 'inside_dhaka') {
       return Number(settings.delivery_inside_dhaka || 70);
     }
@@ -74,10 +87,6 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return Number(settings.delivery_outside_dhaka || 130);
   };
 
-  const subtotal = cart.reduce(
-    (acc, item) => acc + Number(item.unit_price) * Number(item.quantity),
-    0
-  );
   const deliveryCharge = getDeliveryCharge();
   const grandTotal = subtotal + deliveryCharge;
 
@@ -109,6 +118,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         area,
         address: address.trim(),
         delivery_area: deliveryArea,
+        delivery_charge: deliveryCharge,
+        subtotal,
+        total: grandTotal,
         note: note.trim(),
         items: cart.map((item) => ({
           product_id: item.product_id,
@@ -217,9 +229,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="flex items-center justify-between text-xs text-zinc-600">
                   <span>Delivery Charge</span>
-                  <span className="font-semibold text-zinc-900">
-                    ৳{completedOrder.delivery_charge?.toLocaleString('en-BD')}
-                  </span>
+                  {Number(completedOrder.delivery_charge || 0) === 0 ? (
+                    <span className="font-extrabold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded text-xs">
+                      ৳0 (FREE DELIVERY)
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-zinc-900">
+                      ৳{Number(completedOrder.delivery_charge).toLocaleString('en-BD')}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-zinc-200 font-black text-zinc-950 text-base">
@@ -400,25 +418,40 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 {/* Delivery Area Rate Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-zinc-700 mb-1">
-                    Delivery Zone <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-zinc-700">
+                      Delivery Zone <span className="text-rose-500">*</span>
+                    </label>
+                    {isFreeShipping && (
+                      <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        Free Delivery Unlocked!
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={deliveryArea}
                     onChange={(e) => setDeliveryArea(e.target.value as any)}
                     className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:border-zinc-900 focus:outline-none font-semibold"
                   >
                     <option value="inside_dhaka">
-                      Inside Dhaka City — ৳{settings.delivery_inside_dhaka || 70}
+                      Inside Dhaka City — {isFreeShipping ? '৳0 (Free Delivery)' : `৳${settings.delivery_inside_dhaka || 70}`}
                     </option>
                     <option value="sub_dhaka">
-                      Dhaka Sub-Area (Gazipur, Savar, Keraniganj, Tongi, etc.) — ৳{settings.delivery_sub_dhaka || 100}
+                      Dhaka Sub-Area (Gazipur, Savar, Keraniganj, Tongi, etc.) — {isFreeShipping ? '৳0 (Free Delivery)' : `৳${settings.delivery_sub_dhaka || 100}`}
                     </option>
                     <option value="outside_dhaka">
-                      Outside Dhaka (Nationwide) — ৳{settings.delivery_outside_dhaka || 130}
+                      Outside Dhaka (Nationwide) — {isFreeShipping ? '৳0 (Free Delivery)' : `৳${settings.delivery_outside_dhaka || 130}`}
                     </option>
                   </select>
                 </div>
+
+                {isFreeShipping && (
+                  <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 flex items-center gap-2 text-xs font-bold">
+                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>🎉 সাবটোটাল ৳{FREE_SHIPPING_THRESHOLD.toLocaleString('en-BD')}+ হওয়ায় ডেলিভারি চার্জ সম্পূর্ণ ফ্রি (৳0)!</span>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">
@@ -459,11 +492,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <Truck className="w-3.5 h-3.5 text-emerald-400" />
                     Delivery Charge ({deliveryArea === 'inside_dhaka' ? 'Dhaka City' : deliveryArea === 'sub_dhaka' ? 'Sub Dhaka' : 'Outside Dhaka'})
                   </span>
-                  <span className="font-semibold text-white">৳{deliveryCharge.toLocaleString('en-BD')}</span>
+                  {isFreeShipping ? (
+                    <span className="font-black text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40 text-xs">
+                      ৳0 (FREE DELIVERY)
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-white">৳{deliveryCharge.toLocaleString('en-BD')}</span>
+                  )}
                 </div>
                 <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-base font-black">
                   <span>Grand Total (Pay on Delivery)</span>
-                  <span className="text-emerald-400 text-xl">৳{grandTotal.toLocaleString('en-BD')}</span>
+                  <span className="text-emerald-400 text-xl">
+                    ৳{grandTotal.toLocaleString('en-BD')}
+                  </span>
                 </div>
 
                 <div className="bg-zinc-800/80 p-2.5 rounded-xl text-xs text-zinc-300 flex items-center gap-2">

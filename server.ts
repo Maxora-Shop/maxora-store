@@ -881,7 +881,7 @@ app.post('/api/orders', (req, res) => {
       area: directOrder.area || "",
       address: directOrder.address || "",
       delivery_area: directOrder.delivery_area || "inside_dhaka",
-      delivery_charge: Number(directOrder.delivery_charge || 70),
+      delivery_charge: Number(directOrder.delivery_charge !== undefined && directOrder.delivery_charge !== null ? directOrder.delivery_charge : 70),
       subtotal: Number(directOrder.subtotal || 0),
       total: Number(directOrder.total !== undefined ? directOrder.total : directOrder.total_amount || 0),
       status: directOrder.status || directOrder.order_status || "Pending",
@@ -1002,16 +1002,27 @@ app.post('/api/orders', (req, res) => {
     });
   }
 
-  // Delivery charge calculation
-  let deliveryCharge = Number(db.settings.delivery_outside_dhaka || 130);
+  // Delivery charge calculation (Admin controlled Free Shipping Campaign)
   const deliveryArea = body.delivery_area || "inside_dhaka";
-  if (deliveryArea === "inside_dhaka") {
-    deliveryCharge = Number(db.settings.delivery_inside_dhaka || 70);
-  } else if (deliveryArea === "sub_dhaka") {
-    deliveryCharge = Number(db.settings.delivery_sub_dhaka || 100);
+  const isFreeDeliveryFeatureEnabled = db.settings.free_delivery_enabled !== false;
+  const freeThreshold =
+    Number(db.settings.free_delivery_threshold) > 0 ? Number(db.settings.free_delivery_threshold) : 1500;
+
+  let deliveryCharge = 0;
+  if (body.delivery_charge !== undefined && body.delivery_charge !== null) {
+    deliveryCharge = Number(body.delivery_charge);
+  } else if (isFreeDeliveryFeatureEnabled && subtotal >= freeThreshold) {
+    deliveryCharge = 0;
+  } else {
+    deliveryCharge = Number(db.settings.delivery_outside_dhaka || 130);
+    if (deliveryArea === "inside_dhaka") {
+      deliveryCharge = Number(db.settings.delivery_inside_dhaka || 70);
+    } else if (deliveryArea === "sub_dhaka") {
+      deliveryCharge = Number(db.settings.delivery_sub_dhaka || 100);
+    }
   }
 
-  const total = subtotal + deliveryCharge;
+  const total = Number(body.total !== undefined ? body.total : (subtotal + deliveryCharge));
 
   // Customer resolution / update
   let customer = db.customers.find(c => c.phone === body.phone);
@@ -1175,7 +1186,7 @@ app.post('/api/orders/sync', (req, res) => {
     area: directOrder.area || "",
     address: directOrder.address || "",
     delivery_area: directOrder.delivery_area || "inside_dhaka",
-    delivery_charge: Number(directOrder.delivery_charge || 70),
+    delivery_charge: Number(directOrder.delivery_charge !== undefined && directOrder.delivery_charge !== null ? directOrder.delivery_charge : 70),
     subtotal: Number(directOrder.subtotal || 0),
     total: Number(directOrder.total !== undefined ? directOrder.total : directOrder.total_amount || 0),
     status: directOrder.status || directOrder.order_status || "Pending",

@@ -714,7 +714,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <div className="flex justify-between text-zinc-700">
               <span>Delivery Charge:</span>
               <span className="font-semibold font-mono">
-                ৳{Number(order.delivery_charge || 0).toLocaleString('en-BD')}
+                {Number(order.delivery_charge || 0) === 0 ? (
+                  <span className="text-emerald-600 font-bold">৳0 (FREE)</span>
+                ) : (
+                  `৳${Number(order.delivery_charge || 0).toLocaleString('en-BD')}`
+                )}
               </span>
             </div>
             {order.discount && Number(order.discount) > 0 && (

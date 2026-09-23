@@ -1383,6 +1383,9 @@ export const storeService = {
     area: string;
     address: string;
     delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
+    delivery_charge?: number;
+    subtotal?: number;
+    total?: number;
     note?: string;
     items: Array<{
       product_id: string;
@@ -1464,12 +1467,25 @@ export const storeService = {
     }
     setLocal(PRODUCTS_KEY, products);
 
+    // Free delivery threshold & enabled check from store settings
+    const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
+    const FREE_SHIPPING_THRESHOLD =
+      Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+    const isFreeShipping = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;
+
     // Delivery calculation
-    let deliveryCharge = Number(settings.delivery_outside_dhaka || 130);
-    if (orderPayload.delivery_area === 'inside_dhaka') {
-      deliveryCharge = Number(settings.delivery_inside_dhaka || 70);
-    } else if (orderPayload.delivery_area === 'sub_dhaka') {
-      deliveryCharge = Number(settings.delivery_sub_dhaka || 100);
+    let deliveryCharge = 0;
+    if (orderPayload.delivery_charge !== undefined && orderPayload.delivery_charge !== null) {
+      deliveryCharge = Number(orderPayload.delivery_charge);
+    } else if (isFreeShipping) {
+      deliveryCharge = 0;
+    } else {
+      deliveryCharge = Number(settings.delivery_outside_dhaka || 130);
+      if (orderPayload.delivery_area === 'inside_dhaka') {
+        deliveryCharge = Number(settings.delivery_inside_dhaka || 70);
+      } else if (orderPayload.delivery_area === 'sub_dhaka') {
+        deliveryCharge = Number(settings.delivery_sub_dhaka || 100);
+      }
     }
 
     const total = subtotal + deliveryCharge;

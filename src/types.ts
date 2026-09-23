@@ -271,6 +271,8 @@ export interface StoreSettings {
   delivery_inside_dhaka: string | number;
   delivery_sub_dhaka: string | number;
   delivery_outside_dhaka: string | number;
+  free_delivery_enabled?: boolean;
+  free_delivery_threshold?: number;
   currency: string;
   phone: string;
   whatsapp?: string;
