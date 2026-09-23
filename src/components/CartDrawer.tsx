@@ -33,7 +33,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Free delivery toggle & threshold from store settings
   const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
   const FREE_SHIPPING_THRESHOLD =
-    Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+    Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000;
   const amountRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
   const progressPercent = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
   const isFreeShippingUnlocked = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;

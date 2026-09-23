@@ -19,6 +19,14 @@
       "destination": "/api/ai-chat"
     },
     {
+      "source": "/api/admin/settings",
+      "destination": "/api/settings"
+    },
+    {
+      "source": "/api/settings",
+      "destination": "/api/settings"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

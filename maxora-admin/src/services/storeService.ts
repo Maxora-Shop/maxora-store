@@ -748,28 +748,31 @@ export const storeService = {
   async getSettings(): Promise<StoreSettings> {
     const local = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     
-    // 1. Try Firestore if quota cooldown is not active
-    if (!isClientQuotaCooldownActive()) {
-      try {
-        const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-        if (docSnap.exists()) {
-          const firestoreSettings = docSnap.data() as StoreSettings;
-          const merged = { ...local, ...firestoreSettings };
-          setLocal(SETTINGS_KEY, merged);
-          return merged;
-        }
-      } catch (e) {
-        handleStoreFirestoreError('Firestore getSettings', e);
+    // 1. Try Firestore direct single document read
+    try {
+      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+      if (docSnap.exists()) {
+        const firestoreSettings = docSnap.data() as StoreSettings;
+        const merged = { ...local, ...firestoreSettings };
+        setLocal(SETTINGS_KEY, merged);
+        return merged;
       }
+    } catch (e) {
+      console.warn('Firestore getSettings note:', e);
     }
 
     // 2. Try REST API
-    const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-    if (apiResult.success && apiResult.data?.settings) {
-      const merged = { ...local, ...apiResult.data.settings };
-      setLocal(SETTINGS_KEY, merged);
-      return merged;
+    try {
+      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
+      if (apiResult.success && apiResult.data?.settings) {
+        const merged = { ...local, ...apiResult.data.settings };
+        setLocal(SETTINGS_KEY, merged);
+        return merged;
+      }
+    } catch (e) {
+      console.warn('REST getSettings note:', e);
     }
+
     return local;
   },
 
@@ -1312,7 +1315,7 @@ export const storeService = {
     // Free delivery threshold & enabled check from store settings
     const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
     const FREE_SHIPPING_THRESHOLD =
-      Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+      Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000;
     const isFreeShipping = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;
 
     // Delivery calculation

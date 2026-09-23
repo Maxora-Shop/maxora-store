@@ -405,7 +405,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {settings.free_delivery_enabled !== false ? (
               <>
                 <span className="font-semibold text-white">
-                  Free Delivery on orders above ৳{(Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500).toLocaleString('en-BD')}
+                  Free Delivery on orders above ৳{(Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000).toLocaleString('en-BD')}
                 </span>
                 <span className="text-zinc-600 hidden xs:inline">|</span>
                 <span className="hidden xs:inline">

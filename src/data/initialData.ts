@@ -619,7 +619,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   delivery_sub_dhaka: 100,
   delivery_outside_dhaka: 130,
   free_delivery_enabled: true,
-  free_delivery_threshold: 1500,
+  free_delivery_threshold: 2000,
   currency: "৳",
   phone: "01635451746",
   whatsapp: "+8801635451746",

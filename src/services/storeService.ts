@@ -799,7 +799,7 @@ export const storeService = {
   async getSettings(): Promise<StoreSettings> {
     let current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
 
-    // 1. Authoritative Backend REST API query
+    // 1. Authoritative Backend / Serverless REST API query
     try {
       const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
       if (apiResult.success && apiResult.data?.settings) {
@@ -811,19 +811,18 @@ export const storeService = {
       console.warn('API getSettings error:', apiErr);
     }
     
-    // 2. Query Firestore if quota is healthy
-    if (!isClientQuotaCooldownActive()) {
-      try {
-        const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-        if (docSnap.exists()) {
-          const firestoreSettings = docSnap.data() as StoreSettings;
-          current = { ...current, ...firestoreSettings };
-          setLocal(SETTINGS_KEY, current);
-          return current;
-        }
-      } catch (e) {
-        handleStoreFirestoreError('Firestore getSettings', e);
+    // 2. Query Firestore directly (single doc read, ultra-lightweight)
+    try {
+      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+      if (docSnap.exists()) {
+        const firestoreSettings = docSnap.data() as StoreSettings;
+        current = { ...current, ...firestoreSettings };
+        setLocal(SETTINGS_KEY, current);
+        return current;
       }
+    } catch (e) {
+      // Only log if not generic quota notice
+      console.warn('Firestore getSettings note:', e);
     }
 
     return current;
@@ -1470,7 +1469,7 @@ export const storeService = {
     // Free delivery threshold & enabled check from store settings
     const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
     const FREE_SHIPPING_THRESHOLD =
-      Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500;
+      Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000;
     const isFreeShipping = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;
 
     // Delivery calculation

@@ -1528,6 +1528,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleSaveFreeDeliverySettings = async () => {
+    try {
+      setLoading(true);
+      const threshold = Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 2000;
+      const updated = {
+        ...settingsForm,
+        free_delivery_enabled: settingsForm.free_delivery_enabled !== false,
+        free_delivery_threshold: threshold,
+      };
+      setSettingsForm(updated);
+      await storeService.saveSettings(updated, password);
+      showToast(`ফ্রি ডেলিভারি অফার সংরক্ষিত হয়েছে! (টার্গেট: ৳${threshold.toLocaleString('en-BD')})`, 'success');
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to save settings: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Category Edit Handlers for Settings & Management
   const handleOpenCategoryEditModal = (cat: Category) => {
     setCategoryToEdit({
@@ -4296,7 +4316,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {settingsForm.free_delivery_enabled !== false ? (
                           <>
                             <span className="font-semibold text-white whitespace-nowrap">
-                              Free Delivery on orders above ৳{(Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 1500).toLocaleString('en-BD')}
+                              Free Delivery on orders above ৳{(Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 2000).toLocaleString('en-BD')}
                             </span>
                             <span className="text-zinc-600">|</span>
                             <span className="text-zinc-300 whitespace-nowrap">
@@ -4416,7 +4436,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Minimum Order Amount for Free Delivery (৳)
                             </label>
                             <span className="text-[10px] text-emerald-700">
-                              কার্টে এই টাকার সমপরিমাণ বা বেশি মূল্যের পণ্য থাকলে স্বয়ংক্রিয়ভাবে ফ্রি ডেলিভারি আনলক হবে (ডিফল্ট: ৳১৫০০)
+                              কার্টে এই টাকার সমপরিমাণ বা বেশি মূল্যের পণ্য থাকলে স্বয়ংক্রিয়ভাবে ফ্রি ডেলিভারি আনলক হবে
                             </span>
                           </div>
                           <div className="w-full sm:w-52">
@@ -4425,15 +4445,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <input
                                 type="number"
                                 min="1"
-                                value={settingsForm.free_delivery_threshold ?? 1500}
+                                value={settingsForm.free_delivery_threshold ?? 2000}
                                 onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_threshold: Number(e.target.value) })}
                                 className="w-full bg-white text-zinc-900 text-sm pl-7 pr-3 py-2 rounded-xl border border-emerald-300 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-black shadow-2xs"
-                                placeholder="1500"
+                                placeholder="2000"
                               />
                             </div>
                           </div>
                         </div>
                       )}
+
+                      {/* Instant Save Button inside Free Delivery card */}
+                      <div className="pt-3 border-t border-emerald-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="text-[11px] text-emerald-800 font-medium text-center sm:text-left">
+                          বর্তমান ফ্রি ডেলিভারি টার্গেট: <strong className="font-extrabold text-emerald-950">৳{(settingsForm.free_delivery_threshold || 2000).toLocaleString('en-BD')}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveFreeDeliverySettings}
+                          disabled={loading}
+                          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                        >
+                          <Save className="w-4 h-4 text-emerald-200" />
+                          <span>Save Delivery Offer (এখনই সেভ করুন)</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 

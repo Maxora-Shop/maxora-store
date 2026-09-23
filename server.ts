@@ -2026,15 +2026,13 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   });
 
   // Mirror to Firestore in background without delaying HTTP response
-  if (!isFirestoreQuotaCooldownActive()) {
-    try {
-      const firestoreDb = getFirestoreInstance();
-      setDoc(doc(firestoreDb, 'settings', 'store_settings'), cleanForFirestore(db.settings), { merge: true }).catch((fsErr) => {
-        handleFirestoreError('Firestore settings mirror', fsErr);
-      });
-    } catch (err) {
-      handleFirestoreError('Firestore settings instance', err);
-    }
+  try {
+    const firestoreDb = getFirestoreInstance();
+    setDoc(doc(firestoreDb, 'settings', 'store_settings'), cleanForFirestore(db.settings), { merge: true }).catch((fsErr) => {
+      console.warn('Firestore settings mirror note:', fsErr?.message || fsErr);
+    });
+  } catch (err) {
+    console.warn('Firestore settings instance note:', err);
   }
 });
 
