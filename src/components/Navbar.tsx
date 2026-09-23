@@ -401,12 +401,28 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="bg-[#0f172a] text-zinc-300 text-xs py-2 px-3 sm:px-6 w-full border-b border-zinc-800">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 w-full">
           <div className="flex items-center gap-2 text-[11px] sm:text-xs text-zinc-300 font-medium truncate">
-            <Truck className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-            <span>Free Delivery on orders above ৳1500</span>
-            <span className="text-zinc-600 hidden xs:inline">|</span>
-            <span className="hidden xs:inline">Cash on Delivery Available</span>
-            <span className="text-zinc-600 hidden md:inline">|</span>
-            <span className="hidden md:inline">Fast Delivery Across Bangladesh</span>
+            <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            {settings.free_delivery_enabled !== false ? (
+              <>
+                <span className="font-semibold text-white">
+                  Free Delivery on orders above ৳{(Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 1500).toLocaleString('en-BD')}
+                </span>
+                <span className="text-zinc-600 hidden xs:inline">|</span>
+                <span className="hidden xs:inline">
+                  {settings.promo_text?.trim() || "Cash on Delivery Available"}
+                </span>
+                <span className="text-zinc-600 hidden md:inline">|</span>
+                <span className="hidden md:inline">Fast Delivery Across Bangladesh</span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-white">
+                  {settings.promo_text?.trim() || "Cash on Delivery Available Across Bangladesh"}
+                </span>
+                <span className="text-zinc-600 hidden xs:inline">|</span>
+                <span className="hidden xs:inline">Fast Delivery Across Bangladesh (64 Districts)</span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3 sm:gap-5 text-zinc-300 shrink-0 text-[11px] sm:text-xs font-medium">

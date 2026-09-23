@@ -4275,17 +4275,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-zinc-700 mb-1">
-                        Announcement Bar Text
-                      </label>
+                    <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200/90 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-zinc-900">
+                          Top Announcement Bar Notice (ওয়েবসাইটের শীর্ষ ব্যানার টেক্সট)
+                        </label>
+                        <span className="text-[10px] text-zinc-400 font-medium">Storefront Top Header</span>
+                      </div>
                       <input
                         type="text"
                         value={settingsForm.promo_text || ''}
                         onChange={(e) => setSettingsForm({ ...settingsForm, promo_text: e.target.value })}
                         placeholder="Cash on Delivery Available Across Bangladesh"
-                        className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                       />
+                      
+                      {/* Live Top Bar Preview */}
+                      <div className="bg-[#0f172a] text-zinc-300 text-[11px] p-2.5 rounded-xl border border-zinc-800 flex items-center gap-2 overflow-x-auto">
+                        <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        {settingsForm.free_delivery_enabled !== false ? (
+                          <>
+                            <span className="font-semibold text-white whitespace-nowrap">
+                              Free Delivery on orders above ৳{(Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 1500).toLocaleString('en-BD')}
+                            </span>
+                            <span className="text-zinc-600">|</span>
+                            <span className="text-zinc-300 whitespace-nowrap">
+                              {settingsForm.promo_text?.trim() || "Cash on Delivery Available"}
+                            </span>
+                            <span className="text-zinc-600">|</span>
+                            <span className="text-zinc-400 whitespace-nowrap">Fast Delivery Across Bangladesh</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-white whitespace-nowrap">
+                              {settingsForm.promo_text?.trim() || "Cash on Delivery Available Across Bangladesh"}
+                            </span>
+                            <span className="text-zinc-600">|</span>
+                            <span className="text-zinc-400 whitespace-nowrap">Fast Delivery Across Bangladesh (64 Districts)</span>
+                          </>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500">
+                        💡 <strong>নোট:</strong> ফ্রি ডেলিভারির টাকার অংক (যেমন ৳1500) নিচের <strong>Free Delivery Promotion</strong> সেটিংসে পরিবর্তন করলেই এই ব্যানারে স্বয়ংক্রিয়ভাবে আপডেট হয়ে যাবে।
+                      </p>
                     </div>
                   </div>
 
