@@ -5,8 +5,8 @@ export const TrustBenefitsSection: React.FC = () => {
   const benefits = [
     {
       icon: Truck,
-      title: 'Free Shipping',
-      subtitle: 'On orders over ৳1,000',
+      title: 'Fast Delivery',
+      subtitle: 'সারা দেশে দ্রুত ডেলিভারি',
     },
     {
       icon: ShieldCheck,
