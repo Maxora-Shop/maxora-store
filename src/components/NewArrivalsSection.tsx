@@ -71,7 +71,7 @@ export const NewArrivalsSection: React.FC<NewArrivalsSectionProps> = ({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-5">
         {newArrivals.map((product) => {
           const sellingPrice = Number(product.selling_price || 0);
           const discount = Number(product.discount || 0);

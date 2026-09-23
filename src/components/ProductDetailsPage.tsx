@@ -1374,7 +1374,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4">
             {relatedProducts.map((relProduct) => (
               <ProductCard
                 key={relProduct.id}

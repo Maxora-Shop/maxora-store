@@ -142,7 +142,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
       </div>
 
       {/* Grid of Flash Sale Products */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-5 relative z-10">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-5 relative z-10">
         {flashSaleProducts.map((product) => {
           const sellingPrice = Number(product.selling_price || 0);
           const discount = Number(product.discount || 0);

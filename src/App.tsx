@@ -1636,7 +1636,7 @@ export default function App() {
               </div>
 
               {loadingProducts ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 space-y-3 animate-pulse">
                       <div className="aspect-square bg-zinc-200 rounded-xl" />
@@ -1654,9 +1654,7 @@ export default function App() {
                         ? 'grid-cols-1 max-w-xs sm:max-w-sm'
                         : paginatedProducts.length === 2
                         ? 'grid-cols-2 max-w-xl'
-                        : paginatedProducts.length === 3
-                        ? 'grid-cols-2 sm:grid-cols-3 max-w-3xl'
-                        : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'
+                        : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-4'
                     }`}
                   >
                     {paginatedProducts.map((product) => (
