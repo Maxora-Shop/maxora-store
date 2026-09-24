@@ -2962,15 +2962,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </td>
                           <td className="p-4">
                             <div className="flex flex-col gap-1.5 items-start">
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const nextActive = p.active === 0 ? 1 : 0;
+                                    await storeService.updateProduct(p.id, { active: nextActive }, password);
+                                    showToast(
+                                      nextActive === 1 ? `"${p.name}" is now Active on Customer Storefront!` : `"${p.name}" is now Hidden from Customer Storefront`,
+                                      'success'
+                                    );
+                                    loadProducts();
+                                    onSettingsUpdated();
+                                  } catch (err: any) {
+                                    showToast('Failed to change status: ' + err.message, 'error');
+                                  }
+                                }}
+                                title="Click to toggle Active / Hidden on customer site (ক্লিক করে কাস্টমার সাইটে দৃশ্যমান বা লুকান)"
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-all hover:scale-105 active:scale-95 flex items-center gap-1 ${
                                   p.active !== 0
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-zinc-200 text-zinc-600'
+                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                    : 'bg-zinc-200 text-zinc-600 hover:bg-zinc-300'
                                 }`}
                               >
-                                {p.active !== 0 ? 'Active' : 'Hidden'}
-                              </span>
+                                <span className={`w-1.5 h-1.5 rounded-full ${p.active !== 0 ? 'bg-emerald-600' : 'bg-zinc-400'}`}></span>
+                                <span>{p.active !== 0 ? 'Active (লাইভ)' : 'Hidden (লুকানো)'}</span>
+                              </button>
 
                               <div className="flex flex-wrap gap-1 max-w-[170px]">
                                 <button

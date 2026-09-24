@@ -1773,6 +1773,18 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   saveDB();
   invalidateSitemapCache();
 
+  // Mirror to Cloud Firestore if quota is available
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      setDoc(doc(firestoreDb, 'products', productId), cleanForFirestore(newProduct), { merge: true }).catch((err) => {
+        handleFirestoreError('Mirror addProduct to Firestore', err);
+      });
+    } catch (err) {
+      handleFirestoreError('Mirror addProduct to Firestore init', err);
+    }
+  }
+
   res.status(201).json({
     success: true,
     message: "Product added successfully.",
@@ -1858,6 +1870,19 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
 
   saveDB();
   invalidateSitemapCache();
+
+  // Mirror update to Cloud Firestore if quota is available
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const firestoreDb = getFirestoreInstance();
+      setDoc(doc(firestoreDb, 'products', String(db.products[pIndex].id)), cleanForFirestore(db.products[pIndex]), { merge: true }).catch((err) => {
+        handleFirestoreError('Mirror updateProduct to Firestore', err);
+      });
+    } catch (err) {
+      handleFirestoreError('Mirror updateProduct to Firestore init', err);
+    }
+  }
+
   res.json({
     success: true,
     message: "Product updated successfully.",
@@ -2443,13 +2468,37 @@ async function syncFirestoreProducts() {
     const firestoreDb = getFirestoreInstance();
     const snap = await getDocs(collection(firestoreDb, 'products'));
     if (!snap.empty) {
-      const freshProducts: any[] = [];
+      const fsMap = new Map<string, any>();
       snap.forEach(d => {
         const data = { ...d.data(), id: String(d.data().id || d.id) };
-        freshProducts.push(data);
+        fsMap.set(String(data.id), data);
+        if (data.sku) fsMap.set(String(data.sku), data);
+        if (data.slug) fsMap.set(String(data.slug), data);
       });
-      // Replace db.products with the exact active set from Firestore to purge deleted items
-      db.products = freshProducts;
+
+      // Update existing local products with Firestore versions, and add any new products
+      const updatedList: any[] = [];
+      const seenIds = new Set<string>();
+
+      // First keep all Firestore products
+      snap.forEach(d => {
+        const data = { ...d.data(), id: String(d.data().id || d.id) };
+        if (!seenIds.has(data.id)) {
+          seenIds.add(data.id);
+          updatedList.push(data);
+        }
+      });
+
+      // Retain any existing in-memory db.products not present in Firestore (prevents loss on cold starts or partial collections)
+      for (const localP of db.products) {
+        const localId = String(localP.id);
+        if (!seenIds.has(localId)) {
+          seenIds.add(localId);
+          updatedList.push(localP);
+        }
+      }
+
+      db.products = updatedList;
       saveDB();
     }
   } catch (err) {
