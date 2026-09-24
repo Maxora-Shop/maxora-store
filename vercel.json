@@ -19,6 +19,14 @@
       "destination": "/api/ai-chat"
     },
     {
+      "source": "/api/admin/products/(.*)",
+      "destination": "/api/products?id=$1&admin=true"
+    },
+    {
+      "source": "/api/admin/products",
+      "destination": "/api/products?admin=true"
+    },
+    {
       "source": "/api/admin/settings",
       "destination": "/api/settings"
     },

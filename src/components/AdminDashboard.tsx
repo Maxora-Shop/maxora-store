@@ -1170,6 +1170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadProducts = async (p = password) => {
     setLoading(true);
     try {
+      storeService.clearFirestoreCooldown();
       const list = await storeService.getAllAdminProducts(p);
       setProducts(list);
     } catch (e) {

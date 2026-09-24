@@ -6,6 +6,16 @@ import { getFirestore, getDocs, collection } from 'firebase/firestore';
 
 const BASE_URL = 'https://maxora-store-ruby.vercel.app';
 
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: 'gen-lang-client-0786093112',
+  appId: '1:69433257808:web:fb4fbbe84e9a5188354655',
+  apiKey: 'AIzaSyCTbIx95MxDltN100CSrPA9e9J-YrdF3Gg',
+  authDomain: 'gen-lang-client-0786093112.firebaseapp.com',
+  firestoreDatabaseId: 'ai-studio-maxorapremiumonl-a712e7fa-09e4-41f4-9cfb-9515c7736ab5',
+  storageBucket: 'gen-lang-client-0786093112.firebasestorage.app',
+  messagingSenderId: '69433257808',
+};
+
 function escapeHtml(unsafe: string): string {
   if (!unsafe) return '';
   return String(unsafe)
@@ -83,36 +93,39 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let subcategories: any[] = [];
 
     try {
+      let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
       const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
       if (fs.existsSync(configPath)) {
-        const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-        const db = firebaseConfig.firestoreDatabaseId
-          ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-          : getFirestore(app);
+        try {
+          firebaseConfig = { ...DEFAULT_FIREBASE_CONFIG, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) };
+        } catch {}
+      }
+      const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      const db = firebaseConfig.firestoreDatabaseId
+        ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+        : getFirestore(app);
 
-        const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
-          getDocs(collection(db, 'products')),
-          getDocs(collection(db, 'categories')),
-          getDocs(collection(db, 'subcategories')),
-        ]);
+      const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+        getDocs(collection(db, 'products')),
+        getDocs(collection(db, 'categories')),
+        getDocs(collection(db, 'subcategories')),
+      ]);
 
-        if (!prodsSnap.empty) {
-          prodsSnap.forEach((d) => {
-            const data = d.data() as ProductData;
-            products.push({ ...data, id: String(data.id || d.id) });
-          });
-        }
-        if (!catsSnap.empty) {
-          catsSnap.forEach((d) => {
-            categories.push({ ...d.data(), id: String(d.data().id || d.id) });
-          });
-        }
-        if (!subsSnap.empty) {
-          subsSnap.forEach((d) => {
-            subcategories.push({ ...d.data(), id: String(d.data().id || d.id) });
-          });
-        }
+      if (!prodsSnap.empty) {
+        prodsSnap.forEach((d) => {
+          const data = d.data() as ProductData;
+          products.push({ ...data, id: String(data.id || d.id) });
+        });
+      }
+      if (!catsSnap.empty) {
+        catsSnap.forEach((d) => {
+          categories.push({ ...d.data(), id: String(d.data().id || d.id) });
+        });
+      }
+      if (!subsSnap.empty) {
+        subsSnap.forEach((d) => {
+          subcategories.push({ ...d.data(), id: String(d.data().id || d.id) });
+        });
       }
     } catch (e) {
       console.warn('Firestore load failed in render handler:', e);

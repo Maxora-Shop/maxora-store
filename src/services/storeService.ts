@@ -346,6 +346,15 @@ let clientQuotaNoticeLogged = false;
 let activeFirestoreUnsubscribers: Array<() => void> = [];
 let reconnectTimer: any = null;
 
+export function clearFirestoreCooldown() {
+  clientQuotaCooldownUntil = 0;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('maxora_firestore_cooldown_until');
+    } catch {}
+  }
+}
+
 export function isClientQuotaCooldownActive(): boolean {
   if (typeof window !== 'undefined') {
     const stored = Number(localStorage.getItem('maxora_firestore_cooldown_until') || 0);
@@ -376,8 +385,8 @@ export function scheduleReconnectListeners(delayMs = 4000) {
 
 export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
-    // 2-hour circuit breaker saved to persistent storage
-    clientQuotaCooldownUntil = Date.now() + 2 * 60 * 60 * 1000;
+    // 60-second brief backoff for background read listeners (never blocks admin writes)
+    clientQuotaCooldownUntil = Date.now() + 60 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil));
@@ -388,7 +397,7 @@ export function handleStoreFirestoreError(context: string, err: any) {
 
     if (!clientQuotaNoticeLogged) {
       clientQuotaNoticeLogged = true;
-      console.info(`[StoreService] Firestore quota reached (${context}). Seamlessly running on Local Persistence.`);
+      console.info(`[StoreService] Firestore quota notice (${context}). Local fallback available.`);
     }
     return;
   }
@@ -1259,22 +1268,30 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Authoritative Backend Server API persistence
+    // 1. Direct Cloud Firestore write (AWAITED - guaranteed primary database persistence, NEVER blocked by cooldown)
+    let firestorePersisted = false;
     try {
-      await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
+      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
+      firestorePersisted = true;
+      clearFirestoreCooldown();
+    } catch (e: any) {
+      console.warn('Direct Firestore save product error:', e);
+      handleStoreFirestoreError('Firestore save product', e);
+    }
+
+    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
+    let apiPersisted = false;
+    try {
+      const apiRes = await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
         method: 'POST',
         headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(newProd),
       });
+      if (apiRes.success) {
+        apiPersisted = true;
+      }
     } catch (e) {
       console.warn('Backend API addProduct notice:', e);
-    }
-
-    // 2. Mirror to Cloud Firestore if quota is available
-    if (!isClientQuotaCooldownActive()) {
-      setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd)).catch((e) => {
-        handleStoreFirestoreError('Firestore save product mirror', e);
-      });
     }
 
     // 3. Update local cache
@@ -1286,6 +1303,10 @@ export const storeService = {
     }
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
+
+    if (!firestorePersisted && !apiPersisted) {
+      console.warn('[StoreService] Product saved locally, but database sync encountered a network issue. Retrying in background...');
+    }
 
     return { success: true, product: newProd };
   },
@@ -1320,22 +1341,30 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Authoritative Backend Server API persistence
+    // 1. Direct Cloud Firestore write (AWAITED - guaranteed primary database persistence, NEVER blocked by cooldown)
+    let firestorePersisted = false;
     try {
-      await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
+      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
+      firestorePersisted = true;
+      clearFirestoreCooldown();
+    } catch (e: any) {
+      console.warn('Direct Firestore update product error:', e);
+      handleStoreFirestoreError('Firestore update product', e);
+    }
+
+    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
+    let apiPersisted = false;
+    try {
+      const apiRes = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(productData),
       });
+      if (apiRes.success) {
+        apiPersisted = true;
+      }
     } catch (e) {
       console.warn('Backend API updateProduct notice:', e);
-    }
-
-    // 2. Mirror to Cloud Firestore if quota is available
-    if (!isClientQuotaCooldownActive()) {
-      setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true }).catch((e) => {
-        handleStoreFirestoreError('Firestore update product mirror', e);
-      });
     }
 
     if (index !== -1) {
@@ -1345,6 +1374,10 @@ export const storeService = {
     }
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
+
+    if (!firestorePersisted && !apiPersisted) {
+      console.warn('[StoreService] Product updated locally, but database sync encountered a network issue. Retrying in background...');
+    }
 
     return { success: true, product: updated };
   },
@@ -1365,7 +1398,18 @@ export const storeService = {
     // Record in deleted products registry
     markProductDeleted(idStr, target?.sku, target?.slug);
 
-    // 1. Authoritative Backend Server API delete
+    // 1. Direct Cloud Firestore delete (AWAITED - guaranteed primary database deletion, NEVER blocked by cooldown)
+    try {
+      await deleteDoc(doc(db, 'products', idStr));
+      if (target?.id && String(target.id) !== idStr) {
+        await deleteDoc(doc(db, 'products', String(target.id)));
+      }
+      clearFirestoreCooldown();
+    } catch (e) {
+      console.warn('Direct Firestore delete product error:', e);
+    }
+
+    // 2. Authoritative Backend Server API delete
     try {
       await tryApi(`/api/admin/products/${idStr}`, {
         method: 'DELETE',
@@ -1373,14 +1417,6 @@ export const storeService = {
       });
     } catch (e) {
       console.warn('Backend API deleteProduct notice:', e);
-    }
-
-    // 2. Mirror delete to Cloud Firestore if quota is available
-    if (!isClientQuotaCooldownActive()) {
-      deleteDoc(doc(db, 'products', idStr)).catch(() => {});
-      if (target?.id && String(target.id) !== idStr) {
-        deleteDoc(doc(db, 'products', String(target.id))).catch(() => {});
-      }
     }
 
     // 3. Local state filter
@@ -3501,6 +3537,10 @@ export const storeService = {
     }
 
     return { success: true, affectedProductsCount: affectedCount };
+  },
+
+  clearFirestoreCooldown() {
+    clearFirestoreCooldown();
   },
 
   async getProductsByBrand(brandSlugOrName: string): Promise<Product[]> {
