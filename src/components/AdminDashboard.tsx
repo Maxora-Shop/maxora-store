@@ -2310,25 +2310,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* ====================================================
-                LIVE TRAFFIC & CUSTOMER VISITOR ANALYTICS
+                LIVE TRAFFIC & CUSTOMER VISITOR ANALYTICS (Light Modern Theme)
             ==================================================== */}
-            <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white rounded-3xl p-5 sm:p-6 border border-emerald-500/30 shadow-xl space-y-5">
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-zinc-200 shadow-xs space-y-5">
               {/* Header Bar */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-100 pb-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
                       </span>
-                      <span>Live Traffic Engine Active</span>
+                      <span>লাইভ ট্রাফিক সক্রিয় (Live Engine)</span>
                     </span>
-                    <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                    <h3 className="text-lg sm:text-xl font-black text-zinc-950 tracking-tight">
                       লাইভ গ্রাহক ভিজিটর ও ট্রাফিক বিশ্লেষণ (Live Traffic)
                     </h3>
                   </div>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-zinc-500">
                     সারাদিনে আপনার ওয়েবসাইটে কতজন কাস্টমার ভিজিট করছেন এবং এই মুহূর্তে লাইভ কতজন ব্রাউজ করছেন তা সার্বক্ষণিক দেখুন।
                   </p>
                 </div>
@@ -2340,12 +2340,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={() => setIsAutoRefreshTraffic(!isAutoRefreshTraffic)}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                       isAutoRefreshTraffic
-                        ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
-                        : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
                     }`}
                     title={isAutoRefreshTraffic ? 'স্বয়ংক্রিয় রিফ্রেশ চালু আছে (প্রতি ১০ সেকেন্ড)' : 'অটো রিফ্রেশ বন্ধ'}
                   >
-                    <Radio className={`w-3.5 h-3.5 ${isAutoRefreshTraffic ? 'animate-pulse text-emerald-400' : ''}`} />
+                    <Radio className={`w-3.5 h-3.5 ${isAutoRefreshTraffic ? 'animate-pulse text-emerald-600' : 'text-zinc-400'}`} />
                     <span>{isAutoRefreshTraffic ? 'অটো-রিফ্রেশ চালু (১০ সে.)' : 'অটো-রিফ্রেশ বন্ধ'}</span>
                   </button>
 
@@ -2353,9 +2353,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     type="button"
                     onClick={handleManualRefreshTraffic}
                     disabled={trafficRefreshing}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-bold text-white transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-700 transition-all cursor-pointer shadow-xs disabled:opacity-50"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${trafficRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${trafficRefreshing ? 'animate-spin text-emerald-600' : 'text-zinc-500'}`} />
                     <span>রিফ্রেশ</span>
                   </button>
                 </div>
@@ -2364,88 +2364,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {/* 4 Core Traffic Metric Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {/* 1. Live Visitors Right Now */}
-                <div className="bg-zinc-900/90 rounded-2xl p-4 border border-emerald-500/40 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <div className="bg-emerald-50/70 rounded-2xl p-4 border border-emerald-200/80 relative overflow-hidden group space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
                       <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
                       </span>
                       এই মুহূর্তে লাইভ
                     </span>
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
-                      Online
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full">
+                      Online Now
                     </span>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-black text-emerald-950 tracking-tight">
                       {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0}
                     </span>
-                    <span className="text-xs font-bold text-emerald-400">জন কাস্টমার</span>
+                    <span className="text-xs font-bold text-emerald-700">জন কাস্টমার</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    সরাসরি স্টোরে পণ্য ও পেজ ব্রাউজ করছেন
+                  <p className="text-[11px] text-emerald-800/80 font-medium">
+                    সরাসরি ওয়েবসাইটে পণ্য ও পেজ ব্রাউজ করছেন
                   </p>
                 </div>
 
                 {/* 2. Today's Unique Visitors */}
-                <div className="bg-zinc-900/90 rounded-2xl p-4 border border-zinc-800 relative overflow-hidden group">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">আজকের মোট ভিজিটর</span>
-                    <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                <div className="bg-blue-50/70 rounded-2xl p-4 border border-blue-200/80 relative overflow-hidden group space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800">আজকের মোট ভিজিটর</span>
+                    <div className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
                       <Users className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-black text-blue-950 tracking-tight">
                       {trafficAnalytics?.today_visitors ?? totals?.traffic?.today_visitors ?? 0}
                     </span>
-                    <span className="text-xs font-bold text-blue-400">ইউনিক ভিজিটর</span>
+                    <span className="text-xs font-bold text-blue-700">ইউনিক ভিজিটর</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">
+                  <p className="text-[11px] text-blue-800/80 font-medium">
                     সারাদিনে আলাদা আলাদা ডিভাইস থেকে ভিজিট
                   </p>
                 </div>
 
                 {/* 3. Total Page Views Today */}
-                <div className="bg-zinc-900/90 rounded-2xl p-4 border border-zinc-800 relative overflow-hidden group">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">আজকের পেজ ভিউ</span>
-                    <div className="w-6 h-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <div className="bg-purple-50/70 rounded-2xl p-4 border border-purple-200/80 relative overflow-hidden group space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-purple-800">আজকের পেজ ভিউ</span>
+                    <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
                       <Eye className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+                    <span className="text-3xl sm:text-4xl font-black text-purple-950 tracking-tight">
                       {trafficAnalytics?.today_page_views ?? totals?.traffic?.today_page_views ?? 0}
                     </span>
-                    <span className="text-xs font-bold text-purple-400">বার ভিউ</span>
+                    <span className="text-xs font-bold text-purple-700">বার ভিউ</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">
+                  <p className="text-[11px] text-purple-800/80 font-medium">
                     মোট দেখা হওয়া হোমপেজ ও প্রোডাক্ট
                   </p>
                 </div>
 
                 {/* 4. Device Breakdown (Mobile vs Desktop) */}
-                <div className="bg-zinc-900/90 rounded-2xl p-4 border border-zinc-800 relative overflow-hidden group">
-                  <div className="flex items-center justify-between text-zinc-400 mb-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">ডিভাইস অনুপাত</span>
-                    <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200 relative overflow-hidden group space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600">ডিভাইস অনুপাত</span>
+                    <div className="w-6 h-6 rounded-lg bg-zinc-200 text-zinc-700 flex items-center justify-center">
                       <Smartphone className="w-3.5 h-3.5" />
                     </div>
                   </div>
                   <div className="flex items-baseline justify-between text-xs font-black">
-                    <span className="text-emerald-400 flex items-center gap-1">
+                    <span className="text-emerald-700 flex items-center gap-1">
                       <Smartphone className="w-3 h-3" />
                       <span>{trafficAnalytics?.device_breakdown?.mobile_percent ?? 88}% মোবাইল</span>
                     </span>
-                    <span className="text-zinc-400">
+                    <span className="text-zinc-600">
                       {trafficAnalytics?.device_breakdown?.desktop_percent ?? 12}% পিসি
                     </span>
                   </div>
                   {/* Visual Progress Bar */}
-                  <div className="w-full h-2 bg-zinc-800 rounded-full mt-2.5 overflow-hidden flex">
+                  <div className="w-full h-2 bg-zinc-200 rounded-full mt-2 overflow-hidden flex">
                     <div
                       className="bg-emerald-500 h-full rounded-l-full transition-all"
                       style={{ width: `${trafficAnalytics?.device_breakdown?.mobile_percent ?? 88}%` }}
@@ -2455,7 +2454,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       style={{ width: `${trafficAnalytics?.device_breakdown?.desktop_percent ?? 12}%` }}
                     />
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-1.5">
+                  <p className="text-[10px] text-zinc-500 mt-1 font-medium">
                     অধিকাংশ কাস্টমার স্মার্টফোন থেকে ব্রাউজ করছেন
                   </p>
                 </div>
@@ -2463,14 +2462,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               {/* Sub-Tabs: Active Pages, Traffic Sources, 14-Day Trend */}
               <div className="pt-2">
-                <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 overflow-x-auto text-xs font-bold">
+                <div className="flex items-center gap-2 border-b border-zinc-200 pb-2 overflow-x-auto text-xs font-bold">
                   <button
                     type="button"
                     onClick={() => setTrafficActiveTab('pages')}
                     className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                       trafficActiveTab === 'pages'
-                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-xs'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                        ? 'bg-zinc-900 text-white font-black shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                     }`}
                   >
                     📄 বর্তমানে যে পেজগুলো দেখা হচ্ছে ({trafficAnalytics?.active_pages?.length ?? 0})
@@ -2481,8 +2480,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={() => setTrafficActiveTab('sources')}
                     className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                       trafficActiveTab === 'sources'
-                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-xs'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                        ? 'bg-zinc-900 text-white font-black shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                     }`}
                   >
                     🌐 ট্রাফিক সোর্স ও রেফারাল
@@ -2493,8 +2492,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     onClick={() => setTrafficActiveTab('history')}
                     className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                       trafficActiveTab === 'history'
-                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-xs'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                        ? 'bg-zinc-900 text-white font-black shadow-xs'
+                        : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
                     }`}
                   >
                     📊 ১৪ দিনের ভিজিটর হিস্ট্রি
@@ -2509,24 +2508,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {trafficAnalytics.active_pages.map((p, idx) => (
                           <div
                             key={idx}
-                            className="bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-zinc-700 transition-colors"
+                            className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 flex items-center justify-between gap-3 hover:border-zinc-300 transition-colors"
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-zinc-100 truncate">
+                              <p className="text-xs font-bold text-zinc-900 truncate">
                                 {p.title || (p.path === '/' ? 'হোমপেজ (Homepage)' : p.path)}
                               </p>
-                              <p className="text-[10px] text-zinc-400 font-mono truncate">
+                              <p className="text-[10px] text-zinc-500 font-mono truncate">
                                 {p.path}
                               </p>
                             </div>
-                            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-black shrink-0">
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black shrink-0">
                               {p.count} জন লাইভ
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 text-center text-xs text-zinc-400">
+                      <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 text-center text-xs text-zinc-500">
                         বর্তমানে সব লাইভ সেশন হোমপেজ এবং পণ্য ক্যাটালগে সক্রিয় রয়েছে। গ্রাহক সাইট ব্রাউজ করার সাথে সাথে এখানে তাদের সক্রিয় পেজ প্রদর্শিত হবে।
                       </div>
                     )}
@@ -2543,18 +2542,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         { source: 'Google Search', count: 3, percentage: 12 },
                         { source: 'WhatsApp / Referral', count: 1, percentage: 4 },
                       ]).map((src, idx) => (
-                        <div key={idx} className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-3.5 space-y-2">
+                        <div key={idx} className="bg-zinc-50 border border-zinc-200 rounded-xl p-3.5 space-y-2">
                           <div className="flex items-center justify-between text-xs font-bold">
-                            <span className="text-zinc-200">{src.source}</span>
-                            <span className="text-emerald-400">{src.percentage}%</span>
+                            <span className="text-zinc-800">{src.source}</span>
+                            <span className="text-emerald-700 font-black">{src.percentage}%</span>
                           </div>
-                          <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className="w-full h-1.5 bg-zinc-200 rounded-full overflow-hidden">
                             <div
                               className="bg-emerald-500 h-full rounded-full"
                               style={{ width: `${src.percentage}%` }}
                             />
                           </div>
-                          <p className="text-[10px] text-zinc-500">
+                          <p className="text-[10px] text-zinc-500 font-medium">
                             {src.count} টি সেশন রেকর্ড করা হয়েছে
                           </p>
                         </div>
@@ -2565,9 +2564,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* Sub-Tab 3: 14-Day History */}
                 {trafficActiveTab === 'history' && (
-                  <div className="mt-3.5 p-4 bg-zinc-900/90 border border-zinc-800 rounded-2xl space-y-3 animate-fade-in">
+                  <div className="mt-3.5 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-3 animate-fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-zinc-300">
+                      <span className="text-xs font-bold text-zinc-700">
                         বিগত ১৪ দিনের দৈনিক ভিজিটর ট্রেন্ড
                       </span>
                       <span className="text-[10px] text-zinc-500">
@@ -2575,7 +2574,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                     </div>
 
-                    <div className="h-32 flex items-end gap-1.5 sm:gap-2 pt-2 border-b border-zinc-800/80">
+                    <div className="h-32 flex items-end gap-1.5 sm:gap-2 pt-2 border-b border-zinc-200">
                       {(trafficAnalytics?.daily_history || []).map((day, idx) => {
                         const maxV = Math.max(...(trafficAnalytics?.daily_history?.map(d => d.visitors) || [1]), 10);
                         const heightV = Math.max(8, (day.visitors / maxV) * 100);
@@ -2592,7 +2591,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             {/* Bar */}
                             <div
-                              className="w-full bg-emerald-500 hover:bg-emerald-400 rounded-t-sm transition-all cursor-pointer"
+                              className="w-full bg-emerald-500 hover:bg-emerald-600 rounded-t-sm transition-all cursor-pointer"
                               style={{ height: `${heightV}%` }}
                             />
                             <span className="text-[8px] sm:text-[9px] text-zinc-500 font-mono truncate w-full text-center">
