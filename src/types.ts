@@ -367,6 +367,19 @@ export interface BestSellingProduct {
   profit?: number;
 }
 
+export interface LiveTrafficAnalytics {
+  live_now: number;
+  today_visitors: number;
+  today_page_views: number;
+  yesterday_visitors?: number;
+  active_pages?: Array<{ path: string; title: string; count: number }>;
+  device_breakdown?: { mobile: number; desktop: number; tablet: number; mobile_percent: number; desktop_percent: number };
+  traffic_sources?: Array<{ source: string; count: number; percentage: number }>;
+  daily_history?: Array<{ date: string; label: string; visitors: number; views: number }>;
+  top_pages?: Array<{ path: string; title: string; views: number }>;
+  last_updated?: string;
+}
+
 export interface DashboardTotals {
   today_sales: number;
   today_orders: number;
@@ -390,6 +403,7 @@ export interface DashboardTotals {
   monthly_sales_history?: MonthlySalesMetric[];
   status_distribution?: StatusDistribution[];
   best_products?: BestSellingProduct[];
+  traffic?: LiveTrafficAnalytics;
 }
 
 export interface CartItem {

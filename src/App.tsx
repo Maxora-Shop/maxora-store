@@ -42,6 +42,7 @@ import { ProductSortDropdown } from './components/ProductSortDropdown';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand, ProductSortOption } from './types';
 import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
+import { visitorTrackingService } from './services/visitorTrackingService';
 import {
   INITIAL_SETTINGS,
   INITIAL_PRODUCTS,
@@ -431,6 +432,13 @@ export default function App() {
       pixelService.initPixels(settings);
     }
   }, [settings]);
+
+  // Real-time visitor and traffic tracking on customer storefront
+  useEffect(() => {
+    if (!isAdminView) {
+      visitorTrackingService.init();
+    }
+  }, [isAdminView]);
 
   // Load Settings, Products & Categories on startup and listen for live updates
   useEffect(() => {

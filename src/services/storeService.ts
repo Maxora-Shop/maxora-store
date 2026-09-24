@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner, LiveTrafficAnalytics } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug, getProductSlug } from '../utils/seo';
@@ -2234,6 +2234,18 @@ export const storeService = {
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {
+    // 1. Try REST API for full aggregated stats including live traffic
+    try {
+      const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (apiResult.success && apiResult.data?.totals) {
+        return apiResult.data.totals;
+      }
+    } catch {
+      // Fall through to local/Firestore calculation
+    }
+
     const orders = await this.getAllAdminOrders('', adminPassword);
     const products = await this.getAllAdminProducts(adminPassword);
     const customers = await this.getAllCustomers(adminPassword);
@@ -2272,6 +2284,17 @@ export const storeService = {
     }
     const profit = Math.max(0, totalSales - totalExpenses);
 
+    // Try fetching live traffic from endpoint
+    let traffic: LiveTrafficAnalytics | undefined = undefined;
+    try {
+      const trafficRes = await tryApi<{ success: boolean; traffic: LiveTrafficAnalytics }>('/api/admin/traffic/live', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (trafficRes.success && trafficRes.data?.traffic) {
+        traffic = trafficRes.data.traffic;
+      }
+    } catch {}
+
     return {
       today_sales: todaySales,
       today_orders: todayOrders.length,
@@ -2291,7 +2314,22 @@ export const storeService = {
       total_stock: totalStock,
       total_expenses: totalExpenses,
       profit: profit,
+      traffic,
     };
+  },
+
+  async getLiveTraffic(adminPassword?: string): Promise<LiveTrafficAnalytics | null> {
+    try {
+      const res = await tryApi<{ success: boolean; traffic: LiveTrafficAnalytics }>('/api/admin/traffic/live', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (res.success && res.data?.traffic) {
+        return res.data.traffic;
+      }
+    } catch (e) {
+      console.warn('getLiveTraffic error:', e);
+    }
+    return null;
   },
 
   // 6. CATEGORIES
