@@ -115,9 +115,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
+      // Load seed/fallback products from maxora_db.json or userProducts.json
+      const loadFallbackProducts = () => {
+        try {
+          const dbPath = path.join(process.cwd(), 'maxora_db.json');
+          if (fs.existsSync(dbPath)) {
+            const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+            if (Array.isArray(data.products) && data.products.length > 0) return data.products;
+          }
+          const userProdsPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+          if (fs.existsSync(userProdsPath)) {
+            const data = JSON.parse(fs.readFileSync(userProdsPath, 'utf8'));
+            if (Array.isArray(data) && data.length > 0) return data;
+          }
+        } catch (e) {
+          console.warn('Error reading fallback products:', e);
+        }
+        return [];
+      };
+
       // Check in-memory cache
       const now = Date.now();
-      if (cachedProducts.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
+      if (cachedProducts.length > 1 && now - cacheTimestamp < CACHE_TTL_MS) {
         let prods = returnAll
           ? cachedProducts
           : cachedProducts.filter((p) => p.active !== 0 && p.active !== false && String(p.active) !== '0');
@@ -128,32 +147,53 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
-      // Query Firestore
-      const snap = await getDocs(collection(db, 'products'));
-      const prods: any[] = [];
-      if (!snap.empty) {
-        snap.forEach((docSnap) => {
-          const item = docSnap.data();
-          const pId = String(item.id || docSnap.id);
-          const pName = String(item.name || '').trim();
-          if (!pName) return;
+      const prodMap = new Map<string, any>();
+      // First populate with baseline catalog so products are never lost
+      const fallbackList = loadFallbackProducts();
+      fallbackList.forEach((item: any) => {
+        const id = String(item.id || item.sku || '');
+        if (id) prodMap.set(id, item);
+      });
 
-          const discount = Number(item.discount || 0);
-          const price = Number(item.selling_price || 0);
-          const finalPrice = Math.max(0, price - discount);
+      // Query Firestore (if quota allows)
+      try {
+        const snap = await getDocs(collection(db, 'products'));
+        if (!snap.empty) {
+          snap.forEach((docSnap) => {
+            const item = docSnap.data();
+            const pId = String(item.id || docSnap.id);
+            const pName = String(item.name || '').trim();
+            if (!pName) return;
 
-          prods.push({
-            ...item,
-            id: pId,
-            selling_price: price,
-            discount,
-            final_price: finalPrice,
-            stock: Number(item.stock !== undefined ? item.stock : 0),
-            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : []),
+            const discount = Number(item.discount || 0);
+            const price = Number(item.selling_price || 0);
+            const finalPrice = Math.max(0, price - discount);
+
+            prodMap.set(pId, {
+              ...item,
+              id: pId,
+              selling_price: price,
+              discount,
+              final_price: finalPrice,
+              stock: Number(item.stock !== undefined ? item.stock : 0),
+              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : []),
+            });
           });
+        }
+      } catch (fsErr) {
+        console.warn('Firestore getDocs skipped or quota reached, using database cache:', fsErr);
+      }
+
+      // Merge any previously cached or newly uploaded products
+      if (Array.isArray(cachedProducts)) {
+        cachedProducts.forEach((p) => {
+          if (p && p.id) {
+            prodMap.set(String(p.id), p);
+          }
         });
       }
 
+      const prods: any[] = Array.from(prodMap.values());
       // Sort by created_at descending
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       cachedProducts = prods;
@@ -168,7 +208,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       res.end(JSON.stringify({ success: true, products: filtered }));
       return;
     } catch (err: any) {
-      console.error('Error fetching products from Firestore:', err);
+      console.error('Error fetching products:', err);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true, products: cachedProducts || [] }));
@@ -217,7 +257,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       };
 
       const firestoreData = cleanForFirestore(newProd);
-      await setDoc(doc(db, 'products', pId), firestoreData, { merge: true });
+      try {
+        await setDoc(doc(db, 'products', pId), firestoreData, { merge: true });
+      } catch (fsErr) {
+        console.warn('Firestore setDoc notice in POST:', fsErr);
+      }
+
+      // Update maxora_db.json on disk if writable
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.products)) {
+            const idx = dbData.products.findIndex((p: any) => String(p.id) === pId);
+            if (idx >= 0) dbData.products[idx] = newProd;
+            else dbData.products.unshift(newProd);
+            fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        }
+      } catch {}
 
       // Invalidate memory cache
       cachedProducts = [newProd, ...cachedProducts.filter((p) => p.id !== pId)];
@@ -228,7 +286,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       res.end(JSON.stringify({ success: true, product: newProd, id: pId }));
       return;
     } catch (err: any) {
-      console.error('Error adding product in Firestore:', err);
+      console.error('Error adding product:', err);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: false, error: err.message || 'Failed to add product' }));
@@ -257,7 +315,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       };
 
       const firestoreData = cleanForFirestore(updatedProd);
-      await setDoc(doc(db, 'products', pId), firestoreData, { merge: true });
+      try {
+        await setDoc(doc(db, 'products', pId), firestoreData, { merge: true });
+      } catch (fsErr) {
+        console.warn('Firestore setDoc notice in PUT:', fsErr);
+      }
+
+      // Update maxora_db.json on disk if writable
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.products)) {
+            const idx = dbData.products.findIndex((p: any) => String(p.id) === pId);
+            if (idx >= 0) dbData.products[idx] = { ...dbData.products[idx], ...updatedProd };
+            else dbData.products.unshift(updatedProd);
+            fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        }
+      } catch {}
 
       // Update memory cache
       const existingIdx = cachedProducts.findIndex((p) => p.id === pId);
@@ -273,7 +349,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       res.end(JSON.stringify({ success: true, product: updatedProd }));
       return;
     } catch (err: any) {
-      console.error('Error updating product in Firestore:', err);
+      console.error('Error updating product:', err);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: false, error: err.message || 'Failed to update product' }));
@@ -294,7 +370,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
-      await deleteDoc(doc(db, 'products', pId));
+      try {
+        await deleteDoc(doc(db, 'products', pId));
+      } catch (fsErr) {
+        console.warn('Firestore deleteDoc notice:', fsErr);
+      }
+
+      // Update maxora_db.json on disk if writable
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.products)) {
+            dbData.products = dbData.products.filter((p: any) => String(p.id) !== pId && p.sku !== pId && p.slug !== pId);
+            fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        }
+      } catch {}
 
       // Remove from memory cache
       cachedProducts = cachedProducts.filter((p) => p.id !== pId);

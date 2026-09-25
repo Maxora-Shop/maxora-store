@@ -3225,6 +3225,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* Filter Active Notice with Clear Filter button */}
+            {(productSearch || productCategoryFilter || productBrandFilter || productTypeFilter || productStatusFilter !== 'all' || currentTaxonomyFilter.category || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.childCategory) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-amber-900 animate-fade-in">
+                <div className="flex flex-wrap items-center gap-2 font-medium">
+                  <span className="font-bold">ফিল্টার সক্রিয়:</span>
+                  <span>মোট {products.length} টির মধ্যে {filteredProducts.length} টি প্রোডাক্ট দেখানো হচ্ছে</span>
+                  {currentTaxonomyFilter.category && (
+                    <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
+                      ক্যাটেগরি: {currentTaxonomyFilter.childCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.category}
+                    </span>
+                  )}
+                  {productCategoryFilter && !currentTaxonomyFilter.category && (
+                    <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
+                      ক্যাটেগরি: {productCategoryFilter}
+                    </span>
+                  )}
+                  {productBrandFilter && (
+                    <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
+                      ব্র্যান্ড: {productBrandFilter}
+                    </span>
+                  )}
+                  {productSearch && (
+                    <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
+                      অনুসন্ধান: "{productSearch}"
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductSearch('');
+                    setProductCategoryFilter('');
+                    setProductBrandFilter('');
+                    setProductTypeFilter('');
+                    setProductStatusFilter('all');
+                    setCurrentTaxonomyFilter({});
+                  }}
+                  className="font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer bg-white px-3 py-1 rounded-lg border border-amber-300 shadow-xs hover:bg-emerald-50 transition-colors"
+                >
+                  সব প্রোডাক্ট দেখুন (Clear All Filters)
+                </button>
+              </div>
+            )}
+
             {/* Products Table */}
             <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-hidden">
               <div className="overflow-x-auto">

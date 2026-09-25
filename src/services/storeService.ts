@@ -262,21 +262,28 @@ export function initLocalStorage(): void {
     setLocal(PRODUCTS_KEY, initialProds);
   } else {
     const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
-    if (Array.isArray(existingProds) && existingProds.length > 0) {
-      // Remove any legacy hardcoded dummy demo products (prod-001 through prod-009) if present
-      const cleaned = existingProds.filter(
-        (p) =>
-          !deletedProductIds.has(String(p.id)) &&
-          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
-          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
-          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
-      );
-      if (cleaned.length === 0) {
-        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      } else if (cleaned.length !== existingProds.length) {
-        setLocal(PRODUCTS_KEY, cleaned);
-      }
+    const pMap = new Map<string, Product>();
+    // 1. Populate baseline catalog from INITIAL_PRODUCTS
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
+          pMap.set(id, p);
+        }
+      });
     }
+    // 2. Merge existing local storage products (e.g. newly uploaded fan or edits)
+    if (Array.isArray(existingProds) && existingProds.length > 0) {
+      existingProds.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
+          pMap.set(id, p);
+        }
+      });
+    }
+    const merged = Array.from(pMap.values());
+    merged.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, merged);
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     setLocal(ORDERS_KEY, []);
@@ -426,27 +433,34 @@ export function initRealtimeFirestoreListeners() {
   isListening = true;
 
   try {
-    // 1. Listen for product changes
+    // 1. Listen for product changes (merge-safe: never drop baseline catalog)
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
         return;
       }
-      const prods: Product[] = [];
+      const prodMap = new Map<string, Product>();
+      // Baseline catalog
+      if (Array.isArray(INITIAL_PRODUCTS)) {
+        INITIAL_PRODUCTS.forEach((p) => {
+          const id = String(p.id || p.sku || p.slug || '');
+          if (id && !deletedProductIds.has(String(p.id))) {
+            prodMap.set(id, p);
+          }
+        });
+      }
+      // Overlay Firestore snapshot
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
         const pId = String(d.id || docSnap.id);
         const pSku = String(d.sku || '');
         const pSlug = String(d.slug || '');
         const pName = String(d.name || '').trim();
-        if (!pName) {
-          return;
-        }
-        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-          return;
-        }
-        prods.push({ ...d, id: pId });
+        if (!pName) return;
+        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) return;
+        prodMap.set(pId, { ...d, id: pId });
       });
+      const prods = Array.from(prodMap.values());
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setLocal(PRODUCTS_KEY, prods);
       notifyProductsChanged();
@@ -643,6 +657,9 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
 // Seed initial products and multi-tier taxonomy to Firestore if empty
 let isSeeding = false;
 export async function seedInitialDataIfNeeded() {
+  if (typeof window !== 'undefined' && localStorage.getItem('maxora_db_seeded_v3') === 'true') {
+    return;
+  }
   if (isSeeding || isClientQuotaCooldownActive()) return;
   isSeeding = true;
   try {
@@ -752,6 +769,10 @@ export async function seedInitialDataIfNeeded() {
     if (!settingsDoc.exists()) {
       await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
     }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('maxora_db_seeded_v3', 'true');
+    }
   } catch (e) {
     handleStoreFirestoreError('Firestore seeding check', e);
   } finally {
@@ -767,7 +788,26 @@ export const storeService = {
   getCachedProducts(): Product[] {
     const deletedProductIds = getDeletedProductIds();
     const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    return raw.filter(
+    const prodMap = new Map<string, Product>();
+    // Baseline products
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id))) {
+          prodMap.set(id, p);
+        }
+      });
+    }
+    // Overlay local products
+    if (Array.isArray(raw)) {
+      raw.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id))) {
+          prodMap.set(id, p);
+        }
+      });
+    }
+    return Array.from(prodMap.values()).filter(
       (p) =>
         !deletedProductIds.has(String(p.id)) &&
         (!p.sku || !deletedProductIds.has(String(p.sku))) &&
@@ -962,98 +1002,88 @@ export const storeService = {
     childCategory = ''
   ): Promise<Product[]> {
     const deletedProductIds = getDeletedProductIds();
-    let prods = getLocal<Product[]>(PRODUCTS_KEY, []);
-    let freshProds: Product[] | null = null;
+    const prodMap = new Map<string, Product>();
 
-    // 1. Authoritative Backend REST API query first (always gets the latest products from server DB)
+    const registerProduct = (p: any, docId?: string, isLocal = false) => {
+      if (!p) return;
+      const id = String(p.id || docId || '');
+      const sku = String(p.sku || '');
+      const slug = String(p.slug || '');
+      if (!id && !sku && !slug) return;
+      if (['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(id)) {
+        return;
+      }
+      const rawName = String(p.name || '').trim();
+      if (!rawName || rawName === 'Untitled Product') {
+        return;
+      }
+
+      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+        return;
+      }
+
+      const mapped: Product = {
+        ...p,
+        id: id || sku || slug,
+        name: p.name || 'Untitled Product',
+        buying_price: Number(p.buying_price || 0),
+        selling_price: Number(p.selling_price || 0),
+        discount: Number(p.discount || 0),
+        final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
+        stock: Number(p.stock !== undefined ? p.stock : 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false || String(p.active) === '0') ? 0 : 1,
+        featured: p.featured ? 1 : 0,
+        images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || new Date().toISOString(),
+      };
+
+      if (!prodMap.has(mapped.id)) {
+        prodMap.set(mapped.id, mapped);
+      } else {
+        const existing = prodMap.get(mapped.id)!;
+        if (isLocal || new Date(mapped.updated_at || 0).getTime() > new Date(existing.updated_at || 0).getTime()) {
+          prodMap.set(mapped.id, mapped);
+        }
+      }
+    };
+
+    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so products are never missing
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
+    }
+
+    // 2. Authoritative Backend REST API query
     try {
       const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
       if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
-        const apiProds: Product[] = [];
-        apiRes.data.products.forEach((item) => {
-          const pId = String(item.id);
-          const pSku = String(item.sku || '');
-          const pSlug = String(item.slug || '');
-          const pName = String(item.name || '').trim();
-          if (!pName) return;
-          if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-            return;
-          }
-          apiProds.push({
-            ...item,
-            id: pId,
-            selling_price: Number(item.selling_price || 0),
-            discount: Number(item.discount || 0),
-            stock: Number(item.stock !== undefined ? item.stock : 0),
-            images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
-          });
-        });
-        if (apiProds.length > 0) {
-          freshProds = apiProds;
-        }
+        apiRes.data.products.forEach((item) => registerProduct(item));
       }
     } catch (e) {
-      console.warn('API getProducts error:', e);
+      console.warn('API getProducts notice:', e);
     }
 
-    // 2. Fallback to Firestore if API didn't return products and quota is healthy
-    if (!freshProds && !isClientQuotaCooldownActive()) {
+    // 3. Fallback to Firestore if quota allows
+    if (!isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
-          const fsProds: Product[] = [];
-          snap.forEach((d) => {
-            const item = d.data() as Product;
-            const pId = String(item.id || d.id);
-            const pSku = String(item.sku || '');
-            const pSlug = String(item.slug || '');
-            const pName = String(item.name || '').trim();
-            if (!pName) return;
-            if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-              return;
-            }
-            fsProds.push({
-              ...item,
-              id: pId,
-              selling_price: Number(item.selling_price || 0),
-              discount: Number(item.discount || 0),
-              stock: Number(item.stock !== undefined ? item.stock : 0),
-              images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image_url ? [item.image_url] : [])
-            });
-          });
-          if (fsProds.length > 0) {
-            freshProds = fsProds;
-          }
+          snap.forEach((d) => registerProduct(d.data(), d.id));
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getProducts', e);
       }
     }
 
-    // 3. Update local cache with authoritative list
-    if (freshProds && freshProds.length > 0) {
-      freshProds.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      prods = freshProds;
-      setLocal(PRODUCTS_KEY, prods);
-    } else if (prods.length === 0) {
-      const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      prods = cached.filter(
-        (p) =>
-          !deletedProductIds.has(String(p.id)) &&
-          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
-          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
-          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
-      );
-      setLocal(PRODUCTS_KEY, prods);
-    } else {
-      prods = prods.filter(
-        (p) =>
-          !deletedProductIds.has(String(p.id)) &&
-          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
-          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
-          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
-      );
+    // 4. Always merge local cache so newly uploaded/edited products are preserved
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
+
+    const prods = Array.from(prodMap.values());
+    prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, prods);
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
 
@@ -1135,7 +1165,7 @@ export const storeService = {
     const prodMap = new Map<string, Product>();
     const deletedProductIds = getDeletedProductIds();
 
-    const registerProduct = (p: any, docId?: string) => {
+    const registerProduct = (p: any, docId?: string, isLocal = false) => {
       if (!p) return;
       const id = String(p.id || docId || '');
       const sku = String(p.sku || '');
@@ -1161,8 +1191,8 @@ export const storeService = {
         selling_price: Number(p.selling_price || 0),
         discount: Number(p.discount || 0),
         final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
-        stock: Number(p.stock || 0),
-        active: p.active !== undefined && (p.active === 0 || p.active === false) ? 0 : 1,
+        stock: Number(p.stock !== undefined ? p.stock : 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false || String(p.active) === '0') ? 0 : 1,
         featured: p.featured ? 1 : 0,
         images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
         created_at: p.created_at || new Date().toISOString(),
@@ -1171,10 +1201,20 @@ export const storeService = {
 
       if (!prodMap.has(mapped.id)) {
         prodMap.set(mapped.id, mapped);
+      } else {
+        const existing = prodMap.get(mapped.id)!;
+        if (isLocal || new Date(mapped.updated_at || 0).getTime() > new Date(existing.updated_at || 0).getTime()) {
+          prodMap.set(mapped.id, mapped);
+        }
       }
     };
 
-    // 1. Try REST API
+    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so all products are always present
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
+    }
+
+    // 2. Try REST API
     try {
       const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
         headers: getAuthHeaders(adminPassword),
@@ -1186,7 +1226,7 @@ export const storeService = {
       console.warn('API getAllAdminProducts warning:', e);
     }
 
-    // 2. Try Firestore (quota-safe)
+    // 3. Try Firestore (quota-safe)
     if (!isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
@@ -1198,10 +1238,10 @@ export const storeService = {
       }
     }
 
-    // 3. Merge local cache
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    if (Array.isArray(local)) {
-      local.forEach((p) => registerProduct(p));
+    // 4. Merge local cache (preserves newly uploaded products or local edits)
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
 
     const prods = Array.from(prodMap.values());

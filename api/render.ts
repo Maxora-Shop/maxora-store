@@ -105,45 +105,67 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
         : getFirestore(app);
 
-      const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
-        getDocs(collection(db, 'products')),
-        getDocs(collection(db, 'categories')),
-        getDocs(collection(db, 'subcategories')),
-      ]);
+      // 1. Seed baseline master catalog from maxora_db.json
+      const prodMap = new Map<string, ProductData>();
+      const catMap = new Map<string, any>();
+      const subMap = new Map<string, any>();
 
-      if (!prodsSnap.empty) {
-        prodsSnap.forEach((d) => {
-          const data = d.data() as ProductData;
-          products.push({ ...data, id: String(data.id || d.id) });
-        });
-      }
-      if (!catsSnap.empty) {
-        catsSnap.forEach((d) => {
-          categories.push({ ...d.data(), id: String(d.data().id || d.id) });
-        });
-      }
-      if (!subsSnap.empty) {
-        subsSnap.forEach((d) => {
-          subcategories.push({ ...d.data(), id: String(d.data().id || d.id) });
-        });
-      }
-    } catch (e) {
-      console.warn('Firestore load failed in render handler:', e);
-    }
-
-    // Fallback to local maxora_db.json
-    if (products.length === 0) {
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
         if (fs.existsSync(dbPath)) {
           const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-          if (Array.isArray(data.products)) products = data.products;
-          if (Array.isArray(data.categories)) categories = data.categories;
-          if (Array.isArray(data.subcategories)) subcategories = data.subcategories;
+          if (Array.isArray(data.products)) {
+            data.products.forEach((p: any) => prodMap.set(String(p.id || p.sku || p.slug), p));
+          }
+          if (Array.isArray(data.categories)) {
+            data.categories.forEach((c: any) => catMap.set(String(c.id || c.slug), c));
+          }
+          if (Array.isArray(data.subcategories)) {
+            data.subcategories.forEach((s: any) => subMap.set(String(s.id || s.slug), s));
+          }
         }
       } catch (e) {
-        console.error('Local db read error in render:', e);
+        console.warn('Local db read note in render:', e);
       }
+
+      // 2. Query Firestore and overlay
+      try {
+        const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+          getDocs(collection(db, 'products')),
+          getDocs(collection(db, 'categories')),
+          getDocs(collection(db, 'subcategories')),
+        ]);
+
+        if (!prodsSnap.empty) {
+          prodsSnap.forEach((d) => {
+            const data = d.data() as ProductData;
+            const id = String(data.id || d.id);
+            prodMap.set(id, { ...data, id });
+          });
+        }
+        if (!catsSnap.empty) {
+          catsSnap.forEach((d) => {
+            const data = d.data();
+            const id = String(data.id || d.id);
+            catMap.set(id, { ...data, id });
+          });
+        }
+        if (!subsSnap.empty) {
+          subsSnap.forEach((d) => {
+            const data = d.data();
+            const id = String(data.id || d.id);
+            subMap.set(id, { ...data, id });
+          });
+        }
+      } catch (e) {
+        console.warn('Firestore load failed in render handler:', e);
+      }
+
+      products = Array.from(prodMap.values());
+      categories = Array.from(catMap.values());
+      subcategories = Array.from(subMap.values());
+    } catch (err) {
+      console.warn('Render load products note:', err);
     }
 
     // ==========================================
