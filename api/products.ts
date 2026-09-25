@@ -147,12 +147,35 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
+      // Load deleted_product_ids registry
+      const deletedIds = new Set<string>();
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.settings?.deleted_product_ids)) {
+            dbData.settings.deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+          }
+        }
+      } catch {}
+      try {
+        const setSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (setSnap.exists() && Array.isArray(setSnap.data()?.deleted_product_ids)) {
+          setSnap.data().deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+        }
+      } catch {}
+
       const prodMap = new Map<string, any>();
       // First populate with baseline catalog so products are never lost
       const fallbackList = loadFallbackProducts();
       fallbackList.forEach((item: any) => {
         const id = String(item.id || item.sku || '');
-        if (id) prodMap.set(id, item);
+        const idLower = id.toLowerCase().trim();
+        const skuLower = String(item.sku || '').toLowerCase().trim();
+        const slugLower = String(item.slug || '').toLowerCase().trim();
+        if (id && !deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower))) {
+          prodMap.set(id, item);
+        }
       });
 
       // Query Firestore (if quota allows)
@@ -164,6 +187,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             const pId = String(item.id || docSnap.id);
             const pName = String(item.name || '').trim();
             if (!pName) return;
+
+            const idLower = pId.toLowerCase().trim();
+            const skuLower = String(item.sku || '').toLowerCase().trim();
+            const slugLower = String(item.slug || '').toLowerCase().trim();
+            if (deletedIds.has(idLower) || (skuLower && deletedIds.has(skuLower)) || (slugLower && deletedIds.has(slugLower))) {
+              return;
+            }
 
             const discount = Number(item.discount || 0);
             const price = Number(item.selling_price || 0);
@@ -188,12 +218,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if (Array.isArray(cachedProducts)) {
         cachedProducts.forEach((p) => {
           if (p && p.id) {
-            prodMap.set(String(p.id), p);
+            const idLower = String(p.id).toLowerCase().trim();
+            const skuLower = String(p.sku || '').toLowerCase().trim();
+            const slugLower = String(p.slug || '').toLowerCase().trim();
+            if (!deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower))) {
+              prodMap.set(String(p.id), p);
+            }
           }
         });
       }
 
-      const prods: any[] = Array.from(prodMap.values());
+      const prods: any[] = Array.from(prodMap.values()).filter((p) => {
+        const idLower = String(p.id || '').toLowerCase().trim();
+        const skuLower = String(p.sku || '').toLowerCase().trim();
+        const slugLower = String(p.slug || '').toLowerCase().trim();
+        return !deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower));
+      });
       // Sort by created_at descending
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       cachedProducts = prods;
@@ -376,6 +416,27 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         console.warn('Firestore deleteDoc notice:', fsErr);
       }
 
+      // Record in Firestore deleted_products collection
+      try {
+        await setDoc(doc(db, 'deleted_products', pId), {
+          id: pId,
+          deleted_at: new Date().toISOString(),
+        }, { merge: true });
+      } catch {}
+
+      // Update Firestore store_settings deleted_product_ids
+      try {
+        const setSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (setSnap.exists()) {
+          const currentDeleted = Array.isArray(setSnap.data().deleted_product_ids) ? setSnap.data().deleted_product_ids : [];
+          if (!currentDeleted.includes(pId)) {
+            await setDoc(doc(db, 'settings', 'store_settings'), {
+              deleted_product_ids: [...currentDeleted, pId],
+            }, { merge: true });
+          }
+        }
+      } catch {}
+
       // Update maxora_db.json on disk if writable
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
@@ -383,13 +444,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
           if (Array.isArray(dbData.products)) {
             dbData.products = dbData.products.filter((p: any) => String(p.id) !== pId && p.sku !== pId && p.slug !== pId);
-            fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+          if (dbData.settings) {
+            const currentDeleted = Array.isArray(dbData.settings.deleted_product_ids) ? dbData.settings.deleted_product_ids : [];
+            if (!currentDeleted.includes(pId)) {
+              dbData.settings.deleted_product_ids = [...currentDeleted, pId];
+            }
+          }
+          fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+        }
+      } catch {}
+
+      // Update src/data/userProducts.json on disk if writable
+      try {
+        const upPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+        if (fs.existsSync(upPath)) {
+          const upData = JSON.parse(fs.readFileSync(upPath, 'utf8'));
+          if (Array.isArray(upData)) {
+            const updatedUp = upData.filter((p: any) => String(p.id) !== pId && p.sku !== pId && p.slug !== pId);
+            fs.writeFileSync(upPath, JSON.stringify(updatedUp, null, 2), 'utf8');
           }
         }
       } catch {}
 
       // Remove from memory cache
-      cachedProducts = cachedProducts.filter((p) => p.id !== pId);
+      cachedProducts = cachedProducts.filter((p) => String(p.id) !== pId && p.sku !== pId && p.slug !== pId);
       cacheTimestamp = Date.now();
 
       res.statusCode = 200;

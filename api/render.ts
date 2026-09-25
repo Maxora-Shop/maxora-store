@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, getDocs, collection } from 'firebase/firestore';
+import { getFirestore, getDocs, getDoc, doc, collection } from 'firebase/firestore';
 
 const BASE_URL = 'https://maxora-store-ruby.vercel.app';
 
@@ -161,7 +161,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         console.warn('Firestore load failed in render handler:', e);
       }
 
-      products = Array.from(prodMap.values());
+      // 3. Filter out any deleted products
+      const deletedIds = new Set<string>();
+      try {
+        const dbPath = path.join(process.cwd(), 'maxora_db.json');
+        if (fs.existsSync(dbPath)) {
+          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+          if (Array.isArray(dbData.settings?.deleted_product_ids)) {
+            dbData.settings.deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+          }
+        }
+      } catch {}
+      try {
+        const setSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (setSnap.exists() && Array.isArray(setSnap.data()?.deleted_product_ids)) {
+          setSnap.data().deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+        }
+      } catch {}
+
+      products = Array.from(prodMap.values()).filter((p) => {
+        const idLower = String(p.id || '').toLowerCase().trim();
+        const skuLower = String(p.sku || '').toLowerCase().trim();
+        const slugLower = String(p.slug || '').toLowerCase().trim();
+        return !deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower));
+      });
       categories = Array.from(catMap.values());
       subcategories = Array.from(subMap.values());
     } catch (err) {

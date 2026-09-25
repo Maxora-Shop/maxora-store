@@ -233,19 +233,37 @@ export function markOrderDeleted(id: string | number, orderNo?: string) {
 }
 
 export function getDeletedProductIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  const set = new Set<string>();
+  if (typeof window === 'undefined') return set;
   const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
-  return new Set((list || []).map(String));
+  (list || []).forEach((item) => {
+    if (item) set.add(String(item).toLowerCase().trim());
+  });
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (Array.isArray(settings?.deleted_product_ids)) {
+    settings.deleted_product_ids.forEach((item) => {
+      if (item) set.add(String(item).toLowerCase().trim());
+    });
+  }
+  return set;
 }
 
 export function markProductDeleted(id: string | number, sku?: string, slug?: string) {
   if (typeof window === 'undefined') return;
   const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
-  const set = new Set(list.map(String));
-  if (id) set.add(String(id));
-  if (sku) set.add(String(sku));
-  if (slug) set.add(String(slug));
+  const set = new Set(list.map((s) => String(s).toLowerCase().trim()));
+  if (id) set.add(String(id).toLowerCase().trim());
+  if (sku) set.add(String(sku).toLowerCase().trim());
+  if (slug) set.add(String(slug).toLowerCase().trim());
   setLocal(DELETED_PRODUCTS_KEY, Array.from(set));
+
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (settings) {
+    const existing = Array.isArray(settings.deleted_product_ids) ? settings.deleted_product_ids : [];
+    const updatedSettingsDeleted = Array.from(new Set([...existing.map(s => String(s).toLowerCase().trim()), ...Array.from(set)]));
+    settings.deleted_product_ids = updatedSettingsDeleted;
+    setLocal(SETTINGS_KEY, settings);
+  }
 }
 
 // Ensure Local Storage is initialized
@@ -473,6 +491,22 @@ export function initRealtimeFirestoreListeners() {
         const settings = docSnap.data() as StoreSettings;
         setLocal(SETTINGS_KEY, settings);
         notifySettingsChanged();
+
+        // Immediately filter out any deleted products on customer client
+        if (Array.isArray(settings.deleted_product_ids) && settings.deleted_product_ids.length > 0) {
+          const delSet = new Set(settings.deleted_product_ids.map((s) => String(s).toLowerCase().trim()));
+          const currentProds = getLocal<Product[]>(PRODUCTS_KEY, []);
+          const cleanProds = currentProds.filter((p) => {
+            const id = String(p.id || '').toLowerCase().trim();
+            const sku = String(p.sku || '').toLowerCase().trim();
+            const slug = String(p.slug || '').toLowerCase().trim();
+            return !delSet.has(id) && (!sku || !delSet.has(sku)) && (!slug || !delSet.has(slug));
+          });
+          if (cleanProds.length !== currentProds.length) {
+            setLocal(PRODUCTS_KEY, cleanProds);
+            notifyProductsChanged();
+          }
+        }
       }
     }, (err) => handleStoreFirestoreError('Settings snapshot', err));
     activeFirestoreUnsubscribers.push(unsubSettings);
@@ -1018,7 +1052,11 @@ export const storeService = {
         return;
       }
 
-      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+      const idLower = id.toLowerCase().trim();
+      const skuLower = sku.toLowerCase().trim();
+      const slugLower = slug.toLowerCase().trim();
+
+      if (deletedProductIds.has(idLower) || (skuLower && deletedProductIds.has(skuLower)) || (slugLower && deletedProductIds.has(slugLower))) {
         return;
       }
 
@@ -1081,7 +1119,12 @@ export const storeService = {
       local.forEach((p) => registerProduct(p, undefined, true));
     }
 
-    const prods = Array.from(prodMap.values());
+    const prods = Array.from(prodMap.values()).filter((p) => {
+      const idLower = String(p.id || '').toLowerCase().trim();
+      const skuLower = String(p.sku || '').toLowerCase().trim();
+      const slugLower = String(p.slug || '').toLowerCase().trim();
+      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
+    });
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     setLocal(PRODUCTS_KEY, prods);
 
@@ -1179,7 +1222,11 @@ export const storeService = {
         return;
       }
 
-      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+      const idLower = id.toLowerCase().trim();
+      const skuLower = sku.toLowerCase().trim();
+      const slugLower = slug.toLowerCase().trim();
+
+      if (deletedProductIds.has(idLower) || (skuLower && deletedProductIds.has(skuLower)) || (slugLower && deletedProductIds.has(slugLower))) {
         return;
       }
 
@@ -1244,7 +1291,12 @@ export const storeService = {
       local.forEach((p) => registerProduct(p, undefined, true));
     }
 
-    const prods = Array.from(prodMap.values());
+    const prods = Array.from(prodMap.values()).filter((p) => {
+      const idLower = String(p.id || '').toLowerCase().trim();
+      const skuLower = String(p.sku || '').toLowerCase().trim();
+      const slugLower = String(p.slug || '').toLowerCase().trim();
+      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
+    });
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     setLocal(PRODUCTS_KEY, prods);
 
@@ -1435,10 +1487,34 @@ export const storeService = {
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
 
-    // Record in deleted products registry
+    const idsToRecord = [idStr, target?.sku, target?.slug].filter(Boolean) as string[];
+
+    // 1. Record in local deleted products registry
     markProductDeleted(idStr, target?.sku, target?.slug);
 
-    // 1. Direct Cloud Firestore delete (AWAITED - guaranteed primary database deletion, NEVER blocked by cooldown)
+    // 2. Authoritative sync to Firestore settings.deleted_product_ids (so all customers get it immediately!)
+    try {
+      const currentSettings = await this.getSettings();
+      const existingDeleted = Array.isArray(currentSettings.deleted_product_ids) ? currentSettings.deleted_product_ids : [];
+      const updatedDeleted = Array.from(new Set([...existingDeleted.map(s => String(s).toLowerCase().trim()), ...idsToRecord.map(s => s.toLowerCase().trim())]));
+      await this.updateSettings({ deleted_product_ids: updatedDeleted }, adminPassword);
+    } catch (e) {
+      console.warn('Sync deleted_product_ids to store_settings note:', e);
+    }
+
+    // 3. Create tombstone record in Firestore
+    try {
+      await setDoc(doc(db, 'deleted_products', idStr), {
+        id: idStr,
+        sku: target?.sku || '',
+        slug: target?.slug || '',
+        deleted_at: new Date().toISOString(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn('Direct Firestore set deleted_products note:', e);
+    }
+
+    // 4. Direct Cloud Firestore delete (AWAITED - guaranteed primary database deletion, NEVER blocked by cooldown)
     try {
       await deleteDoc(doc(db, 'products', idStr));
       if (target?.id && String(target.id) !== idStr) {
@@ -1449,7 +1525,7 @@ export const storeService = {
       console.warn('Direct Firestore delete product error:', e);
     }
 
-    // 2. Authoritative Backend Server API delete
+    // 5. Authoritative Backend Server API delete
     try {
       await tryApi(`/api/admin/products/${idStr}`, {
         method: 'DELETE',
@@ -1459,8 +1535,14 @@ export const storeService = {
       console.warn('Backend API deleteProduct notice:', e);
     }
 
-    // 3. Local state filter
-    const filtered = local.filter((p) => String(p.id) !== idStr && p.sku !== idStr && p.slug !== idStr && String(p.id) !== String(target?.id));
+    // 6. Local state filter
+    const delSet = new Set(idsToRecord.map((s) => s.toLowerCase().trim()));
+    const filtered = local.filter((p) => {
+      const pId = String(p.id || '').toLowerCase().trim();
+      const pSku = String(p.sku || '').toLowerCase().trim();
+      const pSlug = String(p.slug || '').toLowerCase().trim();
+      return !delSet.has(pId) && (!pSku || !delSet.has(pSku)) && (!pSlug || !delSet.has(pSlug));
+    });
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
 

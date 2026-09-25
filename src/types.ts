@@ -332,6 +332,7 @@ export interface StoreSettings {
   hero_promo_card_3_badge?: string;
   hero_promo_card_3_title?: string;
   hero_promo_card_3_subtitle?: string;
+  deleted_product_ids?: string[];
   updated_at?: string;
 }
 
