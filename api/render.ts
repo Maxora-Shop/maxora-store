@@ -60,6 +60,16 @@ interface ProductData {
   meta_keywords?: string;
   slug?: string;
   brand?: string;
+  category_id?: string;
+  category_slug?: string;
+  subcategory_id?: string;
+  sub_category_id?: string;
+  subcategory_slug?: string;
+  childcategory_id?: string;
+  child_category_id?: string;
+  childcategory_slug?: string;
+  product_type_id?: string;
+  product_type_slug?: string;
   og_image?: string;
   created_at?: string;
   updated_at?: string;
@@ -69,7 +79,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   try {
     const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const type = urlObj.searchParams.get('type') || 'product';
-    const rawSlug = urlObj.searchParams.get('slug') || '';
+    let catSlugParam = (urlObj.searchParams.get('catSlug') || '').trim();
+    let subSlugParam = (urlObj.searchParams.get('subSlug') || '').trim();
+    const rawSlug = (urlObj.searchParams.get('slug') || '').trim();
+
+    if (!catSlugParam && !subSlugParam && rawSlug.includes('/')) {
+      const parts = rawSlug.split('/').map((p) => p.trim()).filter(Boolean);
+      catSlugParam = parts[0] || '';
+      subSlugParam = parts[1] || '';
+    } else if (!catSlugParam && !subSlugParam) {
+      catSlugParam = rawSlug;
+    }
+
     const slug = cleanSlug(rawSlug);
 
     // Read index.html from dist or root
@@ -457,32 +478,69 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
     }
 
     // ==========================================
-    // CATEGORY PAGE SSR
+    // CATEGORY & SUBCATEGORY PAGE SSR
     // ==========================================
     if (type === 'category') {
+      const isSubCategoryRoute = Boolean(subSlugParam);
+      const cleanCatSlug = cleanSlug(catSlugParam || rawSlug);
+      const cleanSubSlug = isSubCategoryRoute ? cleanSlug(subSlugParam) : '';
+
       const matchedCategory = categories.find((c) => {
         const cSlug = cleanSlug(c.slug || c.name || c.id);
-        return cSlug === slug;
+        return cSlug === cleanCatSlug;
       });
 
-      const matchedSubCategory = subcategories.find((s) => {
-        const sSlug = cleanSlug(s.slug || s.name || s.id);
-        return sSlug === slug;
-      });
+      const matchedSubCategory = isSubCategoryRoute
+        ? subcategories.find((s) => {
+            const sSlug = cleanSlug(s.slug || s.name || s.id);
+            if (sSlug !== cleanSubSlug) return false;
+            if (matchedCategory) {
+              if (s.category_id && String(s.category_id) === String(matchedCategory.id)) return true;
+              if (s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug) return true;
+            }
+            return true;
+          }) || subcategories.find((s) => cleanSlug(s.slug || s.name || s.id) === cleanSubSlug)
+        : subcategories.find((s) => cleanSlug(s.slug || s.name || s.id) === cleanCatSlug);
 
       const matchingProducts = products.filter((p) => {
         if (p.active === 0 || p.active === false || String(p.active) === '0') return false;
         const pCatSlug = cleanSlug(p.category || '');
-        const pSubCatSlug = cleanSlug(p.sub_category || '');
-        const pChildCatSlug = cleanSlug(p.child_category || '');
-        const pTypeSlug = cleanSlug(p.product_type || '');
-        return pCatSlug === slug || pSubCatSlug === slug || pChildCatSlug === slug || pTypeSlug === slug;
+        const pSubCatSlug = cleanSlug(p.sub_category || p.subcategory_slug || '');
+        const pChildCatSlug = cleanSlug(p.child_category || p.childcategory_slug || '');
+        const pTypeSlug = cleanSlug(p.product_type || p.product_type_slug || '');
+
+        if (isSubCategoryRoute) {
+          const matchSub =
+            pSubCatSlug === cleanSubSlug ||
+            (matchedSubCategory && (
+              String(p.subcategory_id || p.sub_category_id) === String(matchedSubCategory.id) ||
+              cleanSlug(p.sub_category || '') === cleanSlug(matchedSubCategory.name || '')
+            ));
+          if (!matchSub) return false;
+
+          if (cleanCatSlug) {
+            const matchCat =
+              pCatSlug === cleanCatSlug ||
+              (matchedCategory && (
+                String(p.category_id) === String(matchedCategory.id) ||
+                cleanSlug(p.category || '') === cleanSlug(matchedCategory.name || '')
+              ));
+            if (!matchCat) return false;
+          }
+          return true;
+        }
+
+        return pCatSlug === cleanCatSlug || pSubCatSlug === cleanCatSlug || pChildCatSlug === cleanCatSlug || pTypeSlug === cleanCatSlug;
       });
 
-      const categoryExists = Boolean(matchedCategory || matchedSubCategory || matchingProducts.length > 0);
+      // Route existence validation:
+      // An empty subcategory or category must NOT return 404 if the category or subcategory exists!
+      const routeExists = isSubCategoryRoute
+        ? Boolean(matchedCategory || matchedSubCategory || matchingProducts.length > 0)
+        : Boolean(matchedCategory || matchedSubCategory || matchingProducts.length > 0);
 
       // If category missing -> HTTP 404 (Never soft 404)
-      if (!categoryExists) {
+      if (!routeExists) {
         const notFoundTitle = 'Category Not Found (404) | Maxora Shop Bangladesh';
         const notFoundDesc = 'The requested category could not be found at Maxora Shop Bangladesh.';
         const seoHeadTags = `
@@ -512,33 +570,55 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
         return;
       }
 
-      // Category Exists -> HTTP 200
+      // Route exists -> HTTP 200
       const categoryName =
         matchedCategory?.name ||
-        matchedSubCategory?.name ||
-        matchingProducts[0]?.category ||
-        slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        cleanCatSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-      const canonicalUrl = `${BASE_URL}/category/${slug}`;
-      const title = `${categoryName} Collection | Best Price in Bangladesh | Maxora Shop`;
-      const description = `Shop genuine ${categoryName} online at Maxora Shop Bangladesh. Discover ${matchingProducts.length} authentic products with Cash on Delivery nationwide.`;
+      const subCategoryName = isSubCategoryRoute
+        ? (matchedSubCategory?.name || cleanSubSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
+        : '';
+
+      const displayName = isSubCategoryRoute ? subCategoryName : categoryName;
+      const canonicalUrl = isSubCategoryRoute
+        ? `${BASE_URL}/category/${cleanCatSlug}/${cleanSubSlug}`
+        : `${BASE_URL}/category/${cleanCatSlug}`;
+
+      const title = isSubCategoryRoute
+        ? `${subCategoryName} Collection | Best Price in Bangladesh | Maxora Shop`
+        : `${categoryName} Collection | Best Price in Bangladesh | Maxora Shop`;
+
+      const description = isSubCategoryRoute
+        ? `Shop genuine ${subCategoryName} online at Maxora Shop Bangladesh. Discover authentic ${categoryName} products with 100% Cash on Delivery across all 64 districts.`
+        : `Shop genuine ${categoryName} online at Maxora Shop Bangladesh. Discover ${matchingProducts.length} authentic products with Cash on Delivery nationwide.`;
+
       const catImage = matchingProducts[0]?.image_url || `${BASE_URL}/og-image.png`;
 
       // Category Breadcrumbs JSON-LD
+      const breadcrumbListElements = [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: BASE_URL },
+        { '@type': 'ListItem', position: 2, name: categoryName, item: `${BASE_URL}/category/${cleanCatSlug}` },
+      ];
+      if (isSubCategoryRoute) {
+        breadcrumbListElements.push({
+          '@type': 'ListItem',
+          position: 3,
+          name: subCategoryName,
+          item: canonicalUrl,
+        });
+      }
+
       const breadcrumbLd = {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: BASE_URL },
-          { '@type': 'ListItem', position: 2, name: categoryName, item: canonicalUrl },
-        ],
+        itemListElement: breadcrumbListElements,
       };
 
       // Category ItemList JSON-LD
       const itemListLd = {
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        name: `${categoryName} Products`,
+        name: `${displayName} Products`,
         itemListElement: matchingProducts.slice(0, 20).map((p, idx) => ({
           '@type': 'ListItem',
           position: idx + 1,
@@ -577,40 +657,57 @@ ${JSON.stringify(itemListLd, null, 2)}
     </script>
       `;
 
+      const breadcrumbsHtml = isSubCategoryRoute
+        ? `<nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+             <a href="${BASE_URL}">Home</a> &gt; 
+             <a href="${BASE_URL}/category/${cleanCatSlug}">${escapeHtml(categoryName)}</a> &gt; 
+             <span class="text-zinc-800">${escapeHtml(subCategoryName)}</span>
+           </nav>`
+        : `<nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+             <a href="${BASE_URL}">Home</a> &gt; 
+             <span class="text-zinc-800">${escapeHtml(categoryName)}</span>
+           </nav>`;
+
+      const productsContentHtml = matchingProducts.length > 0
+        ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+             ${matchingProducts
+               .map((p) => {
+                 const pSelling = Number(p.selling_price || 0);
+                 const pDisc = Number(p.discount || 0);
+                 const pFinal = Math.max(0, pSelling - pDisc);
+                 const pSlug = cleanSlug(p.slug || p.name || p.id);
+                 const pImg = p.image_url || '';
+                 return `
+               <a href="${BASE_URL}/product/${pSlug}" class="group block border border-zinc-200 rounded-xl p-3 bg-white hover:shadow-md transition">
+                 <div class="aspect-square w-full mb-3 overflow-hidden rounded-lg bg-zinc-50 flex items-center justify-center">
+                   <img src="${escapeHtml(pImg)}" alt="${escapeHtml(p.name)}" class="h-full w-full object-contain group-hover:scale-105 transition" />
+                 </div>
+                 <h2 class="text-sm font-semibold text-zinc-800 line-clamp-2 mb-1">${escapeHtml(p.name)}</h2>
+                 <div class="flex items-center gap-2">
+                   <span class="text-sm font-bold text-emerald-600">৳${pFinal}</span>
+                   ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">৳${pSelling}</span>` : ''}
+                 </div>
+               </a>
+                 `;
+               })
+               .join('')}
+           </div>`
+        : `<div class="text-center py-16 px-4 bg-white rounded-2xl border border-dashed border-zinc-200">
+             <p class="text-zinc-700 text-sm font-medium mb-1">No products found in ${escapeHtml(displayName)} at the moment.</p>
+             <p class="text-xs text-zinc-400 mb-5">Explore our wide range of authentic products across all categories.</p>
+             ${isSubCategoryRoute ? `<a href="${BASE_URL}/category/${cleanCatSlug}" style="display:inline-block;background:#18181b;color:#ffffff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;margin-right:8px;">View all ${escapeHtml(categoryName)}</a>` : ''}
+             <a href="${BASE_URL}/" style="display:inline-block;background:#f4f4f5;color:#18181b;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">Return to Home</a>
+           </div>`;
+
       const semanticCategoryBody = `
     <main id="ssr-category-container" class="max-w-6xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
-      <nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
-        <a href="${BASE_URL}">Home</a> &gt; 
-        <span class="text-zinc-800">${escapeHtml(categoryName)}</span>
-      </nav>
+      ${breadcrumbsHtml}
       <header class="mb-8 border-b border-zinc-200 pb-4">
-        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">${escapeHtml(categoryName)} Collection</h1>
+        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">${escapeHtml(displayName)} Collection</h1>
         <p class="text-zinc-600 text-sm leading-relaxed">${escapeHtml(description)}</p>
         <p class="text-xs text-zinc-500 mt-2 font-medium">Showing ${matchingProducts.length} items</p>
       </header>
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-        ${matchingProducts
-          .map((p) => {
-            const pSelling = Number(p.selling_price || 0);
-            const pDisc = Number(p.discount || 0);
-            const pFinal = Math.max(0, pSelling - pDisc);
-            const pSlug = cleanSlug(p.slug || p.name || p.id);
-            const pImg = p.image_url || '';
-            return `
-          <a href="${BASE_URL}/product/${pSlug}" class="group block border border-zinc-200 rounded-xl p-3 bg-white hover:shadow-md transition">
-            <div class="aspect-square w-full mb-3 overflow-hidden rounded-lg bg-zinc-50 flex items-center justify-center">
-              <img src="${escapeHtml(pImg)}" alt="${escapeHtml(p.name)}" class="h-full w-full object-contain group-hover:scale-105 transition" />
-            </div>
-            <h2 class="text-sm font-semibold text-zinc-800 line-clamp-2 mb-1">${escapeHtml(p.name)}</h2>
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-bold text-emerald-600">৳${pFinal}</span>
-              ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">৳${pSelling}</span>` : ''}
-            </div>
-          </a>
-            `;
-          })
-          .join('')}
-      </div>
+      ${productsContentHtml}
     </main>
       `;
 

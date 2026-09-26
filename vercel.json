@@ -43,6 +43,10 @@
       "destination": "/api/render?type=product&slug=$1"
     },
     {
+      "source": "/category/([^/]+)/([^/]+)",
+      "destination": "/api/render?type=category&catSlug=$1&subSlug=$2"
+    },
+    {
       "source": "/category/(.*)",
       "destination": "/api/render?type=category&slug=$1"
     },

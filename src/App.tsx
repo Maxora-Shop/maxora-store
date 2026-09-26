@@ -341,6 +341,8 @@ export default function App() {
             setSelectedSubCategory(rawSub);
             setSelectedProductType('');
             setSelectedChildCategory('');
+            setSelectedBrand('');
+            setSearchQuery('');
             setTimeout(() => {
               productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 80);
@@ -678,12 +680,13 @@ export default function App() {
     setQuickViewProduct(null);
     setIsProductNotFound(false);
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/product/')) {
-      if (selectedCategory && selectedSubCategory && activeCategoryObj && activeSubCategoryObj) {
-        window.history.pushState({}, '', `/category/${activeCategoryObj.slug}/${activeSubCategoryObj.slug}`);
-      } else if (selectedCategory && activeCategoryObj) {
-        window.history.pushState({}, '', `/category/${activeCategoryObj.slug}`);
+      if (selectedCategory && selectedSubCategory) {
+        const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+        const subSlug = activeSubCategoryObj?.slug || generateSlug(selectedSubCategory);
+        window.history.pushState({}, '', `/category/${catSlug}/${subSlug}`);
       } else if (selectedCategory) {
-        window.history.pushState({}, '', `/products?category=${encodeURIComponent(selectedCategory)}`);
+        const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+        window.history.pushState({}, '', `/category/${catSlug}`);
       } else {
         window.history.pushState({}, '', '/');
       }
@@ -814,15 +817,24 @@ export default function App() {
     setQuickViewProduct(null);
     setIsProductNotFound(false);
 
-    // Update browser URL query parameters cleanly
-    const params = new URLSearchParams();
-    if (cat) params.set('category', cat);
-    if (sub) params.set('subcategory', sub);
-    if (type) params.set('productType', type);
-    if (child) params.set('childCategory', child);
-
-    const qs = params.toString();
-    const newPath = qs ? `/products?${qs}` : '/';
+    // Update browser URL cleanly
+    let newPath = '/';
+    if (cat && sub && !type && !child) {
+      const catSlug = generateSlug(cat);
+      const subSlug = generateSlug(sub);
+      newPath = `/category/${catSlug}/${subSlug}`;
+    } else if (cat && !sub && !type && !child) {
+      const catSlug = generateSlug(cat);
+      newPath = `/category/${catSlug}`;
+    } else {
+      const params = new URLSearchParams();
+      if (cat) params.set('category', cat);
+      if (sub) params.set('subcategory', sub);
+      if (type) params.set('productType', type);
+      if (child) params.set('childCategory', child);
+      const qs = params.toString();
+      newPath = qs ? `/products?${qs}` : '/';
+    }
 
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
@@ -844,14 +856,23 @@ export default function App() {
     setSelectedProductType(newType);
     setSelectedChildCategory(newChild);
 
-    const params = new URLSearchParams();
-    if (newCat) params.set('category', newCat);
-    if (newSub) params.set('subcategory', newSub);
-    if (newType) params.set('productType', newType);
-    if (newChild) params.set('childCategory', newChild);
-
-    const qs = params.toString();
-    const newPath = qs ? `/products?${qs}` : '/';
+    let newPath = '/';
+    if (newCat && newSub && !newType && !newChild) {
+      const catSlug = generateSlug(newCat);
+      const subSlug = generateSlug(newSub);
+      newPath = `/category/${catSlug}/${subSlug}`;
+    } else if (newCat && !newSub && !newType && !newChild) {
+      const catSlug = generateSlug(newCat);
+      newPath = `/category/${catSlug}`;
+    } else {
+      const params = new URLSearchParams();
+      if (newCat) params.set('category', newCat);
+      if (newSub) params.set('subcategory', newSub);
+      if (newType) params.set('productType', newType);
+      if (newChild) params.set('childCategory', newChild);
+      const qs = params.toString();
+      newPath = qs ? `/products?${qs}` : '/';
+    }
 
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
@@ -1239,7 +1260,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">
       {/* Dynamic SEO & Google SERP JSON-LD schema injection */}
-      <SEOHead settings={settings} activeProduct={quickViewProduct} />
+      <SEOHead
+        settings={settings}
+        activeProduct={quickViewProduct}
+        activeCategory={activeCategoryObj || (selectedCategory ? ({ name: displayCategoryName, slug: generateSlug(selectedCategory) } as any) : null)}
+        activeSubCategory={activeSubCategoryObj || (selectedSubCategory ? ({ name: displaySubCategoryName, slug: generateSlug(selectedSubCategory) } as any) : null)}
+      />
 
       {/* Sticky Top Navbar with 4-Tier Hierarchy Menu */}
       <Navbar
@@ -1712,16 +1738,30 @@ export default function App() {
                       ? `No Products in "${activeChildCategoryObj?.name || selectedChildCategory}"`
                       : selectedProductType
                       ? `No Products in "${activeProductTypeObj?.name || selectedProductType}"`
+                      : selectedSubCategory
+                      ? `No Products in "${activeSubCategoryObj?.name || displaySubCategoryName || selectedSubCategory}"`
                       : selectedCategory
-                      ? `No Products in "${activeCategoryObj?.name || selectedCategory}"`
+                      ? `No Products in "${activeCategoryObj?.name || displayCategoryName || selectedCategory}"`
                       : 'No Products Found'}
                   </h3>
                   <p className="text-xs text-zinc-500 mb-6 leading-relaxed">
                     {showSavedOnly
                       ? "You haven't saved any items yet. Tap the heart icon on any product in the store to save it here!"
+                      : selectedSubCategory
+                      ? `No products found in ${activeSubCategoryObj?.name || displaySubCategoryName || selectedSubCategory} at the moment. Explore other categories or check back soon!`
+                      : selectedCategory
+                      ? `No products found in ${activeCategoryObj?.name || displayCategoryName || selectedCategory} at the moment. Explore other categories or check back soon!`
                       : "We couldn't find any products matching your current filters. Try changing or clearing your search, brand or category filters."}
                   </p>
                   <div className="flex items-center justify-center gap-3 flex-wrap">
+                    {selectedSubCategory && (
+                      <button
+                        onClick={() => updateTaxonomyFilter({ subCategory: '', productType: '', childCategory: '' })}
+                        className="px-5 py-2.5 rounded-full bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer"
+                      >
+                        View all {displayCategoryName}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         handleClearAllTaxonomy();
@@ -1729,7 +1769,7 @@ export default function App() {
                       }}
                       className="px-6 py-2.5 rounded-full bg-zinc-950 text-white text-xs font-bold hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
                     >
-                      {showSavedOnly ? 'Browse All Products' : 'Clear All Filters'}
+                      {showSavedOnly ? 'Browse All Products' : 'Explore All Categories'}
                     </button>
                     {(selectedChildCategory || selectedProductType || selectedBrand || availabilityFilter !== 'all' || minRatingFilter > 0) && (
                       <button

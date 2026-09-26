@@ -3047,15 +3047,55 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
 }
 
 // Helper to render category SSR HTML
-function getCategorySsrHtml(rawSlug: string): { html: string; status: number } | null {
+// Helper to render category & subcategory SSR HTML
+function getCategorySsrHtml(rawCatSlug: string, rawSubSlug?: string): { html: string; status: number } | null {
   const baseUrl = 'https://maxora-store-ruby.vercel.app';
-  const slug = cleanSlug(rawSlug);
+  const isSubCategoryRoute = Boolean(rawSubSlug || (rawCatSlug && rawCatSlug.includes('/')));
+  const cleanCatSlug = cleanSlug(rawCatSlug.includes('/') ? rawCatSlug.split('/')[0] : rawCatSlug);
+  const cleanSubSlug = isSubCategoryRoute ? cleanSlug(rawSubSlug || (rawCatSlug.includes('/') ? rawCatSlug.split('/')[1] : '')) : '';
 
-  const matchedCat = db.categories.find(c => cleanSlug(c.slug || c.name || c.id) === slug);
-  const matchedSub = db.subcategories.find(s => cleanSlug(s.slug || s.name || s.id) === slug);
+  const matchedCat = db.categories.find(c => cleanSlug(c.slug || c.name || c.id) === cleanCatSlug);
+  const matchedSub = isSubCategoryRoute
+    ? db.subcategories.find(s => {
+        const sSlug = cleanSlug(s.slug || s.name || s.id);
+        if (sSlug !== cleanSubSlug) return false;
+        if (matchedCat) {
+          if (s.category_id && String(s.category_id) === String(matchedCat.id)) return true;
+          if (s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug) return true;
+        }
+        return true;
+      }) || db.subcategories.find(s => cleanSlug(s.slug || s.name || s.id) === cleanSubSlug)
+    : db.subcategories.find(s => cleanSlug(s.slug || s.name || s.id) === cleanCatSlug);
+
   const matchingProducts = db.products.filter(p => {
     if (p.active === 0 || p.active === false || String(p.active) === '0') return false;
-    return cleanSlug(p.category || '') === slug || cleanSlug(p.sub_category || '') === slug || cleanSlug(p.child_category || '') === slug;
+    const pCatSlug = cleanSlug(p.category || '');
+    const pSubCatSlug = cleanSlug(p.sub_category || p.subcategory_slug || '');
+    const pChildCatSlug = cleanSlug(p.child_category || p.childcategory_slug || '');
+    const pTypeSlug = cleanSlug(p.product_type || p.product_type_slug || '');
+
+    if (isSubCategoryRoute) {
+      const matchSub =
+        pSubCatSlug === cleanSubSlug ||
+        (matchedSub && (
+          String(p.subcategory_id || p.sub_category_id) === String(matchedSub.id) ||
+          cleanSlug(p.sub_category || '') === cleanSlug(matchedSub.name || '')
+        ));
+      if (!matchSub) return false;
+
+      if (cleanCatSlug) {
+        const matchCat =
+          pCatSlug === cleanCatSlug ||
+          (matchedCat && (
+            String(p.category_id) === String(matchedCat.id) ||
+            cleanSlug(p.category || '') === cleanSlug(matchedCat.name || '')
+          ));
+        if (!matchCat) return false;
+      }
+      return true;
+    }
+
+    return pCatSlug === cleanCatSlug || pSubCatSlug === cleanCatSlug || pChildCatSlug === cleanCatSlug || pTypeSlug === cleanCatSlug;
   });
 
   const distIndex = path.join(process.cwd(), 'dist', 'index.html');
@@ -3064,7 +3104,13 @@ function getCategorySsrHtml(rawSlug: string): { html: string; status: number } |
   if (!fs.existsSync(templatePath)) return null;
   const templateHtml = fs.readFileSync(templatePath, 'utf8');
 
-  if (!matchedCat && !matchedSub && matchingProducts.length === 0) {
+  // Route existence validation:
+  // An empty subcategory or category must NOT return 404 if the category or subcategory exists!
+  const routeExists = isSubCategoryRoute
+    ? Boolean(matchedCat || matchedSub || matchingProducts.length > 0)
+    : Boolean(matchedCat || matchedSub || matchingProducts.length > 0);
+
+  if (!routeExists) {
     const notFoundTitle = 'Category Not Found (404) | Maxora Shop Bangladesh';
     const notFoundDesc = 'The requested category could not be found at Maxora Shop Bangladesh.';
     const seoHeadTags = `
@@ -3089,25 +3135,54 @@ function getCategorySsrHtml(rawSlug: string): { html: string; status: number } |
     return { html: notFoundHtml, status: 404 };
   }
 
-  const categoryName = matchedCat?.name || matchedSub?.name || matchingProducts[0]?.category || slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  const canonicalUrl = `${baseUrl}/category/${slug}`;
-  const title = `${categoryName} Collection | Best Price in Bangladesh | Maxora Shop`;
-  const description = `Shop genuine ${categoryName} online at Maxora Shop Bangladesh. Discover ${matchingProducts.length} authentic products with Cash on Delivery nationwide.`;
+  // Route exists -> HTTP 200
+  const categoryName =
+    matchedCat?.name ||
+    cleanCatSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const subCategoryName = isSubCategoryRoute
+    ? (matchedSub?.name || cleanSubSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))
+    : '';
+
+  const displayName = isSubCategoryRoute ? subCategoryName : categoryName;
+  const canonicalUrl = isSubCategoryRoute
+    ? `${baseUrl}/category/${cleanCatSlug}/${cleanSubSlug}`
+    : `${baseUrl}/category/${cleanCatSlug}`;
+
+  const title = isSubCategoryRoute
+    ? `${subCategoryName} Collection | Best Price in Bangladesh | Maxora Shop`
+    : `${categoryName} Collection | Best Price in Bangladesh | Maxora Shop`;
+
+  const description = isSubCategoryRoute
+    ? `Shop genuine ${subCategoryName} online at Maxora Shop Bangladesh. Discover authentic ${categoryName} products with 100% Cash on Delivery across all 64 districts.`
+    : `Shop genuine ${categoryName} online at Maxora Shop Bangladesh. Discover ${matchingProducts.length} authentic products with Cash on Delivery nationwide.`;
+
   const catImage = matchingProducts[0]?.image_url || `${baseUrl}/og-image.png`;
+
+  // Breadcrumbs JSON-LD
+  const breadcrumbListElements = [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+    { '@type': 'ListItem', position: 2, name: categoryName, item: `${baseUrl}/category/${cleanCatSlug}` },
+  ];
+  if (isSubCategoryRoute) {
+    breadcrumbListElements.push({
+      '@type': 'ListItem',
+      position: 3,
+      name: subCategoryName,
+      item: canonicalUrl,
+    });
+  }
 
   const breadcrumbLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
-      { '@type': 'ListItem', position: 2, name: categoryName, item: canonicalUrl },
-    ]
+    itemListElement: breadcrumbListElements,
   };
 
   const itemListLd = {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: `${categoryName} Products`,
+    name: `${displayName} Products`,
     itemListElement: matchingProducts.slice(0, 20).map((p, idx) => ({
       '@type': 'ListItem',
       position: idx + 1,
@@ -3146,18 +3221,19 @@ ${JSON.stringify(itemListLd, null, 2)}
     </script>
   `;
 
-  const semanticCategoryBody = `
-    <main id="ssr-category-container" class="max-w-6xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
-      <nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
-        <a href="${baseUrl}">Home</a> &gt; 
-        <span class="text-zinc-800">${escapeHtml(categoryName)}</span>
-      </nav>
-      <header class="mb-8 border-b border-zinc-200 pb-4">
-        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">${escapeHtml(categoryName)} Collection</h1>
-        <p class="text-zinc-600 text-sm leading-relaxed">${escapeHtml(description)}</p>
-        <p class="text-xs text-zinc-500 mt-2 font-medium">Showing ${matchingProducts.length} items</p>
-      </header>
-      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+  const breadcrumbsHtml = isSubCategoryRoute
+    ? `<nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+         <a href="${baseUrl}">Home</a> &gt; 
+         <a href="${baseUrl}/category/${cleanCatSlug}">${escapeHtml(categoryName)}</a> &gt; 
+         <span class="text-zinc-800">${escapeHtml(subCategoryName)}</span>
+       </nav>`
+    : `<nav aria-label="Breadcrumb" class="text-xs text-zinc-500 mb-4">
+         <a href="${baseUrl}">Home</a> &gt; 
+         <span class="text-zinc-800">${escapeHtml(categoryName)}</span>
+       </nav>`;
+
+  const productsContentHtml = matchingProducts.length > 0
+    ? `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         ${matchingProducts.map(p => {
           const pSelling = Number(p.selling_price || 0);
           const pDisc = Number(p.discount || 0);
@@ -3176,7 +3252,23 @@ ${JSON.stringify(itemListLd, null, 2)}
           </a>
           `;
         }).join('')}
-      </div>
+      </div>`
+    : `<div class="text-center py-16 px-4 bg-white rounded-2xl border border-dashed border-zinc-200">
+         <p class="text-zinc-700 text-sm font-medium mb-1">No products found in ${escapeHtml(displayName)} at the moment.</p>
+         <p class="text-xs text-zinc-400 mb-5">Explore our wide range of authentic products across all categories.</p>
+         ${isSubCategoryRoute ? `<a href="${baseUrl}/category/${cleanCatSlug}" style="display:inline-block;background:#18181b;color:#ffffff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;margin-right:8px;">View all ${escapeHtml(categoryName)}</a>` : ''}
+         <a href="${baseUrl}/" style="display:inline-block;background:#f4f4f5;color:#18181b;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">Return to Home</a>
+       </div>`;
+
+  const semanticCategoryBody = `
+    <main id="ssr-category-container" class="max-w-6xl mx-auto p-4 sm:p-6 font-sans text-zinc-900">
+      ${breadcrumbsHtml}
+      <header class="mb-8 border-b border-zinc-200 pb-4">
+        <h1 class="text-3xl font-extrabold text-zinc-900 mb-2">${escapeHtml(displayName)} Collection</h1>
+        <p class="text-zinc-600 text-sm leading-relaxed">${escapeHtml(description)}</p>
+        <p class="text-xs text-zinc-500 mt-2 font-medium">Showing ${matchingProducts.length} items</p>
+      </header>
+      ${productsContentHtml}
     </main>
   `;
 
@@ -3205,10 +3297,23 @@ app.get('/product/:slug', async (req, res, next) => {
   next();
 });
 
-// GET /category/:slug and /category/:catSlug/:subSlug (SSR pre-rendered category page)
-app.get(['/category/:slug', '/category/:catSlug/:subSlug'], (req, res, next) => {
-  const targetSlug = req.params.subSlug || req.params.slug;
-  const result = getCategorySsrHtml(targetSlug);
+// GET /category/:catSlug/:subSlug and /category/:slug (SSR pre-rendered category & subcategory page)
+app.get('/category/:catSlug/:subSlug', (req, res, next) => {
+  const result = getCategorySsrHtml(req.params.catSlug, req.params.subSlug);
+  if (result) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (result.status === 200) {
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    return res.status(result.status).send(result.html);
+  }
+  next();
+});
+
+app.get('/category/:slug', (req, res, next) => {
+  const result = getCategorySsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (result.status === 200) {
