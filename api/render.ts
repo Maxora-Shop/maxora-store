@@ -92,13 +92,35 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let subSlugParam = '';
     let rawSlugParam = '';
 
-    const pCat = (urlObj.searchParams.get('catSlug') || urlObj.searchParams.get('categorySlug') || urlObj.searchParams.get('category') || '').trim();
+    const reqQuery = (req as any).query || {};
+
+    const pCat = (
+      reqQuery.catSlug ||
+      reqQuery.categorySlug ||
+      reqQuery.category ||
+      urlObj.searchParams.get('catSlug') ||
+      urlObj.searchParams.get('categorySlug') ||
+      urlObj.searchParams.get('category') ||
+      ''
+    ).toString().trim();
     if (isValidSlugToken(pCat)) catSlugParam = pCat;
 
-    const pSub = (urlObj.searchParams.get('subSlug') || urlObj.searchParams.get('subCategorySlug') || urlObj.searchParams.get('subcategory') || '').trim();
+    const pSub = (
+      reqQuery.subSlug ||
+      reqQuery.subCategorySlug ||
+      reqQuery.subcategory ||
+      urlObj.searchParams.get('subSlug') ||
+      urlObj.searchParams.get('subCategorySlug') ||
+      urlObj.searchParams.get('subcategory') ||
+      ''
+    ).toString().trim();
     if (isValidSlugToken(pSub)) subSlugParam = pSub;
 
-    const pSlug = (urlObj.searchParams.get('slug') || '').trim();
+    const pSlug = (
+      reqQuery.slug ||
+      urlObj.searchParams.get('slug') ||
+      ''
+    ).toString().trim();
     if (isValidSlugToken(pSlug)) rawSlugParam = pSlug;
 
     // Check incoming path from Vercel headers or URL path
