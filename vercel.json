@@ -1,6 +1,11 @@
 {
   "framework": "vite",
   "cleanUrls": false,
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "maxora_db.json"
+    }
+  },
   "rewrites": [
     {
       "source": "/sitemap.xml",
@@ -39,12 +44,20 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/product/:slug",
+      "destination": "/api/render?type=product&slug=:slug"
+    },
+    {
       "source": "/product/(.*)",
       "destination": "/api/render?type=product&slug=$1"
     },
     {
-      "source": "/category/([^/]+)/([^/]+)",
-      "destination": "/api/render?type=category&catSlug=$1&subSlug=$2"
+      "source": "/category/:catSlug/:subSlug",
+      "destination": "/api/render?type=category&catSlug=:catSlug&subSlug=:subSlug"
+    },
+    {
+      "source": "/category/:slug",
+      "destination": "/api/render?type=category&slug=:slug"
     },
     {
       "source": "/category/(.*)",

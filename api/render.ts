@@ -75,23 +75,77 @@ interface ProductData {
   updated_at?: string;
 }
 
+function isValidSlugToken(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const t = String(val).trim();
+  if (!t) return false;
+  if (t.startsWith('$') || t.startsWith(':') || t === 'undefined' || t === 'null') return false;
+  return true;
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
     const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    const type = urlObj.searchParams.get('type') || 'product';
-    let catSlugParam = (urlObj.searchParams.get('catSlug') || '').trim();
-    let subSlugParam = (urlObj.searchParams.get('subSlug') || '').trim();
-    const rawSlug = (urlObj.searchParams.get('slug') || '').trim();
+    let type = (urlObj.searchParams.get('type') || '').trim();
 
-    if (!catSlugParam && !subSlugParam && rawSlug.includes('/')) {
-      const parts = rawSlug.split('/').map((p) => p.trim()).filter(Boolean);
-      catSlugParam = parts[0] || '';
-      subSlugParam = parts[1] || '';
-    } else if (!catSlugParam && !subSlugParam) {
-      catSlugParam = rawSlug;
+    let catSlugParam = '';
+    let subSlugParam = '';
+    let rawSlugParam = '';
+
+    const pCat = (urlObj.searchParams.get('catSlug') || urlObj.searchParams.get('categorySlug') || urlObj.searchParams.get('category') || '').trim();
+    if (isValidSlugToken(pCat)) catSlugParam = pCat;
+
+    const pSub = (urlObj.searchParams.get('subSlug') || urlObj.searchParams.get('subCategorySlug') || urlObj.searchParams.get('subcategory') || '').trim();
+    if (isValidSlugToken(pSub)) subSlugParam = pSub;
+
+    const pSlug = (urlObj.searchParams.get('slug') || '').trim();
+    if (isValidSlugToken(pSlug)) rawSlugParam = pSlug;
+
+    // Check incoming path from Vercel headers or URL path
+    const originalPath = (
+      (req.headers['x-matched-path'] as string) ||
+      (req.headers['x-forwarded-uri'] as string) ||
+      (req.headers['x-invoke-path'] as string) ||
+      urlObj.pathname ||
+      ''
+    ).split('?')[0];
+
+    // If type is not set or inferred
+    if (!type) {
+      if (originalPath.includes('/category/') || rawSlugParam.includes('category') || Boolean(catSlugParam)) {
+        type = 'category';
+      } else if (originalPath.includes('/product/') || rawSlugParam.includes('product')) {
+        type = 'product';
+      } else if (originalPath === '/' || originalPath === '') {
+        type = 'home';
+      } else {
+        type = 'product';
+      }
     }
 
-    const slug = cleanSlug(rawSlug);
+    // If rawSlugParam has multiple segments (e.g. "accessories/mobile-accessories")
+    if (rawSlugParam && rawSlugParam.includes('/')) {
+      const parts = rawSlugParam.split('/').map((p) => p.trim()).filter(Boolean);
+      if (!catSlugParam && parts[0] && isValidSlugToken(parts[0])) catSlugParam = parts[0];
+      if (!subSlugParam && parts[1] && isValidSlugToken(parts[1])) subSlugParam = parts[1];
+    } else if (!catSlugParam && rawSlugParam) {
+      catSlugParam = rawSlugParam;
+    }
+
+    // Fallback: extract directly from originalPath (e.g. /category/accessories/mobile-accessories)
+    if (originalPath.includes('/category/')) {
+      const catMatch = originalPath.match(/\/category\/([^/?#]+)(?:\/([^/?#]+))?/);
+      if (catMatch) {
+        if ((!catSlugParam || !isValidSlugToken(catSlugParam)) && catMatch[1] && isValidSlugToken(catMatch[1])) {
+          catSlugParam = decodeURIComponent(catMatch[1]);
+        }
+        if ((!subSlugParam || !isValidSlugToken(subSlugParam)) && catMatch[2] && isValidSlugToken(catMatch[2])) {
+          subSlugParam = decodeURIComponent(catMatch[2]);
+        }
+      }
+    }
+
+    const slug = cleanSlug(rawSlugParam || catSlugParam);
 
     // Read index.html from dist or root
     let templateHtml = '';
@@ -115,90 +169,108 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     try {
       let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
-      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-      if (fs.existsSync(configPath)) {
-        try {
-          firebaseConfig = { ...DEFAULT_FIREBASE_CONFIG, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) };
-        } catch {}
+      const configPaths = [
+        path.join(process.cwd(), 'firebase-applet-config.json'),
+        path.join(__dirname, 'firebase-applet-config.json'),
+        path.join(__dirname, '..', 'firebase-applet-config.json'),
+      ];
+      for (const cp of configPaths) {
+        if (fs.existsSync(cp)) {
+          try {
+            firebaseConfig = { ...DEFAULT_FIREBASE_CONFIG, ...JSON.parse(fs.readFileSync(cp, 'utf8')) };
+            break;
+          } catch {}
+        }
       }
-      const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-      const db = firebaseConfig.firestoreDatabaseId
-        ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-        : getFirestore(app);
 
       // 1. Seed baseline master catalog from maxora_db.json
       const prodMap = new Map<string, ProductData>();
       const catMap = new Map<string, any>();
       const subMap = new Map<string, any>();
 
-      try {
-        const dbPath = path.join(process.cwd(), 'maxora_db.json');
-        if (fs.existsSync(dbPath)) {
-          const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-          if (Array.isArray(data.products)) {
-            data.products.forEach((p: any) => prodMap.set(String(p.id || p.sku || p.slug), p));
+      const candidateDbPaths = [
+        path.join(process.cwd(), 'maxora_db.json'),
+        path.join(__dirname, 'maxora_db.json'),
+        path.join(__dirname, '..', 'maxora_db.json'),
+      ];
+      for (const dbPath of candidateDbPaths) {
+        try {
+          if (fs.existsSync(dbPath)) {
+            const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+            if (Array.isArray(data.products)) {
+              data.products.forEach((p: any) => prodMap.set(String(p.id || p.sku || p.slug), p));
+            }
+            if (Array.isArray(data.categories)) {
+              data.categories.forEach((c: any) => catMap.set(String(c.id || c.slug), c));
+            }
+            if (Array.isArray(data.subcategories)) {
+              data.subcategories.forEach((s: any) => subMap.set(String(s.id || s.slug), s));
+            }
+            break;
           }
-          if (Array.isArray(data.categories)) {
-            data.categories.forEach((c: any) => catMap.set(String(c.id || c.slug), c));
-          }
-          if (Array.isArray(data.subcategories)) {
-            data.subcategories.forEach((s: any) => subMap.set(String(s.id || s.slug), s));
-          }
+        } catch (e) {
+          console.warn('Local db read note in render:', e);
         }
-      } catch (e) {
-        console.warn('Local db read note in render:', e);
       }
 
-      // 2. Query Firestore and overlay
+      // 2. Query Firestore and overlay with timeout guard
       try {
-        const [prodsSnap, catsSnap, subsSnap] = await Promise.all([
+        const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+        const db = firebaseConfig.firestoreDatabaseId
+          ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+          : getFirestore(app);
+
+        const fetchSnapshots = Promise.all([
           getDocs(collection(db, 'products')),
           getDocs(collection(db, 'categories')),
           getDocs(collection(db, 'subcategories')),
         ]);
+        const timeoutPromise = new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('Firestore timeout')), 3500)
+        );
 
-        if (!prodsSnap.empty) {
-          prodsSnap.forEach((d) => {
-            const data = d.data() as ProductData;
-            const id = String(data.id || d.id);
-            prodMap.set(id, { ...data, id });
-          });
-        }
-        if (!catsSnap.empty) {
-          catsSnap.forEach((d) => {
-            const data = d.data();
-            const id = String(data.id || d.id);
-            catMap.set(id, { ...data, id });
-          });
-        }
-        if (!subsSnap.empty) {
-          subsSnap.forEach((d) => {
-            const data = d.data();
-            const id = String(data.id || d.id);
-            subMap.set(id, { ...data, id });
-          });
+        const snapResult = await Promise.race([fetchSnapshots, timeoutPromise]);
+        if (snapResult && Array.isArray(snapResult)) {
+          const [prodsSnap, catsSnap, subsSnap] = snapResult;
+          if (!prodsSnap.empty) {
+            prodsSnap.forEach((d) => {
+              const data = d.data() as ProductData;
+              const id = String(data.id || d.id);
+              prodMap.set(id, { ...data, id });
+            });
+          }
+          if (!catsSnap.empty) {
+            catsSnap.forEach((d) => {
+              const data = d.data();
+              const id = String(data.id || d.id);
+              catMap.set(id, { ...data, id });
+            });
+          }
+          if (!subsSnap.empty) {
+            subsSnap.forEach((d) => {
+              const data = d.data();
+              const id = String(data.id || d.id);
+              subMap.set(id, { ...data, id });
+            });
+          }
         }
       } catch (e) {
-        console.warn('Firestore load failed in render handler:', e);
+        console.warn('Firestore load note in render handler:', e);
       }
 
       // 3. Filter out any deleted products
       const deletedIds = new Set<string>();
-      try {
-        const dbPath = path.join(process.cwd(), 'maxora_db.json');
-        if (fs.existsSync(dbPath)) {
-          const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-          if (Array.isArray(dbData.settings?.deleted_product_ids)) {
-            dbData.settings.deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+      for (const dbPath of candidateDbPaths) {
+        try {
+          if (fs.existsSync(dbPath)) {
+            const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+            if (Array.isArray(dbData.settings?.deleted_product_ids)) {
+              dbData.settings.deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
+              break;
+            }
           }
-        }
-      } catch {}
-      try {
-        const setSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-        if (setSnap.exists() && Array.isArray(setSnap.data()?.deleted_product_ids)) {
-          setSnap.data().deleted_product_ids.forEach((dId: string) => deletedIds.add(String(dId).toLowerCase().trim()));
-        }
-      } catch {}
+        } catch {}
+      }
 
       products = Array.from(prodMap.values()).filter((p) => {
         const idLower = String(p.id || '').toLowerCase().trim();
@@ -482,7 +554,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
     // ==========================================
     if (type === 'category') {
       const isSubCategoryRoute = Boolean(subSlugParam);
-      const cleanCatSlug = cleanSlug(catSlugParam || rawSlug);
+      const cleanCatSlug = cleanSlug(catSlugParam || rawSlugParam);
       const cleanSubSlug = isSubCategoryRoute ? cleanSlug(subSlugParam) : '';
 
       const matchedCategory = categories.find((c) => {
@@ -495,8 +567,11 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
             const sSlug = cleanSlug(s.slug || s.name || s.id);
             if (sSlug !== cleanSubSlug) return false;
             if (matchedCategory) {
-              if (s.category_id && String(s.category_id) === String(matchedCategory.id)) return true;
-              if (s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug) return true;
+              const catIdMatch = s.category_id && String(s.category_id) === String(matchedCategory.id);
+              const catSlugMatch = s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug;
+              const catNameMatch = (s.category_name || s.category) && cleanSlug(s.category_name || s.category) === cleanCatSlug;
+              if (catIdMatch || catSlugMatch || catNameMatch) return true;
+              return false;
             }
             return true;
           }) || subcategories.find((s) => cleanSlug(s.slug || s.name || s.id) === cleanSubSlug)
@@ -534,9 +609,10 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
       });
 
       // Route existence validation:
-      // An empty subcategory or category must NOT return 404 if the category or subcategory exists!
+      // A valid category or valid subcategory MUST return HTTP 200 even with 0 products!
+      // An invalid category or invalid subcategory must return HTTP 404.
       const routeExists = isSubCategoryRoute
-        ? Boolean(matchedCategory || matchedSubCategory || matchingProducts.length > 0)
+        ? Boolean((matchedCategory && matchedSubCategory) || matchingProducts.length > 0 || (matchedSubCategory && !matchedCategory))
         : Boolean(matchedCategory || matchedSubCategory || matchingProducts.length > 0);
 
       // If category missing -> HTTP 404 (Never soft 404)

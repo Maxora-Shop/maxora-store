@@ -3060,8 +3060,11 @@ function getCategorySsrHtml(rawCatSlug: string, rawSubSlug?: string): { html: st
         const sSlug = cleanSlug(s.slug || s.name || s.id);
         if (sSlug !== cleanSubSlug) return false;
         if (matchedCat) {
-          if (s.category_id && String(s.category_id) === String(matchedCat.id)) return true;
-          if (s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug) return true;
+          const catIdMatch = s.category_id && String(s.category_id) === String(matchedCat.id);
+          const catSlugMatch = s.category_slug && cleanSlug(s.category_slug) === cleanCatSlug;
+          const catNameMatch = (s.category_name || s.category) && cleanSlug(s.category_name || s.category) === cleanCatSlug;
+          if (catIdMatch || catSlugMatch || catNameMatch) return true;
+          return false;
         }
         return true;
       }) || db.subcategories.find(s => cleanSlug(s.slug || s.name || s.id) === cleanSubSlug)
@@ -3105,9 +3108,10 @@ function getCategorySsrHtml(rawCatSlug: string, rawSubSlug?: string): { html: st
   const templateHtml = fs.readFileSync(templatePath, 'utf8');
 
   // Route existence validation:
-  // An empty subcategory or category must NOT return 404 if the category or subcategory exists!
+  // A valid category or valid subcategory MUST return HTTP 200 even with 0 products!
+  // An invalid category or invalid subcategory must return HTTP 404.
   const routeExists = isSubCategoryRoute
-    ? Boolean(matchedCat || matchedSub || matchingProducts.length > 0)
+    ? Boolean((matchedCat && matchedSub) || matchingProducts.length > 0 || (matchedSub && !matchedCat))
     : Boolean(matchedCat || matchedSub || matchingProducts.length > 0);
 
   if (!routeExists) {
