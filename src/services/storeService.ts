@@ -196,6 +196,7 @@ export function cleanForFirestore<T>(data: T): T {
 
 // Helpers for Local Storage
 function getLocal<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return defaultValue;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return defaultValue;
@@ -207,6 +208,7 @@ function getLocal<T>(key: string, defaultValue: T): T {
 }
 
 function setLocal<T>(key: string, value: T): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
@@ -266,8 +268,29 @@ export function markProductDeleted(id: string | number, sku?: string, slug?: str
   }
 }
 
+export function unmarkProductDeleted(id: string | number, sku?: string, slug?: string) {
+  if (typeof window === 'undefined') return;
+  const toRemove = new Set<string>();
+  if (id) toRemove.add(String(id).toLowerCase().trim());
+  if (sku) toRemove.add(String(sku).toLowerCase().trim());
+  if (slug) toRemove.add(String(slug).toLowerCase().trim());
+
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  const remaining = list.filter((item) => !toRemove.has(String(item).toLowerCase().trim()));
+  setLocal(DELETED_PRODUCTS_KEY, remaining);
+
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (settings && Array.isArray(settings.deleted_product_ids)) {
+    settings.deleted_product_ids = settings.deleted_product_ids.filter(
+      (item) => !toRemove.has(String(item).toLowerCase().trim())
+    );
+    setLocal(SETTINGS_KEY, settings);
+  }
+}
+
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   const deletedProductIds = getDeletedProductIds();
 
   if (!localStorage.getItem(SETTINGS_KEY)) {
@@ -650,11 +673,13 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
     'Content-Type': 'application/json',
   };
   const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
-  const pass = adminPassword || (token ? null : '123456');
+  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || (token ? null : '123456');
 
   if (pass) {
     headers['x-admin-password'] = pass;
     headers['Authorization'] = `Bearer ${pass}`;
+  } else if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   if (token) {
     headers['x-admin-token'] = token;
@@ -1360,14 +1385,18 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write (AWAITED - guaranteed primary database persistence, NEVER blocked by cooldown)
+    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
     let firestorePersisted = false;
     try {
-      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
+      const firestorePromise = setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
+      await Promise.race([
+        firestorePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
+      ]);
       firestorePersisted = true;
       clearFirestoreCooldown();
     } catch (e: any) {
-      console.warn('Direct Firestore save product error:', e);
+      console.warn('Direct Firestore save product note:', e);
       handleStoreFirestoreError('Firestore save product', e);
     }
 
@@ -1386,7 +1415,10 @@ export const storeService = {
       console.warn('Backend API addProduct notice:', e);
     }
 
-    // 3. Update local cache
+    // 3. Unmark from deleted products registry so newly added product is never filtered out
+    unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
+
+    // 4. Update local cache
     const existingIdx = local.findIndex(p => String(p.id) === String(newProd.id));
     if (existingIdx >= 0) {
       local[existingIdx] = newProd;
@@ -1433,14 +1465,18 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write (AWAITED - guaranteed primary database persistence, NEVER blocked by cooldown)
+    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
     let firestorePersisted = false;
     try {
-      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
+      const firestorePromise = setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
+      await Promise.race([
+        firestorePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
+      ]);
       firestorePersisted = true;
       clearFirestoreCooldown();
     } catch (e: any) {
-      console.warn('Direct Firestore update product error:', e);
+      console.warn('Direct Firestore update product note:', e);
       handleStoreFirestoreError('Firestore update product', e);
     }
 
@@ -1450,7 +1486,7 @@ export const storeService = {
       const apiRes = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify(productData),
+        body: JSON.stringify(updated),
       });
       if (apiRes.success) {
         apiPersisted = true;
@@ -1459,6 +1495,10 @@ export const storeService = {
       console.warn('Backend API updateProduct notice:', e);
     }
 
+    // 3. Unmark from deleted products registry so updated product is never filtered out
+    unmarkProductDeleted(updated.id, updated.sku, updated.slug);
+
+    // 4. Update local cache
     if (index !== -1) {
       local[index] = updated;
     } else {
@@ -1731,16 +1771,19 @@ export const storeService = {
     const firestoreCustomer = cleanForFirestore(customerData);
 
     try {
-      await Promise.all([
-        setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
-        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }),
-        ...stockUpdatePromises
+      await Promise.race([
+        Promise.all([
+          setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
+          setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }),
+          ...stockUpdatePromises
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore order write timeout')), 3000))
       ]);
     } catch (fsErr) {
-      console.warn('Direct Firestore order persistence notice:', fsErr);
+      console.warn('Direct Firestore order persistence note:', fsErr);
     }
 
-    // 2. Authoritative Backend Server API persistence (mirrored in background)
+    // 2. Authoritative Backend Server API persistence (mirrored immediately)
     const fullOrderSyncPayload = {
       ...orderPayload,
       order: newOrder,
@@ -1751,11 +1794,13 @@ export const storeService = {
       subtotal,
       delivery_charge: deliveryCharge,
     };
-    tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fullOrderSyncPayload),
-    }).catch(() => {});
+    try {
+      await tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fullOrderSyncPayload),
+      });
+    } catch {}
 
     // 3. Local update
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);

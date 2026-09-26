@@ -867,6 +867,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const data = await res.json();
         if (data.success && data.token) {
           localStorage.setItem('maxora_admin_token', data.token);
+          if (p) localStorage.setItem('maxora_admin_password', p);
           setIsAuthenticated(true);
           loadTabData(currentTab, p);
 
@@ -884,6 +885,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       let isValid = p === '123456' || p === 'admin123';
 
       if (isValid) {
+        if (p) localStorage.setItem('maxora_admin_password', p);
         setIsAuthenticated(true);
         loadTabData(currentTab, p);
 
@@ -910,6 +912,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleLogout = async () => {
     localStorage.removeItem('maxora_admin_token');
+    localStorage.removeItem('maxora_admin_password');
     if (auth) {
       try {
         await signOut(auth);
@@ -1228,10 +1231,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // =====================================
   // ACTIONS
   // =====================================
-  const handleSaveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct || !editingProduct.name) {
-      showToast('Please provide a product title', 'error');
+  const handleSaveProduct = async (e?: React.FormEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editingProduct) return;
+
+    const trimmedTitle = (editingProduct.name || '').trim();
+    if (!trimmedTitle) {
+      showToast('Please provide a product title (প্রোডাক্টের নাম লিখুন)', 'error');
+      setProductModalTab('general');
+      return;
+    }
+
+    const catName = (editingProduct.category || '').trim();
+    if (!catName) {
+      showToast('Please select a category (ক্যাটেগরি নির্বাচন করুন)', 'error');
+      setProductModalTab('general');
+      return;
+    }
+
+    const sellingPriceNum = Number(editingProduct.selling_price);
+    if (isNaN(sellingPriceNum) || sellingPriceNum < 0) {
+      showToast('Please provide a valid selling price (বিক্রয় মূল্য লিখুন)', 'error');
+      setProductModalTab('general');
       return;
     }
 
@@ -1239,7 +1260,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setLoading(true);
       const cleanedSlug = (editingProduct.slug && editingProduct.slug.trim())
         ? generateSlug(editingProduct.slug)
-        : generateSlug(editingProduct.name);
+        : generateSlug(trimmedTitle);
       const publicImage = editingProduct.image_url || (Array.isArray(editingProduct.images) && editingProduct.images.length > 0 ? editingProduct.images[0] : '');
       
       // Ensure customer storefront product URL is correctly saved
@@ -1252,20 +1273,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         finalProductLink = `${CUSTOMER_STOREFRONT_URL}/product/${cleanedSlug}${query}`;
       }
 
+      const isEditingExisting = Boolean(editingProduct.id);
       const productToSave: Product = {
         ...editingProduct,
+        name: trimmedTitle,
+        category: catName,
+        selling_price: sellingPriceNum,
+        buying_price: Number(editingProduct.buying_price || 0),
+        discount: Number(editingProduct.discount || 0),
+        stock: Number(editingProduct.stock !== undefined ? editingProduct.stock : 10),
         slug: cleanedSlug,
         product_link: finalProductLink,
         og_image: editingProduct.og_image?.trim() || publicImage || '',
-        meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
-        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
+        meta_title: editingProduct.meta_title?.trim() || `${trimmedTitle} Price in Bangladesh | Maxora Shop`,
+        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${trimmedTitle} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       };
 
-      await storeService.saveProduct(productToSave, password);
-      showToast('Product saved successfully!', 'success');
+      const effectivePassword = password || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || undefined;
+      await storeService.saveProduct(productToSave, effectivePassword);
+      showToast(isEditingExisting ? 'Product updated successfully! (প্রোডাক্ট সফলভাবে আপডেট হয়েছে)' : 'Product saved successfully! (প্রোডাক্ট সফলভাবে যুক্ত হয়েছে)', 'success');
       setIsProductModalOpen(false);
       setEditingProduct(null);
-      loadProducts();
+
+      // Reset filters so the admin can immediately see the newly created/updated product in the catalog table
+      setProductCategoryFilter('ALL');
+      setProductBrandFilter('ALL');
+      setProductTypeFilter('ALL');
+      setCurrentTaxonomyFilter(null);
+
+      await loadProducts(effectivePassword);
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to save product: ' + err.message, 'error');
@@ -5564,7 +5600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
+            <form noValidate onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
               {productModalTab === 'general' && (
                 <>
                   <div>
@@ -6057,8 +6093,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <input
                         type="number"
                         placeholder="Cost price"
-                        value={editingProduct?.buying_price || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, buying_price: Number(e.target.value) })}
+                        value={editingProduct?.buying_price !== undefined ? editingProduct.buying_price : ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, buying_price: e.target.value === '' ? 0 : Number(e.target.value) })}
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
                       />
                     </div>
@@ -6069,10 +6105,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </label>
                       <input
                         type="number"
-                        required
                         placeholder="Regular price"
-                        value={editingProduct?.selling_price || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, selling_price: Number(e.target.value) })}
+                        value={editingProduct?.selling_price !== undefined ? editingProduct.selling_price : ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, selling_price: e.target.value === '' ? 0 : Number(e.target.value) })}
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 font-bold"
                       />
                     </div>
@@ -6084,8 +6119,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <input
                         type="number"
                         placeholder="Discount"
-                        value={editingProduct?.discount || ''}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, discount: Number(e.target.value) })}
+                        value={editingProduct?.discount !== undefined ? editingProduct.discount : ''}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, discount: e.target.value === '' ? 0 : Number(e.target.value) })}
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 text-rose-600 font-bold"
                       />
                     </div>
@@ -7223,9 +7258,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="pt-3">
                 <button
                   type="submit"
-                  className="w-full py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer"
+                  disabled={loading}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSaveProduct(e);
+                  }}
+                  className="w-full py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 disabled:opacity-60 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
                 >
-                  Save Product
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                      <span>Saving Product (সংরক্ষণ করা হচ্ছে...)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 text-emerald-400" />
+                      <span>{editingProduct?.id ? 'Update & Save Product (আপডেট করুন)' : 'Save Product (প্রোডাক্ট সংরক্ষণ করুন)'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
