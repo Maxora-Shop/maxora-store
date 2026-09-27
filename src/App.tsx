@@ -40,7 +40,7 @@ import { FooterSection } from './components/FooterSection';
 import { ProductPagination } from './components/ProductPagination';
 import { ProductSortDropdown } from './components/ProductSortDropdown';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand, ProductSortOption } from './types';
-import { storeService, initRealtimeFirestoreListeners } from './services/storeService';
+import { storeService, initRealtimeFirestoreListeners, detachFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { visitorTrackingService } from './services/visitorTrackingService';
 import {
@@ -120,6 +120,9 @@ export default function App() {
 
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [hasFetchedProducts, setHasFetchedProducts] = useState(false);
+  const [productLoadError, setProductLoadError] = useState<string | null>(null);
+  const productFetchRequestIdRef = useRef(0);
+  const productFetchTimeoutRef = useRef<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
@@ -456,6 +459,18 @@ export default function App() {
       fetchProducts();
     };
 
+    const handleProductsFetchFailed = (e?: any) => {
+      if (productFetchTimeoutRef.current) {
+        clearTimeout(productFetchTimeoutRef.current);
+        productFetchTimeoutRef.current = null;
+      }
+      setLoadingProducts(false);
+      setHasFetchedProducts(true);
+      if (productsRef.current.length === 0) {
+        setProductLoadError(e?.detail?.error || 'Failed to load products');
+      }
+    };
+
     const handleSettingsUpdated = (e?: any) => {
       if (e?.detail) {
         setSettings(e.detail);
@@ -493,6 +508,7 @@ export default function App() {
     };
 
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
+    window.addEventListener('maxora_products_fetch_failed', handleProductsFetchFailed);
     window.addEventListener('maxora_orders_updated', handleOrdersUpdated);
     window.addEventListener('maxora_settings_updated', handleSettingsUpdated);
     window.addEventListener('maxora_categories_updated', handleCategoriesUpdated);
@@ -504,7 +520,12 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (productFetchTimeoutRef.current) {
+        clearTimeout(productFetchTimeoutRef.current);
+        productFetchTimeoutRef.current = null;
+      }
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
+      window.removeEventListener('maxora_products_fetch_failed', handleProductsFetchFailed);
       window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
       window.removeEventListener('maxora_settings_updated', handleSettingsUpdated);
       window.removeEventListener('maxora_categories_updated', handleCategoriesUpdated);
@@ -514,6 +535,7 @@ export default function App() {
       window.removeEventListener('maxora_brands_updated', handleCategoriesUpdated);
       window.removeEventListener('storage', handleStorageEvent);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      detachFirestoreListeners();
     };
   }, []);
 
@@ -552,18 +574,62 @@ export default function App() {
     }
   };
 
-  const fetchProducts = async () => {
-    setLoadingProducts(true);
+  const fetchProducts = async (isManualRetry = false) => {
+    const requestId = ++productFetchRequestIdRef.current;
+
+    if (productFetchTimeoutRef.current) {
+      clearTimeout(productFetchTimeoutRef.current);
+      productFetchTimeoutRef.current = null;
+    }
+
+    // Only set loadingProducts to true if we don't already have products in memory,
+    // or if the user explicitly clicked Retry on the error state.
+    // If products are already loaded (e.g. 29 baseline/cached products),
+    // background re-fetch must NOT replace the product grid with skeletons!
+    if (productsRef.current.length === 0 || isManualRetry) {
+      setLoadingProducts(true);
+    }
+    if (isManualRetry) {
+      setProductLoadError(null);
+    }
+
+    // Client-side safety timeout: guaranteed completion within 6 seconds
+    productFetchTimeoutRef.current = setTimeout(() => {
+      if (productFetchRequestIdRef.current === requestId) {
+        console.warn('[App] Product fetch safety timeout reached; releasing skeleton loading');
+        setLoadingProducts(false);
+        setHasFetchedProducts(true);
+      }
+    }, 6000);
+
     try {
       // Always retrieve all active products from store so the entire inventory is available
       // for instant category/subcategory/type/child-category filtering, mega menu preview, and direct slug lookups
       const data = await storeService.getProducts();
-      setProducts(data);
-    } catch (err) {
-      console.error('Failed to load products:', err);
+      if (productFetchRequestIdRef.current === requestId) {
+        if (Array.isArray(data) && data.length > 0) {
+          setProducts(data);
+          setProductLoadError(null);
+        } else if (productsRef.current.length === 0) {
+          setProducts([]);
+        }
+      }
+    } catch (err: any) {
+      if (productFetchRequestIdRef.current === requestId) {
+        console.error('Failed to load products:', err);
+        if (productsRef.current.length === 0) {
+          setProductLoadError(err?.message || 'Unable to load products. Please check your connection.');
+        }
+      }
     } finally {
-      setLoadingProducts(false);
-      setHasFetchedProducts(true);
+      if (productFetchRequestIdRef.current === requestId) {
+        if (productFetchTimeoutRef.current) {
+          clearTimeout(productFetchTimeoutRef.current);
+          productFetchTimeoutRef.current = null;
+        }
+        setLoadingProducts(false);
+        setHasFetchedProducts(true);
+      }
     }
   };
 
@@ -1676,7 +1742,7 @@ export default function App() {
                 ))}
               </div>
 
-              {loadingProducts ? (
+              {loadingProducts && products.length === 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 space-y-3 animate-pulse">
@@ -1686,6 +1752,25 @@ export default function App() {
                       <div className="h-9 bg-zinc-200 rounded-xl mt-4" />
                     </div>
                   ))}
+                </div>
+              ) : productLoadError && products.length === 0 ? (
+                <div className="bg-white rounded-3xl border border-rose-200 p-8 sm:p-12 text-center max-w-lg mx-auto shadow-xs space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-zinc-900 mb-1">
+                    Unable to Load Products
+                  </h3>
+                  <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
+                    We could not reach the catalog at this moment. You can retry connecting now.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => fetchProducts(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs transition-colors cursor-pointer shadow-sm active:scale-98"
+                  >
+                    <span>Retry Loading</span>
+                  </button>
                 </div>
               ) : filteredProducts.length > 0 ? (
                 <>

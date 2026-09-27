@@ -445,6 +445,10 @@ export function detachFirestoreListeners() {
   });
   activeFirestoreUnsubscribers = [];
   isListening = false;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 }
 
 export function scheduleReconnectListeners(delayMs = 4000) {
@@ -504,6 +508,7 @@ export function initRealtimeFirestoreListeners() {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
+        notifyProductsChanged();
         return;
       }
       const prodMap = new Map<string, Product>();
@@ -531,7 +536,12 @@ export function initRealtimeFirestoreListeners() {
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setLocal(PRODUCTS_KEY, prods);
       notifyProductsChanged();
-    }, (err) => handleStoreFirestoreError('Products snapshot', err));
+    }, (err) => {
+      handleStoreFirestoreError('Products snapshot', err);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('maxora_products_fetch_failed', { detail: { error: err?.message || String(err) } }));
+      }
+    });
     activeFirestoreUnsubscribers.push(unsubProducts);
 
     // 2. Listen for settings changes
@@ -713,14 +723,17 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
   return headers;
 }
 
-async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
+async function tryApi<T>(url: string, options?: RequestInit & { timeoutMs?: number }): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutDuration = options?.timeoutMs || 5000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+
+    const { timeoutMs: _, ...fetchOptions } = options || {};
 
     const res = await fetch(fullUrl, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
 
@@ -736,6 +749,32 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
     return { success: true, data: json };
   } catch (err: any) {
     return { success: false, error: err?.message };
+  }
+}
+
+// Guaranteed Firestore products query that times out after timeoutMs rather than hanging indefinitely
+async function fetchFirestoreProductsWithTimeout(timeoutMs = 4000): Promise<{ data: any; id: string }[]> {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Firestore getProducts query timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    const snap = await Promise.race([
+      getDocs(collection(db, 'products')),
+      timeoutPromise,
+    ]);
+    const docs: { data: any; id: string }[] = [];
+    if (snap && !snap.empty) {
+      snap.forEach((d) => docs.push({ data: d.data(), id: d.id }));
+    }
+    return docs;
+  } catch (err) {
+    handleStoreFirestoreError('Firestore getProducts', err);
+    return [];
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1142,9 +1181,9 @@ export const storeService = {
       INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
     }
 
-    // 2. Authoritative Backend REST API query
+    // 2. Authoritative Backend REST API query (with 3500ms safety timeout)
     try {
-      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true');
+      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 3500 });
       if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
         apiRes.data.products.forEach((item) => registerProduct(item));
       }
@@ -1152,12 +1191,12 @@ export const storeService = {
       console.warn('API getProducts notice:', e);
     }
 
-    // 3. Fallback to Firestore if quota allows
+    // 3. Fallback to Firestore with strict 3500ms timeout if quota allows
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'products'));
-        if (!snap.empty) {
-          snap.forEach((d) => registerProduct(d.data(), d.id));
+        const snapDocs = await fetchFirestoreProductsWithTimeout(3500);
+        if (snapDocs && snapDocs.length > 0) {
+          snapDocs.forEach((d) => registerProduct(d.data, d.id));
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getProducts', e);
