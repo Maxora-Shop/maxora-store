@@ -20,10 +20,11 @@ const DEFAULT_FIREBASE_CONFIG = {
 
 function getFirebaseConfig() {
   try {
+    const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
     const configPaths = [
       path.join(process.cwd(), 'firebase-applet-config.json'),
-      path.join(__dirname, 'firebase-applet-config.json'),
-      path.join(__dirname, '..', 'firebase-applet-config.json'),
+      path.join(currentDir, 'firebase-applet-config.json'),
+      path.join(currentDir, '..', 'firebase-applet-config.json'),
     ];
     for (const cp of configPaths) {
       if (fs.existsSync(cp)) {
@@ -68,10 +69,11 @@ function generateSlug(text: string): string {
 }
 
 function getDbPath(): string | null {
+  const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
   const candidateDbPaths = [
     path.join(process.cwd(), 'maxora_db.json'),
-    path.join(__dirname, 'maxora_db.json'),
-    path.join(__dirname, '..', 'maxora_db.json'),
+    path.join(currentDir, 'maxora_db.json'),
+    path.join(currentDir, '..', 'maxora_db.json'),
   ];
   for (const p of candidateDbPaths) {
     if (fs.existsSync(p)) return p;

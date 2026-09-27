@@ -191,10 +191,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     try {
       let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+      const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
       const configPaths = [
         path.join(process.cwd(), 'firebase-applet-config.json'),
-        path.join(__dirname, 'firebase-applet-config.json'),
-        path.join(__dirname, '..', 'firebase-applet-config.json'),
+        path.join(currentDir, 'firebase-applet-config.json'),
+        path.join(currentDir, '..', 'firebase-applet-config.json'),
       ];
       for (const cp of configPaths) {
         if (fs.existsSync(cp)) {
@@ -212,8 +213,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
       const candidateDbPaths = [
         path.join(process.cwd(), 'maxora_db.json'),
-        path.join(__dirname, 'maxora_db.json'),
-        path.join(__dirname, '..', 'maxora_db.json'),
+        path.join(currentDir, 'maxora_db.json'),
+        path.join(currentDir, '..', 'maxora_db.json'),
       ];
       for (const dbPath of candidateDbPaths) {
         try {
