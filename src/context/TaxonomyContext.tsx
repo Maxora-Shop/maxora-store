@@ -317,6 +317,14 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
         }
         return [...prev, res.category];
       });
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
+      const updatedSubs = storeService.getCachedSubCategories();
+      if (updatedSubs && updatedSubs.length > 0) {
+        setSubCategories(updatedSubs);
+      }
     }
     return res;
   }, []);
@@ -325,6 +333,14 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     const res = await storeService.deleteCategory(categoryId, adminPassword);
     if (res.success) {
       setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
+      const updatedSubs = storeService.getCachedSubCategories();
+      if (updatedSubs && updatedSubs.length > 0) {
+        setSubCategories(updatedSubs);
+      }
     }
     return res;
   }, []);
@@ -341,6 +357,10 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
         }
         return [...prev, res.subCategory];
       });
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
     }
     return res;
   }, []);
@@ -349,6 +369,10 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     const res = await storeService.deleteSubCategory(subCategoryId, adminPassword);
     if (res.success) {
       setSubCategories((prev) => prev.filter((s) => s.id !== subCategoryId));
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
     }
     return res;
   }, []);
@@ -365,6 +389,14 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
         }
         return [...prev, res.productType];
       });
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
+      const updatedChilds = storeService.getCachedChildCategories();
+      if (updatedChilds && updatedChilds.length > 0) {
+        setChildCategories(updatedChilds);
+      }
     }
     return res;
   }, []);
@@ -373,6 +405,10 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     const res = await storeService.deleteProductType(productTypeId, adminPassword);
     if (res.success) {
       setProductTypes((prev) => prev.filter((t) => t.id !== productTypeId));
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
     }
     return res;
   }, []);
@@ -389,6 +425,10 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
         }
         return [...prev, res.childCategory];
       });
+      const updatedProds = storeService.getCachedProducts();
+      if (updatedProds && updatedProds.length > 0) {
+        setProducts(updatedProds);
+      }
     }
     return res;
   }, []);

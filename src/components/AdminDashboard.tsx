@@ -1670,7 +1670,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleToggleCategoryStatus = async (cat: Category) => {
     try {
       const newStatus = cat.active === 0 ? 1 : 0;
-      const res = await storeService.saveCategory({ ...cat, active: newStatus }, password);
+      const res = await taxonomySaveCategory({ ...cat, active: newStatus }, password);
       if (res.success) {
         showToast(`Category "${cat.name}" is now ${newStatus ? 'Active' : 'Hidden'}!`, 'success');
         await loadCategories();
@@ -1704,7 +1704,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         image_url: categoryToEdit.image_url?.trim() || '',
       };
 
-      const res = await storeService.saveCategory(catData, password);
+      const res = await taxonomySaveCategory(catData, password);
       if (res.success) {
         showToast(`Category "${name}" updated & saved to Firestore!`, 'success');
         setIsCategoryEditModalOpen(false);

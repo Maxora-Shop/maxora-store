@@ -40,6 +40,22 @@
       "destination": "/api/settings"
     },
     {
+      "source": "/api/admin/categories/(.*)",
+      "destination": "/api/categories?id=$1&admin=true"
+    },
+    {
+      "source": "/api/admin/categories",
+      "destination": "/api/categories?admin=true"
+    },
+    {
+      "source": "/api/admin/subcategories/(.*)",
+      "destination": "/api/subcategories?id=$1&admin=true"
+    },
+    {
+      "source": "/api/admin/subcategories",
+      "destination": "/api/subcategories?admin=true"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

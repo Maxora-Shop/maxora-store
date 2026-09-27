@@ -382,11 +382,37 @@ export function isQuotaExceededError(err: any): boolean {
   const code = (err.code || '').toLowerCase();
   return (
     code === 'resource-exhausted' ||
+    code === 'resource_exhausted' ||
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
+    msg.includes('resource_exhausted') ||
     msg.includes('free daily read units') ||
+    msg.includes('free daily write units') ||
     msg.includes('rate-limit')
   );
+}
+
+/**
+ * Executes a Firestore write operation with a safety timeout, ensuring
+ * that Firestore stream backoff or quota exhaustion NEVER blocks execution or hangs the app.
+ */
+export async function safeFirestoreWrite<T>(
+  op: () => Promise<T>,
+  timeoutMs = 2500,
+  context = 'Firestore write'
+): Promise<T | null> {
+  try {
+    const res = await Promise.race([
+      op(),
+      new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error(`${context} timeout`)), timeoutMs)
+      ),
+    ]);
+    return res as T;
+  } catch (err: any) {
+    handleStoreFirestoreError(context, err);
+    return null;
+  }
 }
 
 let clientQuotaCooldownUntil = 0;
@@ -2539,11 +2565,16 @@ export const storeService = {
   async getCategories(): Promise<Category[]> {
     let cats: Category[] = [];
     let firestoreSuccess = false;
-    // 1. Try Firestore if quota cooldown is not active
+    // 1. Try Firestore if quota cooldown is not active (protected by 2500ms safety timeout)
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'categories'));
-        if (!snap.empty) {
+        const snap = await Promise.race([
+          getDocs(collection(db, 'categories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getCategories timeout')), 2500)
+          ),
+        ]);
+        if (snap && !snap.empty) {
           firestoreSuccess = true;
           snap.forEach((d) => {
             const item = d.data() as Category;
@@ -2597,21 +2628,14 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // Save to Firestore
-    try {
-      await setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveCategory error:', e);
-    }
-
-    // Save to local cache & cascade rename if existing category was edited
+    // 1. OPTIMISTIC & LOCAL-FIRST: Update local storage & memory IMMEDIATELY so UI updates with 0ms latency
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
-    const existing = current.find((c) => c.id === id);
+    const existing = current.find((c) => c.id === id || c.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
     if (existing && (oldName !== newCategory.name || oldSlug !== newCategory.slug)) {
-      // 1. Cascade update subcategories
+      // 1a. Cascade update subcategories
       const subcats = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
       let subcatsChanged = false;
       subcats.forEach((s) => {
@@ -2619,7 +2643,7 @@ export const storeService = {
           s.category_id = newCategory.id;
           s.category_slug = newCategory.slug;
           subcatsChanged = true;
-          setDoc(doc(db, 'subcategories', s.id), s, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'subcategories', s.id), cleanForFirestore(s), { merge: true }), 2000, 'Cascade subcategory write');
         }
       });
       if (subcatsChanged) {
@@ -2627,7 +2651,7 @@ export const storeService = {
         notifySubCategoriesChanged();
       }
 
-      // 2. Cascade update products
+      // 1b. Cascade update products
       const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       let prodsChanged = false;
       prods.forEach((p) => {
@@ -2640,7 +2664,7 @@ export const storeService = {
           p.category_id = newCategory.id;
           p.category_slug = newCategory.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product write');
         }
       });
       if (prodsChanged) {
@@ -2660,23 +2684,29 @@ export const storeService = {
     setLocal(CATEGORIES_KEY, updated);
     notifyCategoriesChanged();
 
-    // Also persist to Backend API
+    // 2. Persist to Backend API in background (updates server disk / maxora_db.json)
     tryApi('/api/admin/categories', {
       method: 'POST',
       headers: getAuthHeaders(adminPassword),
       body: JSON.stringify(newCategory),
     }).catch(() => {});
+    tryApi('/api/categories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newCategory),
+    }).catch(() => {});
+
+    // 3. Persist to Firestore in background safely with timeout (never hangs UI)
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true }),
+      2500,
+      'saveCategory'
+    );
 
     return { success: true, category: newCategory };
   },
 
   async deleteCategory(categoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'categories', categoryId));
-    } catch (e) {
-      console.warn('Firestore deleteCategory error:', e);
-    }
-
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
     const catToDelete = current.find((c) => c.id === categoryId);
     const catName = catToDelete?.name?.toLowerCase().trim();
@@ -2684,12 +2714,6 @@ export const storeService = {
 
     const updated = current.filter((c) => c.id !== categoryId);
     setLocal(CATEGORIES_KEY, updated);
-
-    // Delete from Backend API
-    tryApi(`/api/admin/categories/${categoryId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(adminPassword),
-    }).catch(() => {});
 
     // 1. Unlink any products that were in this category
     const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
@@ -2704,11 +2728,11 @@ export const storeService = {
         p.category_id = '';
         p.category_slug = 'uncategorized';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           category: 'Uncategorized',
           category_id: '',
           category_slug: 'uncategorized',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product category');
       }
     });
     if (prodsChanged) {
@@ -2726,6 +2750,23 @@ export const storeService = {
 
     notifyCategoriesChanged();
 
+    // Delete from Backend API
+    tryApi(`/api/admin/categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+    tryApi(`/api/categories?id=${categoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+
+    // Delete from Firestore safely with timeout
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'categories', categoryId)),
+      2500,
+      'deleteCategory'
+    );
+
     return { success: true };
   },
 
@@ -2733,11 +2774,16 @@ export const storeService = {
   async getSubCategories(categorySlug?: string): Promise<SubCategory[]> {
     let subcats: SubCategory[] = [];
     let firestoreSuccess = false;
-    // 1. Try Firestore if quota cooldown is not active
+    // 1. Try Firestore if quota cooldown is not active (protected by 2500ms safety timeout)
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'subcategories'));
-        if (!snap.empty) {
+        const snap = await Promise.race([
+          getDocs(collection(db, 'subcategories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getSubCategories timeout')), 2500)
+          ),
+        ]);
+        if (snap && !snap.empty) {
           firestoreSuccess = true;
           snap.forEach((d) => {
             const item = d.data() as SubCategory;
@@ -2800,19 +2846,14 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveSubCategory error:', e);
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
-    const existing = current.find((s) => s.id === id);
+    const existing = current.find((s) => s.id === id || s.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
     if (existing && (oldName !== newSubCategory.name || oldSlug !== newSubCategory.slug)) {
-      // 1. Cascade update products with this subcategory
+      // Cascade update products with this subcategory
       const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       let prodsChanged = false;
       prods.forEach((p) => {
@@ -2825,7 +2866,7 @@ export const storeService = {
           p.subcategory_id = newSubCategory.id;
           p.subcategory_slug = newSubCategory.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product subcategory write');
         }
       });
       if (prodsChanged) {
@@ -2833,7 +2874,7 @@ export const storeService = {
         notifyProductsChanged();
       }
 
-      // 2. Cascade update product types
+      // Cascade update product types
       const types = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
       let typesChanged = false;
       types.forEach((t) => {
@@ -2841,7 +2882,7 @@ export const storeService = {
           t.subcategory_id = newSubCategory.id;
           t.subcategory_slug = newSubCategory.slug;
           typesChanged = true;
-          setDoc(doc(db, 'product_types', t.id), t, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'product_types', t.id), cleanForFirestore(t), { merge: true }), 2000, 'Cascade product_type subcategory write');
         }
       });
       if (typesChanged) {
@@ -2861,23 +2902,29 @@ export const storeService = {
     setLocal(SUBCATEGORIES_KEY, updated);
     notifySubCategoriesChanged();
 
-    // Also persist to Backend API
+    // 2. Persist to Backend API
     tryApi('/api/admin/subcategories', {
       method: 'POST',
       headers: getAuthHeaders(adminPassword),
       body: JSON.stringify(newSubCategory),
     }).catch(() => {});
+    tryApi('/api/subcategories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newSubCategory),
+    }).catch(() => {});
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true }),
+      2500,
+      'saveSubCategory'
+    );
 
     return { success: true, subCategory: newSubCategory };
   },
 
   async deleteSubCategory(subCategoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'subcategories', subCategoryId));
-    } catch (e) {
-      console.warn('Firestore deleteSubCategory error:', e);
-    }
-
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
     const subToDelete = current.find((s) => s.id === subCategoryId);
     const subSlug = subToDelete?.slug?.toLowerCase().trim();
@@ -2885,12 +2932,6 @@ export const storeService = {
 
     const updated = current.filter((s) => s.id !== subCategoryId);
     setLocal(SUBCATEGORIES_KEY, updated);
-
-    // Delete from Backend API
-    tryApi(`/api/admin/subcategories/${subCategoryId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(adminPassword),
-    }).catch(() => {});
 
     // Unlink products associated with this subcategory
     const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
@@ -2905,11 +2946,11 @@ export const storeService = {
         p.subcategory_id = '';
         p.subcategory_slug = '';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           sub_category: '',
           subcategory_id: '',
           subcategory_slug: '',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product subcategory');
       }
     });
     if (prodsChanged) {
@@ -2918,6 +2959,23 @@ export const storeService = {
     }
 
     notifySubCategoriesChanged();
+
+    // Delete from Backend API
+    tryApi(`/api/admin/subcategories/${subCategoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+    tryApi(`/api/subcategories?id=${subCategoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+
+    // Delete from Firestore safely with timeout
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'subcategories', subCategoryId)),
+      2500,
+      'deleteSubCategory'
+    );
 
     return { success: true };
   },
@@ -2928,8 +2986,13 @@ export const storeService = {
 
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapshot = await getDocs(collection(db, 'product_types'));
-        if (!snapshot.empty) {
+        const snapshot = await Promise.race([
+          getDocs(collection(db, 'product_types')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getProductTypes timeout')), 2500)
+          ),
+        ]);
+        if (snapshot && !snapshot.empty) {
           const firestoreTypes: ProductType[] = [];
           snapshot.forEach((docSnap) => {
             const d = docSnap.data() as ProductType;
@@ -3001,28 +3064,9 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveProductType error:', e);
-    }
-
-    // Also attempt server sync if running full-stack
-    try {
-      fetch('/api/admin/product-types', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-        body: JSON.stringify(newType),
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
-    const existing = current.find((t) => t.id === id);
+    const existing = current.find((t) => t.id === id || t.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
@@ -3040,7 +3084,7 @@ export const storeService = {
           p.product_type_id = newType.id;
           p.product_type_slug = newType.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product_type write');
         }
       });
       if (prodsChanged) {
@@ -3057,7 +3101,7 @@ export const storeService = {
           c.product_type_slug = newType.slug;
           c.product_type_name = newType.name;
           childsChanged = true;
-          setDoc(doc(db, 'child_categories', c.id), c, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'child_categories', c.id), cleanForFirestore(c), { merge: true }), 2000, 'Cascade child_category write');
         }
       });
       if (childsChanged) {
@@ -3077,27 +3121,29 @@ export const storeService = {
     setLocal(PRODUCT_TYPES_KEY, updated);
     notifyProductTypesChanged();
 
+    // 2. Persist to Backend API in background
+    try {
+      fetch('/api/admin/product-types', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newType),
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true }),
+      2500,
+      'saveProductType'
+    );
+
     return { success: true, productType: newType };
   },
 
   async deleteProductType(typeId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'product_types', typeId));
-    } catch (e) {
-      console.warn('Firestore deleteProductType error:', e);
-    }
-
-    try {
-      fetch(`/api/admin/product-types/${typeId}`, {
-        method: 'DELETE',
-        headers: {
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
     const typeToDelete = current.find((t) => t.id === typeId);
     const typeSlug = typeToDelete?.slug?.toLowerCase().trim();
@@ -3119,11 +3165,11 @@ export const storeService = {
         p.product_type_id = '';
         p.product_type_slug = '';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           product_type: 'Standard Product',
           product_type_id: '',
           product_type_slug: '',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product product_type');
       }
     });
     if (prodsChanged) {
@@ -3132,6 +3178,21 @@ export const storeService = {
     }
 
     notifyProductTypesChanged();
+
+    try {
+      fetch(`/api/admin/product-types/${typeId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+      }).catch(() => {});
+    } catch {}
+
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'product_types', typeId)),
+      2500,
+      'deleteProductType'
+    );
 
     return { success: true };
   },
@@ -3142,8 +3203,13 @@ export const storeService = {
 
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapshot = await getDocs(collection(db, 'child_categories'));
-        if (!snapshot.empty) {
+        const snapshot = await Promise.race([
+          getDocs(collection(db, 'child_categories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getChildCategories timeout')), 2500)
+          ),
+        ]);
+        if (snapshot && !snapshot.empty) {
           const firestoreChildren: ChildCategory[] = [];
           snapshot.forEach((docSnap) => {
             const d = docSnap.data() as ChildCategory;
@@ -3218,28 +3284,9 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveChildCategory error:', e);
-    }
-
-    // Also attempt server sync if running full-stack
-    try {
-      fetch('/api/admin/child-categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-        body: JSON.stringify(newChild),
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
-    const existing = current.find((c) => c.id === id);
+    const existing = current.find((c) => c.id === id || c.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
@@ -3260,7 +3307,7 @@ export const storeService = {
           p.child_category_slug = newChild.slug;
           p.childcategory_slug = newChild.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product child_category write');
         }
       });
       if (prodsChanged) {
@@ -3280,15 +3327,33 @@ export const storeService = {
     setLocal(CHILD_CATEGORIES_KEY, updated);
     notifyChildCategoriesChanged();
 
+    // 2. Persist to Backend API in background
+    try {
+      fetch('/api/admin/child-categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newChild),
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true }),
+      2500,
+      'saveChildCategory'
+    );
+
     return { success: true, childCategory: newChild };
   },
 
   async deleteChildCategory(childId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'child_categories', childId));
-    } catch (e) {
-      console.warn('Firestore deleteChildCategory error:', e);
-    }
+    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+    const updated = current.filter((c) => c.id !== childId);
+    setLocal(CHILD_CATEGORIES_KEY, updated);
+    notifyChildCategoriesChanged();
 
     try {
       fetch(`/api/admin/child-categories/${childId}`, {
@@ -3297,14 +3362,13 @@ export const storeService = {
           ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
         },
       }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
+    } catch {}
 
-    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
-    const updated = current.filter((c) => c.id !== childId);
-    setLocal(CHILD_CATEGORIES_KEY, updated);
-    notifyChildCategoriesChanged();
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'child_categories', childId)),
+      2500,
+      'deleteChildCategory'
+    );
 
     return { success: true };
   },

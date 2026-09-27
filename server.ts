@@ -2422,8 +2422,8 @@ app.get('/api/categories', (req, res) => {
   });
 });
 
-// POST /api/admin/categories
-app.post('/api/admin/categories', requireAdmin, (req, res) => {
+// POST /api/admin/categories & /api/categories
+const handleSaveCategoryEndpoint = (req: express.Request, res: express.Response) => {
   const cat = req.body;
   if (!cat || !cat.name) {
     return res.status(400).json({ success: false, error: "Category name is required" });
@@ -2445,16 +2445,26 @@ app.post('/api/admin/categories', requireAdmin, (req, res) => {
   }
   saveDB();
   res.json({ success: true, category: formattedCat });
-});
+};
 
-// DELETE /api/admin/categories/:id
-app.delete('/api/admin/categories/:id', requireAdmin, (req, res) => {
-  const catId = String(req.params.id);
+app.post('/api/admin/categories', requireAdmin, handleSaveCategoryEndpoint);
+app.post('/api/categories', requireAdmin, handleSaveCategoryEndpoint);
+
+// DELETE /api/admin/categories/:id & /api/categories/:id
+const handleDeleteCategoryEndpoint = (req: express.Request, res: express.Response) => {
+  const catId = String(req.params.id || req.query.id);
+  if (!catId) {
+    return res.status(400).json({ success: false, error: "Category ID is required" });
+  }
   if (!db.categories) db.categories = [...defaultCategories];
   db.categories = db.categories.filter(c => String(c.id) !== catId && c.slug !== catId);
   saveDB();
   res.json({ success: true, message: "Category deleted" });
-});
+};
+
+app.delete('/api/admin/categories/:id', requireAdmin, handleDeleteCategoryEndpoint);
+app.delete('/api/categories/:id', requireAdmin, handleDeleteCategoryEndpoint);
+app.delete('/api/categories', requireAdmin, handleDeleteCategoryEndpoint);
 
 // GET /api/subcategories
 app.get('/api/subcategories', (req, res) => {
@@ -2474,8 +2484,8 @@ app.get('/api/subcategories', (req, res) => {
   });
 });
 
-// POST /api/admin/subcategories
-app.post('/api/admin/subcategories', requireAdmin, (req, res) => {
+// POST /api/admin/subcategories & /api/subcategories
+const handleSaveSubCategoryEndpoint = (req: express.Request, res: express.Response) => {
   const sub = req.body;
   if (!sub || !sub.name) {
     return res.status(400).json({ success: false, error: "Subcategory name is required" });
@@ -2497,16 +2507,26 @@ app.post('/api/admin/subcategories', requireAdmin, (req, res) => {
   }
   saveDB();
   res.json({ success: true, subcategory: formattedSub });
-});
+};
 
-// DELETE /api/admin/subcategories/:id
-app.delete('/api/admin/subcategories/:id', requireAdmin, (req, res) => {
-  const subId = String(req.params.id);
+app.post('/api/admin/subcategories', requireAdmin, handleSaveSubCategoryEndpoint);
+app.post('/api/subcategories', requireAdmin, handleSaveSubCategoryEndpoint);
+
+// DELETE /api/admin/subcategories/:id & /api/subcategories/:id
+const handleDeleteSubCategoryEndpoint = (req: express.Request, res: express.Response) => {
+  const subId = String(req.params.id || req.query.id);
+  if (!subId) {
+    return res.status(400).json({ success: false, error: "Subcategory ID is required" });
+  }
   if (!db.subcategories) db.subcategories = [...defaultSubCategories];
   db.subcategories = db.subcategories.filter(s => String(s.id) !== subId && s.slug !== subId);
   saveDB();
   res.json({ success: true, message: "Subcategory deleted" });
-});
+};
+
+app.delete('/api/admin/subcategories/:id', requireAdmin, handleDeleteSubCategoryEndpoint);
+app.delete('/api/subcategories/:id', requireAdmin, handleDeleteSubCategoryEndpoint);
+app.delete('/api/subcategories', requireAdmin, handleDeleteSubCategoryEndpoint);
 
 // GET /api/brands
 app.get('/api/brands', (req, res) => {

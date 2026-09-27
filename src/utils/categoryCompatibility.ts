@@ -87,6 +87,15 @@ export function reconcileCategories(
     if (!catName || catName.toLowerCase() === 'uncategorized') return;
     const slug = generateSlug(catName);
 
+    // If an existing registered category matches this product by category_id, name, or slug, DO NOT invent a duplicate ghost category
+    const matchesRegistered = (existingCategories || []).some(
+      (c) =>
+        (prod.category_id && (c.id === prod.category_id || matchesTaxonomyField(c.id, prod.category_id))) ||
+        matchesTaxonomyField(c.name, catName) ||
+        matchesTaxonomyField(c.slug, slug)
+    );
+    if (matchesRegistered) return;
+
     if (!categoryMap.has(slug)) {
       categoryMap.set(slug, {
         id: prod.category_id || `cat-auto-${slug}`,
@@ -143,6 +152,14 @@ export function reconcileSubCategories(
 
     const subSlug = generateSlug(subName);
     const key = `${parentCatSlug}:::${subSlug}`;
+
+    // If an existing registered subcategory already matches this product, do not duplicate
+    const matchesRegisteredSub = (existingSubCategories || []).some(
+      (s) =>
+        (prod.subcategory_id && (s.id === prod.subcategory_id || matchesTaxonomyField(s.id, prod.subcategory_id))) ||
+        (matchesTaxonomyField(s.name, subName) && (s.category_id === matchedCat?.id || s.category_slug === parentCatSlug))
+    );
+    if (matchesRegisteredSub) return;
 
     if (!subCategoryMap.has(key)) {
       subCategoryMap.set(key, {
