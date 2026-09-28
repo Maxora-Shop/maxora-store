@@ -3,7 +3,7 @@
   "cleanUrls": false,
   "functions": {
     "api/*.ts": {
-      "includeFiles": "maxora_db.json"
+      "includeFiles": "{maxora_db.json,firebase-applet-config.json,dist/index.html,index.html}"
     }
   },
   "rewrites": [
