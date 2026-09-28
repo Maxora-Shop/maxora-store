@@ -3369,7 +3369,13 @@ async function startServer() {
   await Promise.allSettled([syncFirestoreProducts(), syncFirestoreSettings()]);
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: {
+          ignored: ['**/*']
+        }
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
