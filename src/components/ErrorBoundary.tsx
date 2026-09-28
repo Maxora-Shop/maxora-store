@@ -10,12 +10,8 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State;
-  public props: Props;
-
   constructor(props: Props) {
     super(props);
-    this.props = props;
     this.state = {
       hasError: false,
       error: null,
@@ -42,22 +38,24 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-xs text-zinc-500">
               {this.state.error?.message || 'An unexpected rendering error occurred. Please refresh or reset.'}
             </p>
-            <div className="flex gap-2 justify-center pt-2">
+            <div className="flex flex-wrap gap-2 justify-center pt-2">
               <button
-                onClick={() => window.location.reload()}
-                className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl font-bold text-xs hover:bg-zinc-800 transition-all cursor-pointer"
+                type="button"
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 transition-all cursor-pointer shadow-sm"
               >
-                Refresh Page
+                Try Again (পুনরায় চেষ্টা করুন)
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  try {
-                    localStorage.removeItem('maxora_cart');
-                    localStorage.removeItem('maxora_wishlist');
-                  } catch (e) {}
-                  window.location.href = '/';
+                  if (typeof window !== 'undefined') {
+                    window.history.pushState({}, '', '/');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }
+                  this.setState({ hasError: false, error: null });
                 }}
-                className="px-5 py-2.5 bg-zinc-100 text-zinc-700 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl font-bold text-xs hover:bg-zinc-800 transition-all cursor-pointer"
               >
                 Go to Home
               </button>

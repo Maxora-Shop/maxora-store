@@ -177,8 +177,9 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                 <a
                   href={fullProductUrl}
                   onClick={(e) => {
-                    if (!e.ctrlKey && !e.metaKey) {
+                    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
                       e.preventDefault();
+                      e.stopPropagation();
                       onQuickView(product);
                     }
                   }}
@@ -261,8 +262,9 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                     <a
                       href={fullProductUrl}
                       onClick={(e) => {
-                        if (!e.ctrlKey && !e.metaKey) {
+                        if (!e.ctrlKey && !e.metaKey && e.button === 0) {
                           e.preventDefault();
+                          e.stopPropagation();
                           onQuickView(product);
                         }
                       }}

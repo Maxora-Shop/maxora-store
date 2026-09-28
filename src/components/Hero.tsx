@@ -116,7 +116,36 @@ export const Hero: React.FC<HeroProps> = ({
         window.dispatchEvent(new PopStateEvent('popstate'));
         return;
       } else if (slide.ctaLink.startsWith('http')) {
-        window.location.href = slide.ctaLink;
+        try {
+          const urlObj = new URL(slide.ctaLink, typeof window !== 'undefined' ? window.location.origin : undefined);
+          const isInternal =
+            typeof window !== 'undefined' &&
+            (urlObj.origin === window.location.origin ||
+              urlObj.hostname === window.location.hostname ||
+              urlObj.hostname.includes('vercel.app') ||
+              urlObj.hostname.includes('run.app') ||
+              urlObj.pathname.startsWith('/product/') ||
+              urlObj.pathname.startsWith('/category/') ||
+              urlObj.pathname.startsWith('/products'));
+
+          if (isInternal) {
+            const internalPath = urlObj.pathname + urlObj.search + urlObj.hash;
+            window.history.pushState({}, '', internalPath);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            return;
+          } else {
+            // External link: open in separate tab to preserve active customer session
+            window.open(slide.ctaLink, '_blank', 'noopener,noreferrer');
+            return;
+          }
+        } catch {
+          if (slide.ctaLink.includes('/product/') || slide.ctaLink.includes('/category/') || slide.ctaLink.includes('/products')) {
+            const sub = slide.ctaLink.substring(slide.ctaLink.indexOf('/'));
+            window.history.pushState({}, '', sub);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            return;
+          }
+        }
         return;
       }
     }

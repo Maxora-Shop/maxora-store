@@ -104,8 +104,9 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                 <a
                   href={fullProductUrl}
                   onClick={(e) => {
-                    if (!e.ctrlKey && !e.metaKey) {
+                    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
                       e.preventDefault();
+                      e.stopPropagation();
                       onQuickView(product);
                     }
                   }}
@@ -188,8 +189,9 @@ export const HotDealsSection: React.FC<HotDealsSectionProps> = ({
                     <a
                       href={fullProductUrl}
                       onClick={(e) => {
-                        if (!e.ctrlKey && !e.metaKey) {
+                        if (!e.ctrlKey && !e.metaKey && e.button === 0) {
                           e.preventDefault();
+                          e.stopPropagation();
                           onQuickView(product);
                         }
                       }}

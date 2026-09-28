@@ -171,17 +171,8 @@ export default function App() {
     return () => window.removeEventListener('maxora_customer_auth_changed', handleCustomerSync);
   }, []);
 
-  // Listen for /admin, #admin, or Ctrl+Shift+A for discreet store owner admin access
+  // Listen for Ctrl+Shift+A for discreet store owner admin access
   useEffect(() => {
-    const handleUrlChange = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const search = window.location.search;
-      if (path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
-        setIsAdminView(true);
-      }
-    };
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
@@ -197,12 +188,8 @@ export default function App() {
       }
     };
 
-    window.addEventListener('popstate', handleUrlChange);
-    window.addEventListener('hashchange', handleUrlChange);
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('popstate', handleUrlChange);
-      window.removeEventListener('hashchange', handleUrlChange);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -315,27 +302,8 @@ export default function App() {
         setIsProductNotFound(false);
         pendingSlugRef.current = null;
 
-        // Category & Subcategory check: /products?..., /category/:slug, /type/:slug, /child/:slug
-        if (search) {
-          const searchParams = new URLSearchParams(search);
-          const cat = searchParams.get('category') || '';
-          const sub = searchParams.get('subcategory') || searchParams.get('subCategory') || '';
-          const type = searchParams.get('productType') || searchParams.get('product_type') || searchParams.get('type') || '';
-          const child = searchParams.get('childCategory') || searchParams.get('child_category') || searchParams.get('child') || '';
-          const brand = searchParams.get('brand') || '';
-
-          setSelectedCategory(cat);
-          setSelectedSubCategory(sub);
-          setSelectedProductType(type);
-          setSelectedChildCategory(child);
-          setSelectedBrand(brand);
-
-          if (cat || sub || type || child || brand || path.startsWith('/products')) {
-            setTimeout(() => {
-              productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 80);
-          }
-        } else if (path.startsWith('/category/')) {
+        // 1. Category & Subcategory check: /category/:slug, /category/:catSlug/:subSlug
+        if (path.startsWith('/category/')) {
           const match = path.match(/^\/category\/([^/?#]+)(?:\/([^/?#]+))?/);
           if (match) {
             const rawCat = decodeURIComponent(match[1]);
@@ -344,8 +312,11 @@ export default function App() {
             setSelectedSubCategory(rawSub);
             setSelectedProductType('');
             setSelectedChildCategory('');
-            setSelectedBrand('');
-            setSearchQuery('');
+            const searchParams = new URLSearchParams(search);
+            const brand = searchParams.get('brand') || '';
+            setSelectedBrand(brand);
+            const q = searchParams.get('q') || searchParams.get('search') || '';
+            setSearchQuery(q);
             setTimeout(() => {
               productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 80);
@@ -354,27 +325,135 @@ export default function App() {
           const rawType = decodeURIComponent(path.replace('/type/', '').replace(/\/$/, '').trim());
           setSelectedProductType(rawType);
           setSelectedChildCategory('');
+          const searchParams = new URLSearchParams(search);
+          const brand = searchParams.get('brand') || '';
+          setSelectedBrand(brand);
           setTimeout(() => {
             productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 80);
         } else if (path.startsWith('/child/')) {
           const rawChild = decodeURIComponent(path.replace('/child/', '').replace(/\/$/, '').trim());
           setSelectedChildCategory(rawChild);
+          const searchParams = new URLSearchParams(search);
+          const brand = searchParams.get('brand') || '';
+          setSelectedBrand(brand);
           setTimeout(() => {
             productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
           }, 80);
+        } else if (path.startsWith('/products') || search) {
+          const searchParams = new URLSearchParams(search);
+          const cat = searchParams.get('category') || '';
+          const sub = searchParams.get('subcategory') || searchParams.get('subCategory') || '';
+          const type = searchParams.get('productType') || searchParams.get('product_type') || searchParams.get('type') || '';
+          const child = searchParams.get('childCategory') || searchParams.get('child_category') || searchParams.get('child') || '';
+          const brand = searchParams.get('brand') || '';
+          const q = searchParams.get('q') || searchParams.get('search') || '';
+
+          setSelectedCategory(cat);
+          setSelectedSubCategory(sub);
+          setSelectedProductType(type);
+          setSelectedChildCategory(child);
+          setSelectedBrand(brand);
+          if (q) setSearchQuery(q);
+
+          if (cat || sub || type || child || brand || q || path.startsWith('/products')) {
+            setTimeout(() => {
+              productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 80);
+          }
         } else if (path === '/' && !hash && !search) {
           setSelectedCategory('');
           setSelectedSubCategory('');
           setSelectedProductType('');
           setSelectedChildCategory('');
           setSelectedBrand('');
+          setSearchQuery('');
+        }
+      }
+    };
+
+    // Global SPA navigation interceptor for all internal anchor clicks:
+    // Ensures internal link clicks NEVER trigger a full browser page reload
+    const handleGlobalLinkClick = (e: MouseEvent) => {
+      // Ignore modified clicks (Ctrl, Cmd, Shift, Alt, middle-click)
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+        return;
+      }
+
+      // Find closest anchor tag
+      const target = e.target as Element | null;
+      const anchor = target?.closest ? target.closest('a') : null;
+      if (!anchor) return;
+
+      // Ignore if explicitly marked with target="_blank" or download
+      if (anchor.target === '_blank' || anchor.hasAttribute('download')) {
+        return;
+      }
+
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+
+      // Ignore protocols: mailto:, tel:, javascript:
+      if (href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) {
+        return;
+      }
+
+      // Check if it's an internal link
+      let isInternal = false;
+      let internalPath = '';
+
+      if (href.startsWith('/') && !href.startsWith('//')) {
+        isInternal = true;
+        internalPath = href;
+      } else if (href.startsWith('#')) {
+        // In-page anchor hash: smooth scroll
+        return;
+      } else {
+        try {
+          const url = new URL(href, window.location.origin);
+          if (url.origin === window.location.origin) {
+            isInternal = true;
+            internalPath = url.pathname + url.search + url.hash;
+          }
+        } catch {}
+      }
+
+      if (isInternal) {
+        // Prevent full browser document reload
+        e.preventDefault();
+
+        // If clicking product link directly, open product in SPA
+        if (internalPath.startsWith('/product/')) {
+          const rawSlug = internalPath.replace('/product/', '').replace(/\/$/, '').trim();
+          let slug = rawSlug;
+          try {
+            slug = decodeURIComponent(rawSlug);
+          } catch {}
+          const currentProducts = productsRef.current;
+          const found = findProductBySlugOrId(currentProducts, slug);
+          if (found) {
+            handleOpenProductDetail(found, true);
+            return;
+          }
+        }
+
+        const currentFullPath = window.location.pathname + window.location.search + window.location.hash;
+        if (internalPath !== currentFullPath) {
+          window.history.pushState({}, '', internalPath);
+          handlePopState();
+        } else {
+          if (internalPath.startsWith('/category/') || internalPath.startsWith('/products')) {
+            productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+          } else if (internalPath === '/') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
         }
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('hashchange', handlePopState);
+    document.addEventListener('click', handleGlobalLinkClick);
 
     // Initial check on mount
     handlePopState();
@@ -382,6 +461,7 @@ export default function App() {
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', handlePopState);
+      document.removeEventListener('click', handleGlobalLinkClick);
     };
   }, []);
 
@@ -749,15 +829,77 @@ export default function App() {
       if (selectedCategory && selectedSubCategory) {
         const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
         const subSlug = activeSubCategoryObj?.slug || generateSlug(selectedSubCategory);
-        window.history.pushState({}, '', `/category/${catSlug}/${subSlug}`);
+        const brandQuery = selectedBrand ? `?brand=${encodeURIComponent(selectedBrand)}` : '';
+        window.history.pushState({}, '', `/category/${catSlug}/${subSlug}${brandQuery}`);
       } else if (selectedCategory) {
         const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
-        window.history.pushState({}, '', `/category/${catSlug}`);
+        const brandQuery = selectedBrand ? `?brand=${encodeURIComponent(selectedBrand)}` : '';
+        window.history.pushState({}, '', `/category/${catSlug}${brandQuery}`);
+      } else if (selectedBrand) {
+        window.history.pushState({}, '', `/products?brand=${encodeURIComponent(selectedBrand)}`);
       } else {
         window.history.pushState({}, '', '/');
       }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectBrand = (brandName: string) => {
+    setQuickViewProduct(null);
+    setIsProductNotFound(false);
+    setSelectedBrand(brandName);
+
+    if (typeof window !== 'undefined') {
+      if (brandName) {
+        if (selectedCategory && selectedSubCategory) {
+          const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+          const subSlug = activeSubCategoryObj?.slug || generateSlug(selectedSubCategory);
+          window.history.pushState({ brand: brandName }, '', `/category/${catSlug}/${subSlug}?brand=${encodeURIComponent(brandName)}`);
+        } else if (selectedCategory) {
+          const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+          window.history.pushState({ brand: brandName }, '', `/category/${catSlug}?brand=${encodeURIComponent(brandName)}`);
+        } else {
+          window.history.pushState({ brand: brandName }, '', `/products?brand=${encodeURIComponent(brandName)}`);
+        }
+      } else {
+        if (selectedCategory && selectedSubCategory) {
+          const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+          const subSlug = activeSubCategoryObj?.slug || generateSlug(selectedSubCategory);
+          window.history.pushState({}, '', `/category/${catSlug}/${subSlug}`);
+        } else if (selectedCategory) {
+          const catSlug = activeCategoryObj?.slug || generateSlug(selectedCategory);
+          window.history.pushState({}, '', `/category/${catSlug}`);
+        } else {
+          window.history.pushState({}, '', '/');
+        }
+      }
+    }
+
+    setTimeout(() => {
+      productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 60);
+  };
+
+  const handleCategorySelectFromProduct = (categoryName: string) => {
+    setQuickViewProduct(null);
+    setIsProductNotFound(false);
+    handleTaxonomySelect({
+      category: categoryName,
+      subCategory: '',
+      productType: '',
+      childCategory: '',
+    });
+  };
+
+  const handleSubCategorySelectFromProduct = (categoryName: string, subCategoryName: string) => {
+    setQuickViewProduct(null);
+    setIsProductNotFound(false);
+    handleTaxonomySelect({
+      category: categoryName,
+      subCategory: subCategoryName,
+      productType: '',
+      childCategory: '',
+    });
   };
 
   const handleUpdateQuantity = (productId: string, delta: number, selectedColor?: string) => {
@@ -869,35 +1011,46 @@ export default function App() {
   }, [products]);
 
   // Unified Taxonomy Selection Handler across Navbar and Catalog components
-  const handleTaxonomySelect = (filter: Partial<TaxonomyFilterState>) => {
+  const handleTaxonomySelect = (filter: Partial<TaxonomyFilterState> & { brand?: string }) => {
     const cat = filter.category || '';
     const sub = filter.subCategory || '';
     const type = filter.productType || '';
     const child = filter.childCategory || '';
+    const brand = filter.brand !== undefined ? filter.brand : '';
 
     setSelectedCategory(cat);
     setSelectedSubCategory(sub);
     setSelectedProductType(type);
     setSelectedChildCategory(child);
+    setSelectedBrand(brand);
     setSearchQuery('');
     setQuickViewProduct(null);
     setIsProductNotFound(false);
 
     // Update browser URL cleanly
     let newPath = '/';
+    const brandQuery = brand ? `?brand=${encodeURIComponent(brand)}` : '';
+
     if (cat && sub && !type && !child) {
       const catSlug = generateSlug(cat);
       const subSlug = generateSlug(sub);
-      newPath = `/category/${catSlug}/${subSlug}`;
+      newPath = `/category/${catSlug}/${subSlug}${brandQuery}`;
     } else if (cat && !sub && !type && !child) {
       const catSlug = generateSlug(cat);
-      newPath = `/category/${catSlug}`;
+      newPath = `/category/${catSlug}${brandQuery}`;
+    } else if (type && !child) {
+      const typeSlug = generateSlug(type);
+      newPath = `/type/${typeSlug}${brandQuery}`;
+    } else if (child) {
+      const childSlug = generateSlug(child);
+      newPath = `/child/${childSlug}${brandQuery}`;
     } else {
       const params = new URLSearchParams();
       if (cat) params.set('category', cat);
       if (sub) params.set('subcategory', sub);
       if (type) params.set('productType', type);
       if (child) params.set('childCategory', child);
+      if (brand) params.set('brand', brand);
       const qs = params.toString();
       newPath = qs ? `/products?${qs}` : '/';
     }
@@ -911,31 +1064,41 @@ export default function App() {
     }, 60);
   };
 
-  const updateTaxonomyFilter = (updates: Partial<TaxonomyFilterState>) => {
+  const updateTaxonomyFilter = (updates: Partial<TaxonomyFilterState> & { brand?: string }) => {
     const newCat = updates.category !== undefined ? updates.category : selectedCategory;
     const newSub = updates.subCategory !== undefined ? updates.subCategory : selectedSubCategory;
     const newType = updates.productType !== undefined ? updates.productType : selectedProductType;
     const newChild = updates.childCategory !== undefined ? updates.childCategory : selectedChildCategory;
+    const newBrand = updates.brand !== undefined ? updates.brand : selectedBrand;
 
     setSelectedCategory(newCat);
     setSelectedSubCategory(newSub);
     setSelectedProductType(newType);
     setSelectedChildCategory(newChild);
+    setSelectedBrand(newBrand);
 
     let newPath = '/';
+    const brandQuery = newBrand ? `?brand=${encodeURIComponent(newBrand)}` : '';
     if (newCat && newSub && !newType && !newChild) {
       const catSlug = generateSlug(newCat);
       const subSlug = generateSlug(newSub);
-      newPath = `/category/${catSlug}/${subSlug}`;
+      newPath = `/category/${catSlug}/${subSlug}${brandQuery}`;
     } else if (newCat && !newSub && !newType && !newChild) {
       const catSlug = generateSlug(newCat);
-      newPath = `/category/${catSlug}`;
+      newPath = `/category/${catSlug}${brandQuery}`;
+    } else if (newType && !newChild) {
+      const typeSlug = generateSlug(newType);
+      newPath = `/type/${typeSlug}${brandQuery}`;
+    } else if (newChild) {
+      const childSlug = generateSlug(newChild);
+      newPath = `/child/${childSlug}${brandQuery}`;
     } else {
       const params = new URLSearchParams();
       if (newCat) params.set('category', newCat);
       if (newSub) params.set('subcategory', newSub);
       if (newType) params.set('productType', newType);
       if (newChild) params.set('childCategory', newChild);
+      if (newBrand) params.set('brand', newBrand);
       const qs = params.toString();
       newPath = qs ? `/products?${qs}` : '/';
     }
@@ -974,7 +1137,7 @@ export default function App() {
   };
 
   const handleResetAllFilters = () => {
-    setSelectedBrand('');
+    handleSelectBrand('');
     handleResetPrice();
     setAvailabilityFilter('all');
     setMinRatingFilter(0);
@@ -1005,17 +1168,18 @@ export default function App() {
       }
       if (selectedSubCategory && selectedSubCategory !== 'All' && selectedSubCategory !== 'all') {
         const matchSub =
-          (p.sub_category_id && p.sub_category_id === selectedSubCategory) ||
+          (p.subcategory_id && p.subcategory_id === selectedSubCategory) ||
+          ((p as any).sub_category_id && (p as any).sub_category_id === selectedSubCategory) ||
           matchesTaxonomyField(p.sub_category, selectedSubCategory) ||
           matchesTaxonomyField(p.subcategory_slug, selectedSubCategory) ||
-          matchesTaxonomyField(p.sub_category_slug, selectedSubCategory);
+          matchesTaxonomyField((p as any).sub_category_slug, selectedSubCategory);
         if (!matchSub) return false;
       }
       if (selectedProductType && selectedProductType !== 'All' && selectedProductType !== 'all') {
         const matchType =
           (p.product_type_id && p.product_type_id === selectedProductType) ||
           matchesTaxonomyField(p.product_type, selectedProductType) ||
-          matchesTaxonomyField(p.producttype_slug, selectedProductType) ||
+          matchesTaxonomyField((p as any).producttype_slug, selectedProductType) ||
           matchesTaxonomyField(p.product_type_slug, selectedProductType);
         if (!matchType) return false;
       }
@@ -1273,11 +1437,12 @@ export default function App() {
     }
   }, [currentPage, totalPages]);
 
-  // Paginated product slice for the active page
+  // Paginated product slice for the active page (safe clamped to avoid empty page slices)
   const paginatedProducts = useMemo(() => {
-    const startIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    const safePage = Math.min(Math.max(1, currentPage), totalPages);
+    const startIndex = (safePage - 1) * PRODUCTS_PER_PAGE;
     return sortedProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
-  }, [sortedProducts, currentPage, PRODUCTS_PER_PAGE]);
+  }, [sortedProducts, currentPage, totalPages, PRODUCTS_PER_PAGE]);
 
   // Page change handler with smooth scrolling to the catalog view
   const handlePageChange = (page: number) => {
@@ -1378,6 +1543,9 @@ export default function App() {
             wishlistIds={wishlistIds}
             onBackToHome={handleCloseProductDetail}
             onSelectProduct={(p) => handleOpenProductDetail(p, true)}
+            onSelectCategory={handleCategorySelectFromProduct}
+            onSelectSubCategory={handleSubCategorySelectFromProduct}
+            onSelectBrand={handleSelectBrand}
             initialTab={quickViewInitialTab}
           />
         ) : pendingSlugRef.current ? (
@@ -1586,7 +1754,8 @@ export default function App() {
               <div className="flex items-center flex-wrap gap-2 pt-1">
                 {selectedBrand && (
                   <button
-                    onClick={() => setSelectedBrand('')}
+                    type="button"
+                    onClick={() => handleSelectBrand('')}
                     className="text-xs font-bold text-orange-900 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-full transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <Tag className="w-3 h-3 text-orange-600" />
@@ -1671,7 +1840,7 @@ export default function App() {
               <ProductFilterSidebar
                 products={sidebarSourceProducts}
                 selectedBrand={selectedBrand}
-                onSelectBrand={setSelectedBrand}
+                onSelectBrand={handleSelectBrand}
                 priceRange={priceRange}
                 maxStorePrice={10000}
                 onPriceRangeChange={setPriceRange}
@@ -1716,7 +1885,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedBrand('')}
+                  onClick={() => handleSelectBrand('')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     !selectedBrand
                       ? 'bg-zinc-950 text-white shadow-xs'
@@ -1725,11 +1894,11 @@ export default function App() {
                 >
                   All Brands
                 </button>
-                {Array.from(new Set(sidebarSourceProducts.map((p) => (p.brand || '').trim()).filter(Boolean))).map((bName) => (
+                {Array.from(new Set<string>(sidebarSourceProducts.map((p) => (p.brand || '').trim()).filter(Boolean))).map((bName) => (
                   <button
                     key={bName}
                     type="button"
-                    onClick={() => setSelectedBrand(selectedBrand === bName ? '' : bName)}
+                    onClick={() => handleSelectBrand(selectedBrand === bName ? '' : bName)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 ${
                       selectedBrand === bName
                         ? 'bg-orange-600 text-white shadow-xs'
@@ -1741,6 +1910,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
 
               {loadingProducts && products.length === 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
@@ -1986,7 +2156,10 @@ export default function App() {
             onClose={() => setIsCustomerAccountOpen(false)}
             settings={settings}
             wishlistProducts={savedProducts}
-            onRemoveWishlist={handleToggleWishlist}
+            onRemoveWishlist={(productId) => {
+              const p = products.find((x) => x.id === productId);
+              if (p) handleToggleWishlist(p);
+            }}
             onAddToCart={(p) => handleAddToCart(p, 1)}
             onOpenInvoice={(order) => setCustomerInvoiceOrder(order)}
             onOpenProduct={(p) => handleOpenProductDetail(p)}
@@ -2017,7 +2190,7 @@ export default function App() {
         onCloseMobile={() => setIsMobileFilterOpen(false)}
         products={sidebarSourceProducts}
         selectedBrand={selectedBrand}
-        onSelectBrand={setSelectedBrand}
+        onSelectBrand={handleSelectBrand}
         priceRange={priceRange}
         maxStorePrice={10000}
         onPriceRangeChange={setPriceRange}

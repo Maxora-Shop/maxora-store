@@ -34,9 +34,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isLowStock = Number(product.stock || 0) > 0 && Number(product.stock || 0) <= 5;
 
   const productSlug = getProductSlug(product);
-  const fullProductUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/product/${productSlug}`
-    : `/product/${productSlug}`;
+  const fullProductUrl = `/product/${productSlug}`;
   const imageAlt = `${product.name}${product.sku ? ` - ${product.sku}` : ''}`;
 
   const rawImage = product.image_url || (product.images && product.images[0]) || '';
@@ -44,18 +42,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Calculate discount percentage if applicable
   const discountPercent = sellingPrice > 0 && discount > 0 ? Math.round((discount / sellingPrice) * 100) : 0;
 
-  const handleProductLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleProductLinkClick = (e: React.MouseEvent<HTMLElement>) => {
     // If user clicked with Ctrl/Cmd or middle mouse, let browser open new tab natively
     if (e.metaKey || e.ctrlKey || e.button === 1) {
       return;
     }
     // Instant SPA navigation in the current tab without reloading the page or downloading bundles
     e.preventDefault();
+    e.stopPropagation();
     onQuickView(product);
   };
 
   return (
-    <div className={`group bg-white rounded-2xl border ${isLowStock ? 'border-amber-300/80 hover:border-amber-400' : 'border-zinc-200/90'} overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0`}>
+    <div
+      onClick={handleProductLinkClick}
+      className={`group bg-white rounded-2xl border ${isLowStock ? 'border-amber-300/80 hover:border-amber-400' : 'border-zinc-200/90'} overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0 cursor-pointer`}
+    >
       {/* Product Image Area */}
       <div className="relative aspect-square bg-zinc-50/50 border-b border-zinc-100 flex items-center justify-center p-2.5 xs:p-3 sm:p-4 overflow-hidden group/image w-full min-w-0">
         <a
@@ -168,7 +170,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             href={fullProductUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={handleProductLinkClick}
+            onClick={(e) => e.stopPropagation()}
             className="pointer-events-auto bg-zinc-950 hover:bg-zinc-800 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
             title="Open product in separate browser tab"
           >

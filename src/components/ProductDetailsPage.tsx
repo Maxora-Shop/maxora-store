@@ -68,6 +68,9 @@ interface ProductDetailsPageProps {
   wishlistIds?: string[];
   onBackToHome: () => void;
   onSelectProduct: (product: Product) => void;
+  onSelectCategory?: (category: string) => void;
+  onSelectSubCategory?: (category: string, subCategory: string) => void;
+  onSelectBrand?: (brand: string) => void;
   initialTab?: 'details' | 'reviews';
 }
 
@@ -92,6 +95,9 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   wishlistIds = [],
   onBackToHome,
   onSelectProduct,
+  onSelectCategory,
+  onSelectSubCategory,
+  onSelectBrand,
   initialTab = 'details',
 }) => {
   // Description parser
@@ -587,8 +593,15 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
           <>
             <button
               type="button"
-              onClick={onBackToHome}
+              onClick={() => {
+                if (onSelectCategory && product.category) {
+                  onSelectCategory(product.category);
+                } else {
+                  onBackToHome();
+                }
+              }}
               className="text-zinc-600 hover:text-emerald-700 transition-colors cursor-pointer truncate max-w-[140px] sm:max-w-[200px]"
+              title={`View ${product.category} products`}
             >
               {product.category}
             </button>
@@ -598,9 +611,22 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
 
         {product.sub_category && (
           <>
-            <span className="text-zinc-600 truncate max-w-[140px] sm:max-w-[200px]">
+            <button
+              type="button"
+              onClick={() => {
+                if (onSelectSubCategory && product.category && product.sub_category) {
+                  onSelectSubCategory(product.category, product.sub_category);
+                } else if (onSelectCategory && product.category) {
+                  onSelectCategory(product.category);
+                } else {
+                  onBackToHome();
+                }
+              }}
+              className="text-zinc-600 hover:text-emerald-700 transition-colors cursor-pointer truncate max-w-[140px] sm:max-w-[200px]"
+              title={`View ${product.sub_category} products`}
+            >
               {product.sub_category}
-            </span>
+            </button>
             <ChevronRight className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
           </>
         )}
@@ -733,14 +759,26 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
           <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-semibold text-zinc-500 border-b border-zinc-100 pb-3">
             <div className="flex items-center flex-wrap gap-2">
               {product.brand && (
-                <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-800 border border-amber-500/20 text-[10px] font-extrabold flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onSelectBrand && onSelectBrand(product.brand)}
+                  className="px-2.5 py-1 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 border border-amber-500/20 text-[10px] font-extrabold flex items-center gap-1 transition-colors cursor-pointer"
+                  title={`View all ${product.brand} products`}
+                >
                   <Tag className="w-3 h-3 text-amber-600" />
                   <span>Brand: {product.brand}</span>
-                </span>
+                </button>
               )}
-              <span className="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-800 uppercase tracking-wider text-[10px] font-bold">
-                {product.category || 'General'}
-              </span>
+              {product.category && (
+                <button
+                  type="button"
+                  onClick={() => onSelectCategory && onSelectCategory(product.category)}
+                  className="px-2.5 py-1 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 uppercase tracking-wider text-[10px] font-bold transition-colors cursor-pointer"
+                  title={`View all ${product.category} products`}
+                >
+                  {product.category}
+                </button>
+              )}
               {product.product_type && (
                 <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold">
                   {product.product_type}
