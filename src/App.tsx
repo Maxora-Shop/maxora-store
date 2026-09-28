@@ -562,29 +562,19 @@ export default function App() {
       fetchCategories();
     };
 
-    // Auto-refresh products and settings when tab becomes active again
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchProducts();
-        fetchSettings();
-        fetchCategories();
-      }
+    const handleOrdersUpdated = () => {
+      setOrdersVersion((v) => v + 1);
     };
 
     const handleStorageEvent = (e: StorageEvent) => {
-      if (!e.key || e.key.includes('product')) {
+      if (!e.key) return;
+      if (e.key === 'maxora_products_sync') {
         fetchProducts();
-      }
-      if (!e.key || e.key.includes('setting')) {
+      } else if (e.key === 'maxora_settings_sync') {
         fetchSettings();
-      }
-      if (!e.key || e.key.includes('categor') || e.key.includes('brand')) {
+      } else if (e.key === 'maxora_categories_sync') {
         fetchCategories();
       }
-    };
-
-    const handleOrdersUpdated = () => {
-      setOrdersVersion((v) => v + 1);
     };
 
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
@@ -597,7 +587,6 @@ export default function App() {
     window.addEventListener('maxora_child_categories_updated', handleCategoriesUpdated);
     window.addEventListener('maxora_brands_updated', handleCategoriesUpdated);
     window.addEventListener('storage', handleStorageEvent);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (productFetchTimeoutRef.current) {
@@ -614,7 +603,6 @@ export default function App() {
       window.removeEventListener('maxora_child_categories_updated', handleCategoriesUpdated);
       window.removeEventListener('maxora_brands_updated', handleCategoriesUpdated);
       window.removeEventListener('storage', handleStorageEvent);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       detachFirestoreListeners();
     };
   }, []);
@@ -666,7 +654,7 @@ export default function App() {
     // or if the user explicitly clicked Retry on the error state.
     // If products are already loaded (e.g. 29 baseline/cached products),
     // background re-fetch must NOT replace the product grid with skeletons!
-    if (productsRef.current.length === 0 || isManualRetry) {
+    if ((productsRef.current.length === 0 && products.length === 0) || isManualRetry) {
       setLoadingProducts(true);
     }
     if (isManualRetry) {
@@ -676,28 +664,23 @@ export default function App() {
     // Client-side safety timeout: guaranteed completion within 6 seconds
     productFetchTimeoutRef.current = setTimeout(() => {
       if (productFetchRequestIdRef.current === requestId) {
-        console.warn('[App] Product fetch safety timeout reached; releasing skeleton loading');
         setLoadingProducts(false);
         setHasFetchedProducts(true);
       }
     }, 6000);
 
     try {
-      // Always retrieve all active products from store so the entire inventory is available
-      // for instant category/subcategory/type/child-category filtering, mega menu preview, and direct slug lookups
       const data = await storeService.getProducts();
       if (productFetchRequestIdRef.current === requestId) {
         if (Array.isArray(data) && data.length > 0) {
           setProducts(data);
           setProductLoadError(null);
-        } else if (productsRef.current.length === 0) {
-          setProducts([]);
         }
       }
     } catch (err: any) {
       if (productFetchRequestIdRef.current === requestId) {
         console.error('Failed to load products:', err);
-        if (productsRef.current.length === 0) {
+        if (productsRef.current.length === 0 && products.length === 0) {
           setProductLoadError(err?.message || 'Unable to load products. Please check your connection.');
         }
       }

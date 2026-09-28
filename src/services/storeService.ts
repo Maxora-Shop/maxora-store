@@ -451,14 +451,17 @@ export function detachFirestoreListeners() {
   }
 }
 
-export function scheduleReconnectListeners(delayMs = 4000) {
+let reconnectAttempts = 0;
+export function scheduleReconnectListeners(delayMs = 30000) {
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  const backoffDelay = Math.max(delayMs, Math.min(120000, 30000 * Math.pow(1.5, Math.min(reconnectAttempts, 5))));
   reconnectTimer = setTimeout(() => {
+    reconnectAttempts++;
     if (!isClientQuotaCooldownActive()) {
       detachFirestoreListeners();
       initRealtimeFirestoreListeners();
     }
-  }, delayMs);
+  }, backoffDelay);
 }
 
 export function handleStoreFirestoreError(context: string, err: any) {
@@ -482,8 +485,8 @@ export function handleStoreFirestoreError(context: string, err: any) {
   const msg = err?.message || String(err);
   if (!msg.includes('idle stream') && !msg.includes('CANCELLED')) {
     console.warn(`${context} notice:`, msg);
-    // Transient error: schedule a clean reconnect attempt
-    scheduleReconnectListeners(5000);
+    // Transient error: schedule a calm reconnect attempt with backoff
+    scheduleReconnectListeners(30000);
   }
 }
 

@@ -270,7 +270,7 @@ function debouncedSaveTrafficDB() {
   saveTrafficTimeout = setTimeout(() => {
     saveTrafficTimeout = null;
     saveDB();
-  }, 4000);
+  }, 60000); // 1 minute throttle
 }
 
 function getLiveTrafficData() {

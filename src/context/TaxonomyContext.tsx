@@ -231,7 +231,6 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     window.addEventListener('maxora_child_categories_updated', handleTaxonomyEvent);
     window.addEventListener('maxora_products_updated', handleProductsEvent);
     window.addEventListener('storage', handleStorageChange);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Cross-tab broadcast channel sync
     let channel: BroadcastChannel | null = null;
@@ -253,7 +252,6 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
       window.removeEventListener('maxora_child_categories_updated', handleTaxonomyEvent);
       window.removeEventListener('maxora_products_updated', handleProductsEvent);
       window.removeEventListener('storage', handleStorageChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       try {
         channel?.close();
       } catch {}

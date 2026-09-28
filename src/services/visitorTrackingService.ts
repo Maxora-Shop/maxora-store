@@ -132,12 +132,14 @@ class VisitorTrackingService {
    */
   public async ping(customPath?: string, customTitle?: string): Promise<void> {
     if (typeof window === 'undefined' || this.isIgnoredPath()) return;
+    const now = Date.now();
+    if (!customPath && now - this.lastPingTime < 8000) return;
 
     const path = customPath || window.location.pathname;
     const title = customTitle || document.title || 'Maxora Storefront';
 
     this.currentPath = path;
-    this.lastPingTime = Date.now();
+    this.lastPingTime = now;
 
     const payload = {
       visitorId: this.visitorId || this.initVisitorId(),
