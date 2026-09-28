@@ -136,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         const name = (p.name || '').toLowerCase();
         const brand = (p.brand || '').toLowerCase();
         const cat = (p.category || '').toLowerCase();
-        const sub = (p.subcategory || '').toLowerCase();
+        const sub = ((p as any).subcategory || p.sub_category || '').toLowerCase();
         const sku = (p.sku || '').toLowerCase();
         return name.includes(q) || brand.includes(q) || cat.includes(q) || sub.includes(q) || sku.includes(q);
       })

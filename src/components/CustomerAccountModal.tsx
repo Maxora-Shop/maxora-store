@@ -289,11 +289,11 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
     setTrackError('');
     setTrackedOrder(null);
     try {
-      const found = await storeService.trackOrder(trackQuery.trim());
-      if (found) {
-        setTrackedOrder(found);
+      const res = await storeService.trackOrder(trackQuery.trim());
+      if (res && res.order) {
+        setTrackedOrder(res.order);
       } else {
-        setTrackError('No order found with this tracking number or phone number.');
+        setTrackError(res?.error || 'No order found with this tracking number or phone number.');
       }
     } catch {
       setTrackError('Could not retrieve tracking details. Please try again.');

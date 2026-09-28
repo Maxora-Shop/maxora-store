@@ -1276,6 +1276,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const isEditingExisting = Boolean(editingProduct.id);
       const productToSave: Product = {
         ...editingProduct,
+        id: editingProduct.id || ('prod_' + Date.now()),
         name: trimmedTitle,
         category: catName,
         selling_price: sellingPriceNum,
@@ -1284,6 +1285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         stock: Number(editingProduct.stock !== undefined ? editingProduct.stock : 10),
         slug: cleanedSlug,
         product_link: finalProductLink,
+        image_url: editingProduct.image_url || publicImage || '',
         og_image: editingProduct.og_image?.trim() || publicImage || '',
         meta_title: editingProduct.meta_title?.trim() || `${trimmedTitle} Price in Bangladesh | Maxora Shop`,
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${trimmedTitle} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),

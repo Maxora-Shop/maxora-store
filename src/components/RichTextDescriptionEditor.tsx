@@ -521,7 +521,7 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
               contentEditable
               onInput={handleVisualInput}
               onBlur={handleVisualInput}
-              placeholder={placeholder}
+              data-placeholder={placeholder}
               dangerouslySetInnerHTML={{ __html: formatInitialHtml(value || '') }}
               style={{
                 fontFamily:

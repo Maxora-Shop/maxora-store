@@ -199,6 +199,7 @@ export interface Order {
   delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
   delivery_charge: number;
   subtotal: number;
+  discount?: number;
   total: number;
   total_amount?: number;
   status: OrderStatus;
@@ -242,6 +243,8 @@ export interface StoreSettings {
   free_delivery_threshold?: number;
   currency: string;
   phone: string;
+  email?: string;
+  address?: string;
   whatsapp?: string;
   facebook?: string;
   instagram?: string;
@@ -325,9 +328,11 @@ export interface DashboardTotals {
   total_stock: number;
   total_expenses: number;
   profit: number;
+  estimated_profit?: number;
   daily_sales?: DailySalesMetric[];
+  daily_sales_history?: DailySalesMetric[];
   monthly_sales_history?: MonthlySalesMetric[];
-  status_distribution?: StatusDistribution[];
+  status_distribution?: any;
   best_products?: BestSellingProduct[];
 }
 

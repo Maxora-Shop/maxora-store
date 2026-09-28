@@ -185,7 +185,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
         if (subCount === 0) {
           products.forEach((p) => {
             if (p.active === 0 || p.active === false || String(p.active) === '0') return;
-            const pSub = (p.subcategory || '').toLowerCase().trim();
+            const pSub = ((p as any).subcategory || p.sub_category || '').toLowerCase().trim();
             const pSubId = (p.subcategory_id || '').toLowerCase().trim();
             const sSlug = s.slug.toLowerCase().trim();
             const sId = (s.id || '').toLowerCase().trim();

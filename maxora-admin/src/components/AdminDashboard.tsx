@@ -969,11 +969,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       const productToSave: Product = {
         ...editingProduct,
+        id: editingProduct.id || ('prod_' + Date.now()),
+        name: editingProduct.name || 'Untitled Product',
+        category: editingProduct.category || 'General',
+        selling_price: Number(editingProduct.selling_price || 0),
+        buying_price: Number(editingProduct.buying_price || 0),
+        discount: Number(editingProduct.discount || 0),
+        stock: Number(editingProduct.stock !== undefined ? editingProduct.stock : 10),
+        image_url: editingProduct.image_url || publicImage || '',
         slug: cleanedSlug,
         product_link: finalProductLink,
         og_image: editingProduct.og_image?.trim() || publicImage || '',
-        meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name} Price in Bangladesh | Maxora Shop`,
-        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
+        meta_title: editingProduct.meta_title?.trim() || `${editingProduct.name || 'Product'} Price in Bangladesh | Maxora Shop`,
+        meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${editingProduct.name || 'Product'} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       };
 
       await storeService.saveProduct(productToSave, password);
