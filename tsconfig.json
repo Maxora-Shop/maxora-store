@@ -28,6 +28,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "maxora-admin/dist"
+    "maxora-admin"
   ]
 }

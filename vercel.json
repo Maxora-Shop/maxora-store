@@ -1,5 +1,6 @@
 {
   "framework": "vite",
+  "buildCommand": "vite build",
   "cleanUrls": false,
   "functions": {
     "api/*.ts": {
