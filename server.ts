@@ -2717,7 +2717,7 @@ ${productUrls}
 
 // GET /sitemap.xml (Dynamic Google XML Sitemap from live Firestore)
 app.get(['/sitemap.xml', '/api/sitemap.xml'], async (req, res) => {
-  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const baseUrl = 'https://maxorabd.com';
   const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true' || req.headers['cache-control'] === 'no-cache';
   try {
     const sitemap = await generateDynamicSitemapXml(baseUrl, forceRefresh);
@@ -2866,7 +2866,7 @@ async function getProductByIdOrSlug(idOrSlug: string): Promise<any | null> {
 
 // Helper to render product SSR HTML
 async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; status: number } | null> {
-  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const baseUrl = 'https://maxorabd.com';
   const product = await getProductByIdOrSlug(rawSlug);
 
   const distIndex = path.join(process.cwd(), 'dist', 'index.html');
@@ -3069,7 +3069,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
 // Helper to render category SSR HTML
 // Helper to render category & subcategory SSR HTML
 function getCategorySsrHtml(rawCatSlug: string, rawSubSlug?: string): { html: string; status: number } | null {
-  const baseUrl = 'https://maxora-store-ruby.vercel.app';
+  const baseUrl = 'https://maxorabd.com';
   const isSubCategoryRoute = Boolean(rawSubSlug || (rawCatSlug && rawCatSlug.includes('/')));
   const cleanCatSlug = cleanSlug(rawCatSlug.includes('/') ? rawCatSlug.split('/')[0] : rawCatSlug);
   const cleanSubSlug = isSubCategoryRoute ? cleanSlug(rawSubSlug || (rawCatSlug.includes('/') ? rawCatSlug.split('/')[1] : '')) : '';
@@ -3358,7 +3358,7 @@ Allow: /
 Disallow: /admin
 Disallow: /api/admin/
 
-Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
+Sitemap: https://maxorabd.com/sitemap.xml
 `);
 });
 

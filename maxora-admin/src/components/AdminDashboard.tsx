@@ -4914,7 +4914,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="relative flex-1">
                         <input
                           type="text"
-                          placeholder="https://maxora-store-ruby.vercel.app/product/your-product-slug"
+                          placeholder="https://maxorabd.com/product/your-product-slug"
                           value={editingProduct?.product_link || ''}
                           onChange={(e) => setEditingProduct({ ...editingProduct, product_link: e.target.value })}
                           className="w-full bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 font-mono"

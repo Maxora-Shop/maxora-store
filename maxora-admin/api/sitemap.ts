@@ -9,7 +9,7 @@ try {
   setLogLevel('error');
 } catch (e) {}
 
-const BASE_URL = 'https://maxora-store-ruby.vercel.app';
+const BASE_URL = 'https://maxorabd.com';
 
 // Static configuration fallback to guarantee serverless execution even if filesystem root is isolated
 const DEFAULT_FIREBASE_CONFIG = {

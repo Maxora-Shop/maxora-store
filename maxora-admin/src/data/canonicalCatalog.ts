@@ -800,7 +800,7 @@ export const CANONICAL_PRODUCTS = [
     "badge": "NEW"
   },
   {
-    "product_link": "https://maxorashopbd.com/product/white-rose-led-tree-lamp-24-led-warm-white",
+    "product_link": "https://maxorabd.com/product/white-rose-led-tree-lamp-24-led-warm-white",
     "sub_category": "Home Decor",
     "child_category": "",
     "final_price": 2449,

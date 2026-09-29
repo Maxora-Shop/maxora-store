@@ -4,7 +4,7 @@ import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, getDocs, getDoc, doc, collection } from 'firebase/firestore';
 
-const BASE_URL = 'https://maxora-store-ruby.vercel.app';
+const BASE_URL = 'https://maxorabd.com';
 
 const DEFAULT_FIREBASE_CONFIG = {
   projectId: 'gen-lang-client-0786093112',

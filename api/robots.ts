@@ -6,7 +6,7 @@ Allow: /
 Disallow: /admin
 Disallow: /api/admin/
 
-Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
+Sitemap: https://maxorabd.com/sitemap.xml
 `;
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');

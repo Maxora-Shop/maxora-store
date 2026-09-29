@@ -248,7 +248,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
   const fullProductUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/product/${productSlug}`
-      : `https://maxorashopbd.com/product/${productSlug}`;
+      : `https://maxorabd.com/product/${productSlug}`;
 
   // Average Rating
   const effectiveRating = useMemo(() => {

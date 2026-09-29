@@ -1,7 +1,7 @@
 import { Product } from '../types';
 
-export const SITE_URL = 'https://maxora-store-ruby.vercel.app';
-export const CUSTOMER_STOREFRONT_URL = 'https://maxora-store-ruby.vercel.app';
+export const SITE_URL = 'https://maxorabd.com';
+export const CUSTOMER_STOREFRONT_URL = 'https://maxorabd.com';
 export const STORE_NAME = 'Maxora Shop';
 
 /**
@@ -49,7 +49,7 @@ export function getProductSlug(product: {
 
 /**
  * Gets the canonical product URL.
- * Example: https://maxora-store-ruby.vercel.app/product/sokany-blender-sk-03067
+ * Example: https://maxorabd.com/product/sokany-blender-sk-03067
  */
 export function getProductCanonicalUrl(
   product: { slug?: string; name?: string; sku?: string; id?: string | number },
@@ -61,9 +61,9 @@ export function getProductCanonicalUrl(
 
 /**
  * Gets the public customer storefront product URL.
- * Base URL: https://maxora-store-ruby.vercel.app
- * Final Format: https://maxora-store-ruby.vercel.app/product/{product-slug}
- * Example: https://maxora-store-ruby.vercel.app/product/golden-4-digit-password-combination-padlock-heavy-duty-keyless-metal-lock-for-locker-gate-luggage
+ * Base URL: https://maxorabd.com
+ * Final Format: https://maxorabd.com/product/{product-slug}
+ * Example: https://maxorabd.com/product/golden-4-digit-password-combination-padlock-heavy-duty-keyless-metal-lock-for-locker-gate-luggage
  * 
  * Rules:
  * 1. Uses existing product slug if available and valid.
@@ -116,7 +116,7 @@ export function getHomepageCanonicalUrl(baseUrl = SITE_URL): string {
 
 /**
  * Gets the canonical category URL.
- * Example: https://maxora-store-ruby.vercel.app/category/smart-gadgets
+ * Example: https://maxorabd.com/category/smart-gadgets
  */
 export function getCategoryCanonicalUrl(
   category: { slug?: string; name?: string } | string,
@@ -130,7 +130,7 @@ export function getCategoryCanonicalUrl(
 
 /**
  * Gets the canonical subcategory URL.
- * Example: https://maxora-store-ruby.vercel.app/category/smart-gadgets/smartwatches
+ * Example: https://maxorabd.com/category/smart-gadgets/smartwatches
  */
 export function getSubCategoryCanonicalUrl(
   category: { slug?: string; name?: string } | string,

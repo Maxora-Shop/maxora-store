@@ -4,7 +4,7 @@ import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, getDocs, collection } from 'firebase/firestore';
 
-const BASE_URL = 'https://maxora-store-ruby.vercel.app';
+const BASE_URL = 'https://maxorabd.com';
 
 function escapeHtml(unsafe: string): string {
   if (!unsafe) return '';

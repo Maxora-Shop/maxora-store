@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/admin/
 
-Sitemap: https://maxora-store-ruby.vercel.app/sitemap.xml
+Sitemap: https://maxorabd.com/sitemap.xml

@@ -8,7 +8,7 @@ try {
   setLogLevel('error');
 } catch (e) {}
 
-export const SITEMAP_BASE_URL = 'https://maxora-store-ruby.vercel.app';
+export const SITEMAP_BASE_URL = 'https://maxorabd.com';
 
 function escapeXml(unsafe: string): string {
   if (!unsafe) return '';

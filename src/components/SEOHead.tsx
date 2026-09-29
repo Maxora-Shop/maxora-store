@@ -64,7 +64,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
 
       ogImage = activeProduct.og_image || activeProduct.image_url || defaultOgImage;
 
-      // Phase 6 Canonical URL: https://maxora-store-ruby.vercel.app/product/{slug}
+      // Phase 6 Canonical URL: https://maxorabd.com/product/{slug}
       canonicalUrl = getProductCanonicalUrl(activeProduct, SITE_URL);
     } else if (activeCategory) {
       // Category & Subcategory SEO
