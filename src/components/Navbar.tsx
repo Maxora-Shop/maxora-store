@@ -398,8 +398,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white shadow-xs border-b border-zinc-200/90 w-full max-w-full">
       {/* 1. Slim Announcement / Top Bar matching screenshot */}
-      <div className="bg-[#0f172a] text-zinc-300 text-xs py-2 px-3 sm:px-6 w-full border-b border-zinc-800">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 w-full">
+      <div className="bg-[#0f172a] text-zinc-300 text-xs py-2 px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 w-full border-b border-zinc-800">
+        <div className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto flex items-center justify-between gap-3 w-full">
           <div className="flex items-center gap-2 text-[11px] sm:text-xs text-zinc-300 font-medium truncate">
             <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             {settings.free_delivery_enabled !== false ? (
@@ -450,7 +450,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* 2. Main Marketplace Header: [Logo] [Search] [Login] [Wishlist] [Cart] */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-6 w-full">
+      <div className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-6 w-full">
         {/* Logo & Store Name */}
         <button
           onClick={handleLogoClick}
@@ -695,7 +695,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="bg-[#0f172a] text-white text-xs font-semibold w-full border-t border-b border-slate-800/90 relative z-30 shadow-xs">
         <div
           ref={navContainerRef}
-          className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center gap-1.5 sm:gap-2 py-1.5 overflow-x-auto no-scrollbar scroll-smooth"
+          className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 flex items-center gap-1.5 sm:gap-2 py-1.5 overflow-x-auto no-scrollbar scroll-smooth"
         >
           {/* 1. All Categories Button */}
           <button

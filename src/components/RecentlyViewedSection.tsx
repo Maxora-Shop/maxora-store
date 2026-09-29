@@ -62,7 +62,7 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
 
   return (
     <section className={`py-8 sm:py-12 border-t border-zinc-200/80 ${className}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-2.5">

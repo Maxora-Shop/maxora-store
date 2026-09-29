@@ -1,6 +1,6 @@
 # Vercel deployment ignore for Customer Storefront project (Root Directory = .)
 
-# 1. Ignore Admin subproject and archives (Admin has its own Vercel project with Root Directory = maxora-admin)
+# Archives
 maxora-admin.tar.gz
 maxora-admin.zip
 

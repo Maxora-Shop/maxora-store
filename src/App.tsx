@@ -1511,7 +1511,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 w-full min-h-[60vh]">
+      <main className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 w-full min-h-[60vh]">
         {quickViewProduct ? (
           <ProductDetailsPage
             product={quickViewProduct}
@@ -1817,9 +1817,9 @@ export default function App() {
           </div>
 
           {/* Products List Grid with Left-side Filter Sidebar */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start w-full">
             {/* Left Sidebar Filter with 4 Sections (Brand, Price Range, Availability, Rating) */}
-            <div className="hidden lg:block lg:col-span-1 space-y-4 sticky top-24">
+            <div className="hidden lg:block w-64 xl:w-72 2xl:w-80 shrink-0 space-y-4 sticky top-24">
               <ProductFilterSidebar
                 products={sidebarSourceProducts}
                 selectedBrand={selectedBrand}
@@ -1840,7 +1840,7 @@ export default function App() {
             </div>
 
             {/* Product Cards Grid & Mobile Filter */}
-            <div className="lg:col-span-3">
+            <div className="flex-1 min-w-0 w-full">
               {/* Mobile Filter Button & Brand Chips Bar */}
               <div className="lg:hidden mb-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 <button
@@ -1896,8 +1896,8 @@ export default function App() {
 
 
               {loadingProducts && products.length === 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3.5 lg:gap-4 xl:gap-5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                     <div key={n} className="bg-white rounded-2xl border border-zinc-200 p-3 sm:p-4 space-y-3 animate-pulse">
                       <div className="aspect-square bg-zinc-200 rounded-xl" />
                       <div className="h-4 bg-zinc-200 rounded w-3/4" />
@@ -1933,7 +1933,7 @@ export default function App() {
                         ? 'grid-cols-1 max-w-xs sm:max-w-sm'
                         : paginatedProducts.length === 2
                         ? 'grid-cols-2 max-w-xl'
-                        : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-4'
+                        : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
                     }`}
                   >
                     {paginatedProducts.map((product) => (

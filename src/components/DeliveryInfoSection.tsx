@@ -10,7 +10,7 @@ export const DeliveryInfoSection: React.FC = () => {
         className="absolute -bottom-20 -right-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"
       />
 
-      <div className="relative z-10 max-w-5xl mx-auto">
+      <div className="relative z-10 max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6">
         <div className="text-center max-w-xl mx-auto mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold mb-3">
             <Package className="w-3.5 h-3.5" />

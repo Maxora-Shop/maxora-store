@@ -111,7 +111,7 @@ Maxora Shop BD respects your personal privacy:
   return (
     <>
       <footer className="mt-auto bg-zinc-950 text-white pt-14 pb-28 sm:pb-12 border-t border-zinc-800 w-full">
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="w-full max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           {/* Main Balanced 12-Column Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-8 pb-12 border-b border-zinc-800/80">
             {/* Column 1: About Maxora Shop BD (Spans 4 columns) */}

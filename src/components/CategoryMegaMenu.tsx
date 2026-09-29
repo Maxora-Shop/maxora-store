@@ -221,7 +221,7 @@ export const CategoryMegaMenu: React.FC<CategoryMegaMenuProps> = ({
         role="region"
         aria-label="Category mega navigation menu"
       >
-        <div className="max-w-7xl w-full px-3 sm:px-6">
+        <div className="max-w-[1720px] 2xl:max-w-[1840px] w-full px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
           <div className="bg-white rounded-b-2xl border border-zinc-200/90 border-t-0 shadow-xl p-5 sm:p-7 md:p-8 text-zinc-800 animate-in fade-in-50 slide-in-from-top-1 duration-150 max-h-[78vh] overflow-y-auto">
             
             {/* =========================================================================
