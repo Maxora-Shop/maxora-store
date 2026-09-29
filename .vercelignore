@@ -1,0 +1,13 @@
+# Vercel deployment ignore for Customer Storefront project (Root Directory = .)
+
+# 1. Ignore Admin subproject and archives (Admin has its own Vercel project with Root Directory = maxora-admin)
+maxora-admin/
+maxora-admin.tar.gz
+maxora-admin.zip
+
+# 2. Prevent legacy duplicate wrapper files from being compiled as standalone Serverless Functions
+# (All traffic is already routed via vercel.json rewrites directly to /api/products, /api/settings, and /api/ai-chat)
+api/admin/
+api/admin/**
+api/ai/
+api/ai/**
