@@ -165,6 +165,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // Navigation
   const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'orders' | 'customers' | 'settings'>('overview');
@@ -778,8 +779,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const data = await res.json();
         if (data.success && data.token) {
           localStorage.setItem('maxora_admin_token', data.token);
-          setIsAuthenticated(true);
-          loadTabData(currentTab, p);
+          setLoginSuccess(true);
+          setTimeout(() => {
+            setIsAuthenticated(true);
+            setLoginSuccess(false);
+            loadTabData(currentTab, p);
+          }, 900);
           return;
         }
       } catch {
@@ -790,8 +795,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       let isValid = p === '123456' || p === 'admin123';
 
       if (isValid) {
-        setIsAuthenticated(true);
-        loadTabData(currentTab, p);
+        setLoginSuccess(true);
+        setTimeout(() => {
+          setIsAuthenticated(true);
+          setLoginSuccess(false);
+          loadTabData(currentTab, p);
+        }, 900);
       } else {
         setIsAuthenticated(false);
         setAuthError('Incorrect username or password. (Default: admin / 123456)');
@@ -1569,95 +1578,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // ====================================================
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
-        <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-white space-y-6 animate-fade-in">
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 text-emerald-400 mb-1 shadow-inner">
-              <Lock className="w-7 h-7" />
+      <div className="min-h-screen bg-[#e6ecf4] flex flex-col items-center justify-center p-4 selection:bg-blue-600 selection:text-white">
+        {/* Neumorphic 3D Circle Disc matching Image 1 & Image 2 */}
+        <div className="w-[340px] h-[340px] xs:w-[380px] xs:h-[380px] sm:w-[440px] sm:h-[440px] rounded-full bg-[#e6ecf4] shadow-[20px_20px_60px_#c2cad6,-20px_-20px_60px_#ffffff] flex flex-col items-center justify-center p-6 sm:p-10 transition-all duration-300 relative">
+          {loginSuccess ? (
+            /* IMAGE 2: SUCCESS STATE ANIMATION */
+            <div className="flex flex-col items-center justify-center text-center animate-in zoom-in-95 fade-in duration-300">
+              {/* Raised circular badge with green checkmark */}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#e6ecf4] shadow-[6px_6px_14px_#c2cad6,-6px_-6px_14px_#ffffff] flex items-center justify-center mb-4">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-600 stroke-[3.5]" />
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-[#2d3748] tracking-tight">
+                Welcome Back!
+              </h2>
+              <p className="text-sm sm:text-base font-semibold text-[#4a5568] mt-1">
+                Login Successful
+              </p>
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-white">
-              Maxora Admin Login
-            </h1>
-            <p className="text-xs text-zinc-400">
-              Private merchant portal for managing orders, products & sales
-            </p>
-          </div>
+          ) : (
+            /* IMAGE 1: NEUMORPHIC SIGN IN FORM */
+            <form onSubmit={handleLoginSubmit} className="w-full flex flex-col items-center space-y-4 sm:space-y-4.5 animate-fade-in">
+              <h1 className="text-xl sm:text-2xl font-black text-[#2d3748] tracking-[0.2em] uppercase text-center mb-2 select-none">
+                SIGN IN
+              </h1>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
-                Admin Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
-                required
-                className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-            </div>
+              {/* Inset Pill Username Input */}
+              <div className="w-[240px] sm:w-[280px]">
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="admin"
+                  required
+                  className="w-full bg-[#e6ecf4] text-[#2d3748] font-bold rounded-full px-5 py-2.5 sm:py-3 text-sm sm:text-base shadow-[inset_4px_4px_8px_#c5cdd8,inset_-4px_-4px_8px_#ffffff] border-none outline-none placeholder:text-[#94a3b8] transition-all focus:shadow-[inset_5px_5px_10px_#b8c2ce,inset_-5px_-5px_10px_#ffffff]"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
-                Password / Security PIN
-              </label>
-              <div className="relative">
+              {/* Inset Pill Password Input */}
+              <div className="w-[240px] sm:w-[280px] relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="••••"
                   required
-                  className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl pl-4 pr-11 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-[#e6ecf4] text-[#2d3748] font-bold rounded-full pl-5 pr-10 py-2.5 sm:py-3 text-sm sm:text-base shadow-[inset_4px_4px_8px_#c5cdd8,inset_-4px_-4px_8px_#ffffff] border-none outline-none placeholder:text-[#94a3b8] transition-all tracking-widest focus:shadow-[inset_5px_5px_10px_#b8c2ce,inset_-5px_-5px_10px_#ffffff]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#718096] hover:text-[#2d3748] transition-colors cursor-pointer p-1"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <div className="flex justify-between items-center text-[11px] text-zinc-500 mt-1.5">
-                <span>Default credentials: admin / 123456</span>
-              </div>
-            </div>
 
-            {authError && (
-              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-medium flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{authError}</span>
-              </div>
-            )}
+              {/* Raised Pill Login Button */}
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-[240px] sm:w-[280px] py-2.5 sm:py-3 rounded-full bg-[#e6ecf4] text-[#2b6cb0] hover:text-[#1d4ed8] font-bold text-base sm:text-lg shadow-[6px_6px_14px_#c2cad6,-6px_-6px_14px_#ffffff] hover:shadow-[3px_3px_8px_#c2cad6,-3px_-3px_8px_#ffffff] active:shadow-[inset_4px_4px_8px_#c2cad6,inset_-4px_-4px_8px_#ffffff] transition-all cursor-pointer flex items-center justify-center gap-2 select-none disabled:opacity-60"
+              >
+                {authLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#2b6cb0]" />
+                    <span className="text-sm font-semibold">Verifying...</span>
+                  </>
+                ) : (
+                  <span>Login</span>
+                )}
+              </button>
 
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-sm transition-all shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-            >
-              {authLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying Credentials...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Enter Admin Dashboard</span>
-                </>
+              {authError && (
+                <div className="text-[11px] text-rose-600 font-semibold px-4 py-1 rounded-full bg-rose-50/90 border border-rose-200/80 max-w-[260px] text-center animate-in fade-in">
+                  {authError}
+                </div>
               )}
-            </button>
-          </form>
+            </form>
+          )}
+        </div>
 
-          <div className="pt-2 text-center border-t border-zinc-800/80">
+        {/* Footer Sub-links */}
+        <div className="mt-8 flex items-center gap-3 text-xs text-[#718096] font-medium">
+          {onBackToStore && (
             <button
+              type="button"
               onClick={onBackToStore}
-              className="text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 mx-auto"
+              className="hover:text-[#2d3748] transition-colors cursor-pointer"
             >
-              <span>← Return to Customer Storefront</span>
+              Return to Storefront
             </button>
-          </div>
+          )}
         </div>
       </div>
     );
