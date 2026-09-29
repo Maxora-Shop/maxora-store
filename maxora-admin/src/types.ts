@@ -236,6 +236,7 @@ export interface HeroBanner {
 export interface StoreSettings {
   store_name: string;
   store_tagline: string;
+  admin_password?: string;
   delivery_inside_dhaka: string | number;
   delivery_sub_dhaka: string | number;
   delivery_outside_dhaka: string | number;

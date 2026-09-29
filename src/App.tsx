@@ -69,18 +69,20 @@ import {
 } from './utils/taxonomy';
 
 export default function App() {
-  // Admin View State
+  // Admin View State - tab session persistence (reloads in admin stay in admin, new tabs default to store)
   const [isAdminView, setIsAdminView] = useState(() => {
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname.toLowerCase();
       const path = window.location.pathname;
       const hash = window.location.hash;
       const search = window.location.search;
+      const sessionView = sessionStorage.getItem('maxora_admin_view_active') === 'true';
       return (
         hostname.includes('admin') ||
         path.startsWith('/admin') ||
         hash === '#admin' ||
-        search.includes('admin=true')
+        search.includes('admin=true') ||
+        sessionView
       );
     }
     return false;
@@ -179,8 +181,10 @@ export default function App() {
         setIsAdminView((prev) => {
           const next = !prev;
           if (next) {
+            sessionStorage.setItem('maxora_admin_view_active', 'true');
             window.history.pushState({}, '', '/admin');
           } else {
+            sessionStorage.removeItem('maxora_admin_view_active');
             window.history.pushState({}, '', '/');
           }
           return next;
@@ -254,11 +258,13 @@ export default function App() {
       // Admin check
       const hostname = window.location.hostname.toLowerCase();
       if (hostname.includes('admin') || path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
+        sessionStorage.setItem('maxora_admin_view_active', 'true');
         setIsAdminView(true);
         setQuickViewProduct(null);
         setIsProductNotFound(false);
         return;
       } else {
+        sessionStorage.removeItem('maxora_admin_view_active');
         setIsAdminView(false);
       }
 
@@ -1455,6 +1461,7 @@ export default function App() {
       >
         <AdminDashboard
           onBackToStore={() => {
+            sessionStorage.removeItem('maxora_admin_view_active');
             setIsAdminView(false);
             window.history.pushState({}, '', '/');
             fetchProducts();

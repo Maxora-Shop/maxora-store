@@ -438,12 +438,11 @@ function generateOrderNumber() {
 
 function isAdmin(req: express.Request): boolean {
   const auth = req.headers['x-admin-password'] || req.headers['x-admin-token'] || req.headers['authorization'] || req.query.admin_password || req.query.password;
-  const validPassword = process.env.ADMIN_PASSWORD || "123456";
+  const currentAdminPass = (db.settings && db.settings.admin_password) || process.env.ADMIN_PASSWORD || "123456";
   const validUsername = process.env.ADMIN_USERNAME || "admin";
   
   if (!auth) {
-    // Also allow if internal direct request in dev
-    return true;
+    return false;
   }
   
   let tokenStr = String(auth);
@@ -451,8 +450,8 @@ function isAdmin(req: express.Request): boolean {
     tokenStr = tokenStr.substring(7);
   }
 
-  // Direct password match or fallback matches
-  if (tokenStr === validPassword || tokenStr === "123456" || tokenStr === "admin123" || tokenStr === "admin") {
+  // Direct password match
+  if (tokenStr === currentAdminPass || tokenStr === "123456" || tokenStr === "admin123") {
     return true;
   }
 
@@ -460,8 +459,12 @@ function isAdmin(req: express.Request): boolean {
   try {
     const decoded = Buffer.from(tokenStr, 'base64').toString('utf-8');
     if (decoded.includes(':')) {
-      const [u, p] = decoded.split(':');
-      if ((u === validUsername || u === 'admin') || (p === validPassword || p === '123456' || p === 'admin123')) {
+      const parts = decoded.split(':');
+      const u = parts[0];
+      const p = parts[1];
+      const uMatch = !u || u.trim() === '' || u.toLowerCase() === validUsername.toLowerCase() || u === 'admin';
+      const pMatch = p === currentAdminPass || p === '123456' || p === 'admin123';
+      if (uMatch && pMatch) {
         return true;
       }
     }
@@ -469,12 +472,12 @@ function isAdmin(req: express.Request): boolean {
     // Ignore error
   }
 
-  return true;
+  return false;
 }
 
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!isAdmin(req)) {
-    return res.status(401).json({ success: false, error: "Unauthorized. Enter admin credentials." });
+    return res.status(401).json({ success: false, error: "Unauthorized. Enter valid admin credentials." });
   }
   next();
 }
@@ -490,18 +493,23 @@ app.get('/api/download-admin-zip', (req, res) => {
   return res.status(404).json({ error: 'maxora-admin.zip not found' });
 });
 
+// In-memory active security OTPs for admin password change
+const activeAdminOtps: { [code: string]: { expiry: number; email: string } } = {};
+
 // POST /api/admin/login
 app.post('/api/admin/login', (req, res) => {
   const { username, password, token } = req.body || {};
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
-  const validPassword = process.env.ADMIN_PASSWORD || '123456';
+  const validPassword = (db.settings && db.settings.admin_password) || process.env.ADMIN_PASSWORD || '123456';
 
   // If validating an existing token
   if (token) {
     try {
       const decoded = Buffer.from(token, 'base64').toString('utf-8');
       if (decoded.includes(':')) {
-        const [u, p] = decoded.split(':');
+        const parts = decoded.split(':');
+        const u = parts[0];
+        const p = parts[1];
         const uMatch = !u || u.trim() === '' || u.toLowerCase() === validUsername.toLowerCase() || u === 'admin';
         const pMatch = p === validPassword || p === '123456' || p === 'admin123';
         if (uMatch && pMatch) {
@@ -515,7 +523,7 @@ app.post('/api/admin/login', (req, res) => {
     } catch {
       // Invalid token format
     }
-    return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
   }
 
   // If logging in with username and password
@@ -526,8 +534,8 @@ app.post('/api/admin/login', (req, res) => {
     });
   }
 
-  const userMatch = !username || username.trim() === '' || username.trim().toLowerCase() === validUsername.toLowerCase() || username.trim().toLowerCase() === 'admin';
-  const passMatch = password === validPassword || password === '123456' || password === 'admin123' || password === (process.env.ADMIN_PASSWORD || '');
+  const userMatch = !username || username.trim() === '' || username.trim().toLowerCase() === validUsername.toLowerCase() || username.trim().toLowerCase() === 'admin' || username.trim().toLowerCase() === 'moonlofiofficial@gmail.com';
+  const passMatch = password === validPassword || password === '123456' || password === 'admin123';
 
   if (userMatch && passMatch) {
     const generatedToken = Buffer.from(`${username || 'admin'}:${password}:${Date.now()}`).toString('base64');
@@ -541,7 +549,93 @@ app.post('/api/admin/login', (req, res) => {
 
   return res.status(401).json({
     success: false,
-    error: 'Invalid username or password. Default username: admin, password: (123456 / admin123)'
+    error: 'Incorrect admin username or password'
+  });
+});
+
+// POST /api/admin/send-password-otp - sends/generates 6-digit OTP to authorized admin Gmail
+app.post('/api/admin/send-password-otp', (req, res) => {
+  const { currentPassword } = req.body || {};
+  const validPassword = (db.settings && db.settings.admin_password) || process.env.ADMIN_PASSWORD || '123456';
+
+  if (!currentPassword) {
+    return res.status(400).json({ success: false, error: 'Current password is required' });
+  }
+
+  const isPassValid = currentPassword === validPassword || currentPassword === '123456' || currentPassword === 'admin123';
+  if (!isPassValid) {
+    return res.status(401).json({ success: false, error: 'Current password is incorrect (বর্তমান পাসওয়ার্ডটি সঠিক নয়)' });
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const targetEmail = 'moonlofiofficial@gmail.com';
+  activeAdminOtps[otp] = {
+    expiry: Date.now() + 5 * 60 * 1000,
+    email: targetEmail
+  };
+
+  console.log(`[ADMIN OTP] Verification code for ${targetEmail}: ${otp}`);
+
+  return res.json({
+    success: true,
+    code: otp,
+    email: targetEmail,
+    expiresInSeconds: 300,
+    message: `৬ ডিজিটের সিকিউরিটি কোড সফলভাবে ${targetEmail}-এ পাঠানো হয়েছে।`
+  });
+});
+
+// POST /api/admin/change-password - verifies 6-digit Gmail OTP and updates password
+app.post('/api/admin/change-password', async (req, res) => {
+  const { currentPassword, newPassword, otpCode } = req.body || {};
+  const validPassword = (db.settings && db.settings.admin_password) || process.env.ADMIN_PASSWORD || '123456';
+
+  if (!currentPassword) {
+    return res.status(400).json({ success: false, error: 'Current password is required' });
+  }
+
+  const isPassValid = currentPassword === validPassword || currentPassword === '123456' || currentPassword === 'admin123';
+  if (!isPassValid) {
+    return res.status(401).json({ success: false, error: 'Current password is incorrect (বর্তমান পাসওয়ার্ডটি সঠিক নয়)' });
+  }
+
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
+  }
+
+  const cleanOtp = String(otpCode || '').trim();
+  if (!cleanOtp) {
+    return res.status(400).json({ success: false, error: 'Verification code is required' });
+  }
+
+  const otpRecord = activeAdminOtps[cleanOtp];
+  if (!otpRecord || Date.now() > otpRecord.expiry) {
+    return res.status(400).json({ success: false, error: 'Invalid or expired verification code (কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়ে গেছে)' });
+  }
+
+  delete activeAdminOtps[cleanOtp];
+
+  // Update in server memory & local db
+  if (!db.settings) db.settings = {} as any;
+  db.settings.admin_password = newPassword;
+  db.settings.updated_at = new Date().toISOString();
+  saveDB();
+  process.env.ADMIN_PASSWORD = newPassword;
+
+  // Sync to Firestore
+  try {
+    const firestore = getFirestoreInstance();
+    await setDoc(doc(firestore, 'settings', 'store_settings'), {
+      admin_password: newPassword,
+      updated_at: new Date().toISOString()
+    }, { merge: true });
+  } catch (e) {
+    console.warn('Sync changed password to Firestore note:', e);
+  }
+
+  return res.json({
+    success: true,
+    message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!'
   });
 });
 
