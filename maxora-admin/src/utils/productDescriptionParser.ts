@@ -1,4 +1,5 @@
 import { Product } from '../types';
+import { sanitizeSafeHtml, stripAllHtml, hasHtmlTags } from './sanitizeHtml';
 
 export interface SpecificationItem {
   label: string;
@@ -16,6 +17,8 @@ export interface ParsedProductDescription {
     title: string;
     paragraphs: string[];
   };
+  rawRichHtml?: string;
+  isRichHtml?: boolean;
 }
 
 // Patterns for section headers in both English and Bengali
@@ -82,6 +85,9 @@ function isKeywordDumpLine(line: string): boolean {
  */
 export function sanitizeText(text: string): string {
   if (!text) return '';
+  if (hasHtmlTags(text)) {
+    return sanitizeSafeHtml(text).trim();
+  }
   let s = text;
   // 1. Strip script or style blocks
   s = s.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
@@ -116,6 +122,9 @@ export function sanitizeText(text: string): string {
 }
 
 function cleanBulletText(text: string): string {
+  if (hasHtmlTags(text)) {
+    return sanitizeSafeHtml(text).replace(/^(\s*<[^>]+>\s*)*[•\-\*\✓\✔\▪\▫\+►\–\—\>]+/, '').trim();
+  }
   return sanitizeText(text);
 }
 
@@ -232,7 +241,11 @@ export function parseProductDescription(
     };
   }
 
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  const isRich = hasHtmlTags(rawDescription);
+  const normalizedText = text
+    .replace(/<\/(?:p|div|h[1-6]|li|tr|blockquote)>/gi, '$&\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+  const lines = normalizedText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
 
   // Section collectors
   const overviewList: string[] = [];
@@ -258,57 +271,58 @@ export function parseProductDescription(
 
   // Pass 1: Scan for explicit section headings and categorize lines
   for (const rawLine of lines) {
+    const plainLine = stripAllHtml(rawLine).trim();
+
     // 1. Completely ignore keyword dumps and SEO tags on customer-facing view
-    if (isKeywordDumpLine(rawLine)) {
+    if (isKeywordDumpLine(plainLine)) {
       continue;
     }
 
     // 2. Ignore raw JSON code or object representations
-    const trimmed = rawLine.trim();
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    if ((plainLine.startsWith('{') && plainLine.endsWith('}')) || (plainLine.startsWith('[') && plainLine.endsWith(']'))) {
       continue;
     }
 
     const line = sanitizeText(rawLine);
     if (!line) continue;
 
-    // Check for section headings
-    if (SECTION_PATTERNS.overview.test(line)) {
+    // Check for section headings using plainLine
+    if (SECTION_PATTERNS.overview.test(plainLine)) {
       currentSection = 'overview';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.features.test(line)) {
+    if (SECTION_PATTERNS.features.test(plainLine)) {
       currentSection = 'features';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.specifications.test(line)) {
+    if (SECTION_PATTERNS.specifications.test(plainLine)) {
       currentSection = 'specifications';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.packageContents.test(line)) {
+    if (SECTION_PATTERNS.packageContents.test(plainLine)) {
       currentSection = 'packageContents';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.warranty.test(line)) {
+    if (SECTION_PATTERNS.warranty.test(plainLine)) {
       currentSection = 'warranty';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.delivery.test(line)) {
+    if (SECTION_PATTERNS.delivery.test(plainLine)) {
       currentSection = 'delivery';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.usage.test(line)) {
+    if (SECTION_PATTERNS.usage.test(plainLine)) {
       currentSection = 'usage';
       hasExplicitHeaders = true;
       continue;
     }
-    if (SECTION_PATTERNS.additionalInfo.test(line)) {
+    if (SECTION_PATTERNS.additionalInfo.test(plainLine)) {
       currentSection = 'additional';
       hasExplicitHeaders = true;
       continue;
@@ -320,7 +334,7 @@ export function parseProductDescription(
     } else if (currentSection === 'features') {
       featuresList.push(cleanBulletText(line));
     } else if (currentSection === 'specifications') {
-      const kv = parseKeyValue(line);
+      const kv = parseKeyValue(plainLine);
       if (kv) {
         specsList.push({ label: kv.key, value: kv.value });
       } else {
@@ -339,14 +353,13 @@ export function parseProductDescription(
       additionalList.push(cleanBulletText(line));
     } else {
       // Line is before any section header
-      // Check if it's a key-value
-      const kv = parseKeyValue(line);
-      const isBullet = /^[\s•\-\*\✓\✔\▪\▫\+►\–\—]/.test(line) || /^\d+[\.\)]\s/.test(line);
+      const kv = parseKeyValue(plainLine);
+      const isBullet = /^[\s•\-\*\✓\✔\▪\▫\+►\–\—]/.test(plainLine) || /^\d+[\.\)]\s/.test(plainLine) || rawLine.includes('<li');
 
       // Check for warranty keywords in inline sentence
-      if (/(?:warranty|ওয়ারেন্টি|গ্যারান্টি|রিপ্লেসমেন্ট)/i.test(line) && line.length < 150) {
+      if (/(?:warranty|ওয়ারেন্টি|গ্যারান্টি|রিপ্লেসমেন্ট)/i.test(plainLine) && plainLine.length < 150) {
         warrantyList.push(cleanBulletText(line));
-      } else if (/(?:in\s+the\s+box|package\s+includes|বক্সের\s*ভেতর)/i.test(line)) {
+      } else if (/(?:in\s+the\s+box|package\s+includes|বক্সের\s*ভেতর)/i.test(plainLine)) {
         packageContentsList.push(cleanBulletText(line.replace(/.*(?:in\s+the\s+box|package\s+includes|বক্সের\s*ভেতর)[:\s]*/i, '')));
       } else if (kv) {
         specsList.push({ label: kv.key, value: kv.value });
@@ -451,5 +464,7 @@ export function parseProductDescription(
             paragraphs: additionalList,
           }
         : undefined,
+    rawRichHtml: isRich ? sanitizeSafeHtml(rawDescription) : undefined,
+    isRichHtml: isRich,
   };
 }

@@ -3467,7 +3467,7 @@ async function startServer() {
         middlewareMode: true,
         hmr: false,
         watch: {
-          ignored: ['**/*']
+          ignored: ['**/maxora_db.json', '**/dist/**', '**/*.log', '**/maxora-admin.zip', '**/maxora-admin.tar.gz']
         }
       },
       appType: "spa",
