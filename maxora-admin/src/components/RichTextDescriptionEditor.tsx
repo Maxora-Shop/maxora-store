@@ -38,6 +38,8 @@ import {
   HelpCircle,
   Copy,
   ExternalLink,
+  Bot,
+  Wand2,
 } from 'lucide-react';
 import { sanitizeSafeHtml } from '../utils/sanitizeHtml';
 import { compressImageToBlob, uploadProductImageToStorage } from '../utils/imageStorage';
@@ -49,6 +51,7 @@ export interface RichTextDescriptionEditorProps {
   placeholder?: string;
   className?: string;
   productId?: string;
+  productName?: string;
   existingImages?: string[];
 }
 
@@ -158,6 +161,7 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
   placeholder = 'পণ্যটির আকর্ষণীয় বিবরণ, মূল হুক ও স্পেসিফিকেশন লিখুন...',
   className = '',
   productId,
+  productName = '',
   existingImages = [],
 }) => {
   const [editorMode, setEditorMode] = useState<'visual' | 'html' | 'preview'>('visual');
@@ -169,6 +173,11 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
   const [showHookMenu, setShowHookMenu] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiProductName, setAiProductName] = useState(productName || '');
+  const [aiKeyFeatures, setAiKeyFeatures] = useState('');
+  const [aiTone, setAiTone] = useState<'converting' | 'luxury' | 'technical'>('converting');
+  const [aiGeneratedHtml, setAiGeneratedHtml] = useState('');
 
   // Custom colors
   const [customColor, setCustomColor] = useState('#dc2626');
@@ -507,6 +516,78 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
     setShowTemplateMenu(false);
   };
 
+  // AI Description Generator
+  const handleGenerateWithAi = () => {
+    const title = aiProductName.trim() || productName || 'স্মার্ট গ্যাজেট ও লাইফস্টাইল পণ্য';
+    const featuresList = aiKeyFeatures.trim()
+      ? aiKeyFeatures.split(/[,;\n]+/).map((f) => f.trim()).filter(Boolean)
+      : ['১০০% অথেনটিক ও ব্র্যান্ড কোয়ালিটি', 'উন্নত ও দীর্ঘস্থায়ী পারফরম্যান্স', 'স্মার্ট ও আকর্ষণীয় প্রিমিয়াম ডিজাইন', 'সহজ ও ঝামেলাহীন ব্যবহার'];
+
+    let hookColor = '#dc2626';
+    let hookBg = '#fef2f2';
+    let hookTitle = `🔥 ${title} - সীমিত সময়ের স্পেশাল অফার!`;
+    let hookBody = `সেরা কোয়ালিটি এবং অথেনটিক ব্র্যান্ডের ১০০% নিশ্চয়তা। দ্রুত অর্ডার করুন কারণ স্টক সীমিত!`;
+
+    if (aiTone === 'luxury') {
+      hookColor = '#7c3aed';
+      hookBg = '#faf5ff';
+      hookTitle = `⭐ ${title} - এক্সক্লুসিভ লাক্সারি এডিশন`;
+      hookBody = `আপনার ব্যক্তিত্ব ও দৈনন্দিন লাইফস্টাইলে যুক্ত করুন আভিজাত্যের নতুন মাত্রা।`;
+    } else if (aiTone === 'technical') {
+      hookColor = '#2563eb';
+      hookBg = '#eff6ff';
+      hookTitle = `⚡ ${title} - আধুনিক টেকনোলজি ও পাওয়ারফুল পারফরম্যান্স`;
+      hookBody = `সর্বাধুনিক প্রযুক্তি ও টেকসই উপাদানে তৈরি। কোনো রকম ল্যাগ ছাড়া নির্ভরযোগ্য সাপোর্ট।`;
+    }
+
+    const generated = `
+<div style="background-color: ${hookBg}; border-left: 4px solid ${hookColor}; border-radius: 14px; padding: 14px 18px; margin: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+  <div style="color: ${hookColor}; font-weight: 800; font-size: 15px; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">
+    <span>${aiTone === 'luxury' ? '⭐' : aiTone === 'technical' ? '⚡' : '🔥'}</span>
+    <span>${hookTitle}</span>
+  </div>
+  <div style="color: #27272a; font-size: 13px; line-height: 1.7; font-weight: 500;">
+    ${hookBody}
+  </div>
+</div>
+
+<h3 style="color: #18181b; font-weight: 800; font-size: 18px; margin: 18px 0 8px 0;">পণ্য পরিচিতি (${title})</h3>
+<p>${title} আপনার দৈনন্দিন প্রয়োজন মেটাতে সেরা ও নির্ভরযোগ্য একটি পণ্য। আধুনিক ও আকর্ষণীয় ফিনিশিংয়ের সাথে এটি অত্যন্ত টেকসই এবং দীর্ঘস্থায়ী পারফরম্যান্স দিতে সক্ষম। যারা কোয়ালিটি ও প্রিমিয়াম ফিল নিয়ে কোনো আপস করতে চান না, তাদের জন্য এটি পারফেক্ট পছন্দ।</p>
+
+<h3 style="color: #059669; font-weight: 800; font-size: 17px; margin: 18px 0 8px 0;">মূল আকর্ষণ ও বিশেষ সুবিধাসমূহ</h3>
+<ul>
+${featuresList
+  .map((feat, idx) => {
+    const colors = ['#dc2626', '#059669', '#2563eb', '#7c3aed', '#d97706'];
+    const col = colors[idx % colors.length];
+    return `  <li><strong style="color: ${col};">${feat}:</strong> উন্নত প্রযুক্তিতে তৈরি এবং ঝামেলামুক্ত ব্যবহারের পূর্ণ নিশ্চয়তা।</li>`;
+  })
+  .join('\n')}
+</ul>
+
+<h3 style="color: #2563eb; font-weight: 800; font-size: 17px; margin: 18px 0 8px 0;">প্রোডাক্ট স্পেসিফিকেশন (Specifications)</h3>
+<p>
+  <strong>মডেল / ভ্যারিয়েন্ট:</strong> ${title}<br>
+  <strong>কোয়ালিটি গ্রেড:</strong> ১০০% অথেনটিক ও প্রিমিয়াম মেটেরিয়াল<br>
+  <strong>কালার ও ফিনিশিং:</strong> আকর্ষণীয় কালার অপশন ও ম্যাট ফিনিশ<br>
+  <strong>ওয়ারেন্টি সাপোর্ট:</strong> দ্রুত রিপ্লেসমেন্ট ও অফিসিয়াল সার্ভিস
+</p>
+
+<div style="background-color: #ecfdf5; border-left: 4px solid #059669; border-radius: 14px; padding: 14px 18px; margin: 16px 0;">
+  <div style="color: #059669; font-weight: 800; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+    <span>🚚</span>
+    <span>ক্যাশ অন ডেলিভারি ও নিশ্চিন্ত কেনাকাটা</span>
+  </div>
+  <div style="color: #065f46; font-size: 13px; line-height: 1.6;">
+    সমগ্র বাংলাদেশে পণ্য হাতে পেয়ে দেখে ও বুঝে মূল্য পরিশোধ করার সুবিধা। কোনো প্রকার অগ্রিম পেমেন্টের ঝুঁকি নেই!
+  </div>
+</div>
+<p><br></p>
+`.trim();
+
+    setAiGeneratedHtml(generated);
+  };
+
   // Word and character counts & embedded images count
   const plainText = (value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const wordCount = plainText ? plainText.split(/\s+/).length : 0;
@@ -706,6 +787,26 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
               </div>
             )}
           </div>
+
+          {/* AI Assistant Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowAiModal(true);
+              setShowHookMenu(false);
+              setShowTemplateMenu(false);
+              setShowTextColorPicker(false);
+              setShowHighlightPicker(false);
+              if (productName && !aiProductName) {
+                setAiProductName(productName);
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-300 transition-all shadow-2xs cursor-pointer active:scale-95"
+            title="AI Assistant দিয়ে স্বয়ংক্রিয়ভাবে আকর্ষণীয় বিবরণ ও হুক লিখুন"
+          >
+            <Bot className="w-3.5 h-3.5 text-emerald-600" />
+            <span>🤖 AI অ্যাসিস্ট্যান্ট</span>
+          </button>
 
           {/* View Modes: Visual vs HTML vs Live Storefront Preview */}
           <div className="flex items-center bg-zinc-100 rounded-xl p-0.5 border border-zinc-200">
@@ -1679,6 +1780,182 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
                 <CheckCircle2 className="w-4 h-4" />
                 <span>হুক যোগ করুন</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. AI DESCRIPTION GENERATOR MODAL */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-zinc-200 animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+            <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-teal-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-zinc-900">
+                    Maxora AI Assistant - ডেসক্রিপশন জেনারেটর
+                  </h3>
+                  <p className="text-[11px] text-emerald-800 font-medium">
+                    পণ্যের নাম ও ফিচার থেকে আকর্ষণীয় বিক্রয়োপযোগী বিবরণ স্বয়ংক্রিয়ভাবে তৈরি করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiModal(false)}
+                className="text-zinc-400 hover:text-zinc-700 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 flex-1">
+              <div>
+                <label className="block text-xs font-black text-zinc-800 mb-1.5">
+                  পণ্যের নাম (Product Title):
+                </label>
+                <input
+                  type="text"
+                  value={aiProductName}
+                  onChange={(e) => setAiProductName(e.target.value)}
+                  placeholder="যেমন: T900 Ultra Smartwatch with Wireless Charger"
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-zinc-800 mb-1.5">
+                  প্রধান ফিচার বা হাইলাইটস (কমা দিয়ে লিখুন):
+                </label>
+                <textarea
+                  value={aiKeyFeatures}
+                  onChange={(e) => setAiKeyFeatures(e.target.value)}
+                  placeholder="যেমন: ২.০৯ ইঞ্চি এইচডি স্ক্রিন, ব্লুটুথ কলিং, হার্টরেট ট্র্যাকিং, ৩-৫ দিন ব্যাটারি ব্যাকআপ, ওয়াটারপ্রুফ"
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border border-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium leading-relaxed resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-zinc-800 mb-1.5">
+                  ডেসক্রিপশনের ধরন বা টোন (Writing Style):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAiTone('converting')}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                      aiTone === 'converting'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
+                        : 'border-zinc-200 hover:border-zinc-300 text-zinc-700'
+                    }`}
+                  >
+                    <div className="font-black text-xs flex items-center gap-1 mb-0.5">
+                      <span>🚀</span>
+                      <span>হাই-কনভার্টিং</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 block">হট ডিল ও বিক্রয় সহায়ক</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiTone('luxury')}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                      aiTone === 'luxury'
+                        ? 'border-purple-500 bg-purple-50 text-purple-950 font-bold shadow-xs'
+                        : 'border-zinc-200 hover:border-zinc-300 text-zinc-700'
+                    }`}
+                  >
+                    <div className="font-black text-xs flex items-center gap-1 mb-0.5">
+                      <span>⭐</span>
+                      <span>লাক্সারি ও প্রিমিয়াম</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 block">আভিজাত্য ও এক্সক্লুসিভ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiTone('technical')}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all cursor-pointer ${
+                      aiTone === 'technical'
+                        ? 'border-blue-500 bg-blue-50 text-blue-950 font-bold shadow-xs'
+                        : 'border-zinc-200 hover:border-zinc-300 text-zinc-700'
+                    }`}
+                  >
+                    <div className="font-black text-xs flex items-center gap-1 mb-0.5">
+                      <span>⚡</span>
+                      <span>টেক ও স্পেক্স</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 block">বিস্তারিত প্রযুক্তি তথ্য</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Generate Trigger Button */}
+              <button
+                type="button"
+                onClick={handleGenerateWithAi}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>✨ এআই দিয়ে বিবরণ তৈরি করুন (Generate AI Description)</span>
+              </button>
+
+              {/* Generated Result Preview */}
+              {aiGeneratedHtml && (
+                <div className="space-y-2 pt-2 border-t border-zinc-100">
+                  <div className="flex items-center justify-between text-xs font-black text-zinc-800">
+                    <span>প্রিভিউ (Generated Preview):</span>
+                    <span className="text-emerald-700 text-[10px] font-bold">রেডিমেড ও ফরম্যাটেড</span>
+                  </div>
+                  <div
+                    className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-200 text-xs text-zinc-800 max-h-56 overflow-y-auto leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: sanitizeSafeHtml(aiGeneratedHtml) }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAiModal(false)}
+                className="px-4 py-2 text-xs font-bold text-zinc-600 hover:text-zinc-900 cursor-pointer"
+              >
+                বন্ধ করুন
+              </button>
+
+              {aiGeneratedHtml && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      insertHtmlAtCursor(aiGeneratedHtml);
+                      setShowAiModal(false);
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-zinc-800 bg-zinc-200 hover:bg-zinc-300 rounded-xl transition-all cursor-pointer"
+                  >
+                    শেষে যোগ করুন
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editorRef.current) {
+                        editorRef.current.innerHTML = aiGeneratedHtml;
+                      }
+                      handleVisualInput();
+                      setShowAiModal(false);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-md cursor-pointer active:scale-95"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>ডেসক্রিপশন হিসেবে সেট করুন</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

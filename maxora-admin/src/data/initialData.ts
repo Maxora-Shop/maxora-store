@@ -1,5 +1,95 @@
 import userProductsJson from "./userProducts.json";
-import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, Category, SubCategory, ProductType, ChildCategory, Review, Brand, HeroBanner, AiSuggestedQuestion, AiFaqItem, AiCustomCommand } from '../types';
+
+export const DEFAULT_AI_CUSTOM_COMMANDS: AiCustomCommand[] = [
+  {
+    id: "cmd-1",
+    title: "নম্র ও আন্তরিক আচরণ",
+    command: "কাস্টমারদের সাথে কথা বলার সময় অত্যন্ত মার্জিত, নম্র ও আন্তরিক ভাষা ব্যবহার করবে। কথা সংক্ষিপ্ত, তথ্যবহুল ও পরিষ্কার রাখবে।",
+    active: true,
+    order: 1,
+  },
+  {
+    id: "cmd-2",
+    title: "অর্ডার করার নিয়ম ও Buy Now নির্দেশনা",
+    command: "কাস্টমার কোনো পণ্য কিনতে চাইলে তাকে ওয়েবসাইটে পণ্যটির পেজে গিয়ে 'Buy Now' অথবা 'অর্ডার করুন' বাটনে ক্লিক করে নাম, মোবাইল নম্বর ও ঠিকানা দিয়ে অর্ডার সম্পন্ন করতে বলবে।",
+    active: true,
+    order: 2,
+  },
+  {
+    id: "cmd-3",
+    title: "ক্যাশ অন ডেলিভারি নিশ্চয়তা",
+    command: "কাস্টমার পেমেন্ট নিয়ে জানতে চাইলে আশ্বস্ত করবে যে সারা বাংলাদেশে ১০০% ক্যাশ অন ডেলিভারি রয়েছে, ডেলিভারিম্যানের কাছ থেকে পণ্য দেখে মূল্য পরিশোধ করা যাবে।",
+    active: true,
+    order: 3,
+  },
+  {
+    id: "cmd-4",
+    title: "দাম ও ডিসকাউন্ট পলিসি",
+    command: "ওয়েবসাইটে প্রদর্শিত মূল্যের চেয়ে কম বা অতিরিক্ত ডিসকাউন্ট অফার করবে না। যদি কাস্টমার ডিসকাউন্ট চায়, তাকে বলবে ওয়েবসাইটে দেওয়া স্পেশাল অফার মূল্যই আমাদের সেরা দাম।",
+    active: true,
+    order: 4,
+  },
+  {
+    id: "cmd-5",
+    title: "WhatsApp এস্কেলেশন",
+    command: "পাইকারি বা হোলসেল কেনাকাটা, বড় অভিযোগ, অথবা কোনো পণ্যের সুনির্দিষ্ট তথ্য জানা না থাকলে কাস্টমারকে আমাদের অফিসিয়াল WhatsApp নম্বরে কথা বলার পরামর্শ দিবে।",
+    active: true,
+    order: 5,
+  },
+];
+
+export const DEFAULT_AI_SUGGESTED_QUESTIONS: AiSuggestedQuestion[] = [
+  { id: "sq-1", question: "এই পণ্যের দাম কত?", active: true, order: 1 },
+  { id: "sq-2", question: "ঢাকায় delivery charge কত?", active: true, order: 2 },
+  { id: "sq-3", question: "Cash on Delivery আছে?", active: true, order: 3 },
+  { id: "sq-4", question: "কীভাবে অর্ডার করব?", active: true, order: 4 },
+  { id: "sq-5", question: "আমার জন্য একটা ভালো গ্যাজেট সাজেস্ট করুন", active: true, order: 5 },
+  { id: "sq-6", question: "ডেলিভারি হতে কত দিন সময় লাগে?", active: true, order: 6 },
+];
+
+export const DEFAULT_AI_FAQS: AiFaqItem[] = [
+  {
+    id: "faq-1",
+    question: "কীভাবে অর্ডার করব?",
+    answer: "আপনার পছন্দের পণ্য নির্বাচন করে 'Add to Cart' অথবা সরাসরি 'Buy Now' বাটনে ক্লিক করুন। এরপর আপনার নাম, মোবাইল নম্বর এবং সম্পূর্ণ ডেলিভারি ঠিকানা প্রদান করে 'Confirm Order'-এ ক্লিক করলেই অর্ডার সফলভাবে প্লেস হবে।",
+    category: "অর্ডার",
+    active: true,
+    order: 1,
+  },
+  {
+    id: "faq-2",
+    question: "Cash on Delivery (ক্যাশ অন ডেলিভারি) সুবিধা আছে কি?",
+    answer: "হ্যাঁ, Maxora-তে সমগ্র বাংলাদেশের ৬৪টি জেলাতেই ক্যাশ অন ডেলিভারি (পণ্য হাতে পেয়ে মূল্য পরিশোধ) সুবিধা রয়েছে।",
+    category: "পেমেন্ট",
+    active: true,
+    order: 2,
+  },
+  {
+    id: "faq-3",
+    question: "ডেলিভারি চার্জ কত এবং ডেলিভারি হতে কত দিন সময় লাগে?",
+    answer: "আমাদের ডেলিভারি চার্জ: ঢাকা সিটির ভেতরে ৭০ টাকা (২-৩ কার্যদিবস), ঢাকা সাব-এরিয়া ১০০ টাকা এবং ঢাকার বাইরে সমগ্র বাংলাদেশে ১৩০ টাকা (৩-৫ কার্যদিবস)।",
+    category: "ডেলিভারি",
+    active: true,
+    order: 3,
+  },
+  {
+    id: "faq-4",
+    question: "পণ্য পছন্দ না হলে বা কোনো সমস্যা থাকলে কি রিটার্ন করা যাবে?",
+    answer: "হ্যাঁ, ডেলিভারি নেওয়ার সময় ডেলিভারি ম্যানের সামনে পার্সেল খুলে পণ্য সম্পূর্ণ চেক করে নিতে পারবেন। কোনো ডিফেক্ট বা অমিল থাকলে তাৎক্ষণিক রিটার্ন করার সুযোগ রয়েছে।",
+    category: "চেক ও রিটার্ন",
+    active: true,
+    order: 4,
+  },
+  {
+    id: "faq-5",
+    question: "অর্ডার করার সময় কি অগ্রিম কোনো টাকা পরিশোধ করতে হবে?",
+    answer: "না, সাধারণ অর্ডারে কোনো অগ্রিম টাকার প্রয়োজন নেই। আপনি পণ্য হাতে পাওয়ার পর চেক করে মূল্য পরিশোধ করতে পারবেন।",
+    category: "পেমেন্ট",
+    active: true,
+    order: 5,
+  },
+];
 
 export const DEFAULT_HERO_BANNERS: HeroBanner[] = [
   {
@@ -562,6 +652,13 @@ export const INITIAL_SETTINGS: StoreSettings = {
     "Exclusive Edition",
     "Clearance Sale"
   ],
+  ai_assistant_enabled: true,
+  ai_welcome_message: "হ্যালো! 👋 আমি Maxora AI Assistant। পণ্যের দাম, স্পেসিফিকেশন, স্টক, ডেলিভারি বা আপনার প্রয়োজন অনুযায়ী পণ্য খুঁজে দিতে আমি সাহায্য করতে পারি। কীভাবে আপনাকে সাহায্য করতে পারি?",
+  ai_whatsapp_number: "+8801635451746",
+  ai_suggested_questions: DEFAULT_AI_SUGGESTED_QUESTIONS,
+  ai_faqs: DEFAULT_AI_FAQS,
+  ai_custom_commands: DEFAULT_AI_CUSTOM_COMMANDS,
+  ai_system_instructions: "কাস্টমারদের সাথে সর্বদা সর্বোচ্চ বিনম্র ও প্রফেশনাল আচরণ করুন। Maxora-এর সব পণ্য ১০০% আসল ও কোয়ালিটি নিশ্চিত।",
 };
 
 export const INITIAL_PRODUCTS: Product[] = (userProductsJson as Product[]);
@@ -578,7 +675,11 @@ export const INITIAL_REVIEWS: Review[] = [
     comment: "The AMOLED display is stunning and responsive! Battery easily lasts a week. Excellent build quality for this price.",
     user_name: "Tanvir Ahmed",
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    verified_purchase: true
+    verified_purchase: true,
+    images: [
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=600&auto=format&fit=crop&q=80"
+    ]
   },
   {
     id: "rev-002",
@@ -587,7 +688,10 @@ export const INITIAL_REVIEWS: Review[] = [
     comment: "Very smooth Bluetooth calling and accurate step tracking. Delivery was fast inside Dhaka.",
     user_name: "Mahmudul Hasan",
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-    verified_purchase: true
+    verified_purchase: true,
+    images: [
+      "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=600&auto=format&fit=crop&q=80"
+    ]
   },
   {
     id: "rev-003",

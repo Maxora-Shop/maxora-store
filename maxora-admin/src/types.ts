@@ -233,6 +233,40 @@ export interface HeroBanner {
   display_order?: number;
 }
 
+export interface AiCustomCommand {
+  id: string;
+  title: string;
+  command: string;
+  active: boolean;
+  order: number;
+}
+
+export interface AiSuggestedQuestion {
+  id: string;
+  question: string;
+  active: boolean;
+  order: number;
+}
+
+export interface AiFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  active: boolean;
+  order: number;
+  category?: string;
+}
+
+export interface AiAssistantSettings {
+  enabled: boolean;
+  welcomeMessage: string;
+  whatsappNumber?: string;
+  suggestedQuestions: AiSuggestedQuestion[];
+  faqs: AiFaqItem[];
+  customCommands?: AiCustomCommand[];
+  systemInstructions?: string;
+}
+
 export interface StoreSettings {
   store_name: string;
   store_tagline: string;
@@ -272,9 +306,37 @@ export interface StoreSettings {
   custom_head_code?: string;
   custom_body_code?: string;
   custom_product_types?: string[];
+  // AI Shopping Assistant Configuration
+  ai_assistant_enabled?: boolean;
+  ai_welcome_message?: string;
+  ai_whatsapp_number?: string;
+  ai_suggested_questions?: AiSuggestedQuestion[];
+  ai_faqs?: AiFaqItem[];
+  ai_custom_commands?: AiCustomCommand[];
+  ai_system_instructions?: string;
   // Social Proof & Live Sales Notification
   live_sales_popup_enabled?: boolean;
   live_sales_popup_interval?: number;
+  // Trust Benefits Customization
+  trust_badge_1_title?: string;
+  trust_badge_1_subtitle?: string;
+  trust_badge_2_title?: string;
+  trust_badge_2_subtitle?: string;
+  trust_badge_3_title?: string;
+  trust_badge_3_subtitle?: string;
+  trust_badge_4_title?: string;
+  trust_badge_4_subtitle?: string;
+  // Hero Promo Highlight Cards
+  hero_promo_card_1_badge?: string;
+  hero_promo_card_1_title?: string;
+  hero_promo_card_1_subtitle?: string;
+  hero_promo_card_2_badge?: string;
+  hero_promo_card_2_title?: string;
+  hero_promo_card_2_subtitle?: string;
+  hero_promo_card_3_badge?: string;
+  hero_promo_card_3_title?: string;
+  hero_promo_card_3_subtitle?: string;
+  deleted_product_ids?: string[];
   updated_at?: string;
 }
 
@@ -310,6 +372,19 @@ export interface BestSellingProduct {
   profit?: number;
 }
 
+export interface LiveTrafficAnalytics {
+  live_now: number;
+  today_visitors: number;
+  today_page_views: number;
+  yesterday_visitors?: number;
+  active_pages?: Array<{ path: string; title: string; count: number }>;
+  device_breakdown?: { mobile: number; desktop: number; tablet: number; mobile_percent: number; desktop_percent: number };
+  traffic_sources?: Array<{ source: string; count: number; percentage: number }>;
+  daily_history?: Array<{ date: string; label: string; visitors: number; views: number }>;
+  top_pages?: Array<{ path: string; title: string; views: number }>;
+  last_updated?: string;
+}
+
 export interface DashboardTotals {
   today_sales: number;
   today_orders: number;
@@ -335,6 +410,7 @@ export interface DashboardTotals {
   monthly_sales_history?: MonthlySalesMetric[];
   status_distribution?: any;
   best_products?: BestSellingProduct[];
+  traffic?: LiveTrafficAnalytics;
 }
 
 export interface CartItem {

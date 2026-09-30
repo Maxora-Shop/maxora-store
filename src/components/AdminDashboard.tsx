@@ -6654,6 +6654,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         setEditingProduct((prev) => (prev ? { ...prev, description: html } : prev))
                       }
                       productId={editingProduct?.id}
+                      productName={editingProduct?.name || ''}
                       existingImages={
                         editingProduct
                           ? ([editingProduct.image_url, ...(editingProduct.images || [])].filter(Boolean) as string[])
