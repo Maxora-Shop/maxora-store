@@ -6,8 +6,54 @@
 
 const DANGEROUS_TAGS = /<\/?(script|iframe|frame|object|embed|applet|form|input|button|select|textarea|link|meta|style)\b[^>]*>/gi;
 const DANGEROUS_ATTRS = /\s+(on\w+|javascript:|vbscript:|data:\s*text\/html)\s*=\s*(['"][^'"]*['"]|[^\s>]+)/gi;
-const DANGEROUS_PROTOCOLS = /(href|src)\s*=\s*['"]\s*(javascript|vbscript|data):[^'"]*['"]/gi;
+// Block javascript:, vbscript:, and non-image data: protocols (allow safe base64 images and https/http)
+const DANGEROUS_PROTOCOLS = /(href|src)\s*=\s*['"]\s*(?:javascript|vbscript|data:(?!\s*image\/(?:png|jpeg|jpg|webp|gif|svg\+xml)\b))[^'"]*['"]/gi;
 const DANGEROUS_CSS = /(expression|behavior|javascript|moz-binding)/gi;
+
+const SAFE_STYLE_PROPS = new Set([
+  'color',
+  'background-color',
+  'background',
+  'font-weight',
+  'font-size',
+  'font-style',
+  'font-family',
+  'text-decoration',
+  'text-align',
+  'line-height',
+  'letter-spacing',
+  'padding',
+  'padding-top',
+  'padding-bottom',
+  'padding-left',
+  'padding-right',
+  'margin',
+  'margin-top',
+  'margin-bottom',
+  'margin-left',
+  'margin-right',
+  'border-radius',
+  'border',
+  'border-left',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-color',
+  'border-width',
+  'border-style',
+  'box-shadow',
+  'display',
+  'max-width',
+  'width',
+  'height',
+  'object-fit',
+  'vertical-align',
+  'gap',
+  'grid-template-columns',
+  'flex-direction',
+  'align-items',
+  'justify-content',
+]);
 
 /**
  * Strips all HTML tags and returns purely plain text
@@ -59,28 +105,14 @@ export function sanitizeSafeHtml(html?: string): string {
     if (DANGEROUS_CSS.test(styleContent)) {
       return '';
     }
-    // Allow safe CSS properties: color, background-color, font-weight, font-size, font-style, text-decoration, text-align, padding, margin, border-radius
+    // Allow safe CSS properties from SAFE_STYLE_PROPS
     const safeDeclarations = styleContent
       .split(';')
       .map((decl: string) => decl.trim())
       .filter((decl: string) => {
         if (!decl) return false;
         const [prop] = decl.split(':').map((s: string) => s.trim().toLowerCase());
-        return [
-          'color',
-          'background-color',
-          'background',
-          'font-weight',
-          'font-size',
-          'font-style',
-          'text-decoration',
-          'text-align',
-          'line-height',
-          'padding',
-          'margin',
-          'border-radius',
-          'display',
-        ].includes(prop);
+        return SAFE_STYLE_PROPS.has(prop);
       });
 
     return safeDeclarations.length > 0 ? `style=${quote}${safeDeclarations.join('; ')}${quote}` : '';

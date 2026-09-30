@@ -60,7 +60,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
           <div className="p-3.5 sm:p-4 rounded-2xl bg-zinc-50/90 border border-zinc-200/80 space-y-2.5">
             {parsed.isRichHtml && parsed.rawRichHtml ? (
               <div
-                className="text-xs sm:text-[13px] text-zinc-800 leading-[1.8] font-normal space-y-2 [&_h2]:text-base [&_h2]:font-black [&_h2]:my-2 [&_h2]:text-zinc-950 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-1 [&_p]:my-1.5 [&_mark]:px-1 [&_mark]:py-0.5 [&_mark]:rounded-md"
+                className="text-xs sm:text-[13px] text-zinc-800 leading-[1.8] font-normal space-y-2.5 [&_h2]:text-base sm:[&_h2]:text-lg [&_h2]:font-black [&_h2]:my-2 [&_h2]:text-zinc-950 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-1 [&_p]:my-1.5 [&_mark]:px-1.5 [&_mark]:py-0.5 [&_mark]:rounded-md [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-2xl [&_img]:my-3.5 [&_img]:shadow-xs [&_img]:mx-auto [&_img]:block [&_figure]:my-4 [&_figure]:mx-auto [&_figure]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-xs [&_figcaption]:text-zinc-500 [&_figcaption]:mt-1.5 [&_figcaption]:font-medium"
                 dangerouslySetInnerHTML={{ __html: parsed.rawRichHtml }}
               />
             ) : (

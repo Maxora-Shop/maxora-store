@@ -1202,7 +1202,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
               </h3>
               {parsedDescription.isRichHtml && parsedDescription.rawRichHtml ? (
                 <div
-                  className="product-rich-description text-zinc-800 text-xs sm:text-sm leading-[1.8] space-y-3 font-normal [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-black [&_h2]:my-3 [&_h2]:text-zinc-950 [&_h3]:text-sm sm:[&_h3]:text-base [&_h3]:font-black [&_h3]:my-2.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2.5 [&_li]:my-1 [&_p]:my-2 [&_mark]:px-1.5 [&_mark]:py-0.5 [&_mark]:rounded-md"
+                  className="product-rich-description text-zinc-800 text-xs sm:text-sm leading-[1.8] space-y-3 font-normal [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-black [&_h2]:my-3 [&_h2]:text-zinc-950 [&_h3]:text-sm sm:[&_h3]:text-base [&_h3]:font-black [&_h3]:my-2.5 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2.5 [&_li]:my-1 [&_p]:my-2 [&_mark]:px-1.5 [&_mark]:py-0.5 [&_mark]:rounded-md [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-2xl [&_img]:my-4 [&_img]:shadow-xs [&_img]:mx-auto [&_img]:block [&_figure]:my-5 [&_figure]:mx-auto [&_figure]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-xs [&_figcaption]:text-zinc-500 [&_figcaption]:mt-2 [&_figcaption]:font-medium"
                   dangerouslySetInnerHTML={{ __html: parsedDescription.rawRichHtml }}
                 />
               ) : parsedDescription.overviewParagraphs.length > 0 ? (
