@@ -31,6 +31,7 @@ interface AdminCategoriesProps {
   products?: Product[];
   onUpdated?: () => void;
   onSelectProduct?: (product: Product) => void;
+  initialTab?: TabType;
 }
 
 type TabType = 'tree' | 'categories' | 'subcategories' | 'product_types' | 'child_categories';
@@ -48,8 +49,15 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   products = [],
   onUpdated,
   onSelectProduct,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('tree');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'tree');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Unified 4-tier taxonomy state from TaxonomyContext
   const {

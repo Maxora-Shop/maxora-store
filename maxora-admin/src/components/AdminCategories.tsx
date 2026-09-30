@@ -31,6 +31,7 @@ interface AdminCategoriesProps {
   products?: Product[];
   onUpdated?: () => void;
   onSelectProduct?: (product: Product) => void;
+  initialTab?: TabType;
 }
 
 type TabType = 'tree' | 'categories' | 'subcategories' | 'product_types' | 'child_categories';
@@ -48,8 +49,15 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   products = [],
   onUpdated,
   onSelectProduct,
+  initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('tree');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'tree');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Unified 4-tier taxonomy state from TaxonomyContext
   const {
@@ -59,6 +67,14 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
     childCategories,
     taxonomyTree: taxonomy,
     refreshTaxonomy,
+    saveCategory: taxonomySaveCategory,
+    deleteCategory: taxonomyDeleteCategory,
+    saveSubCategory: taxonomySaveSubCategory,
+    deleteSubCategory: taxonomyDeleteSubCategory,
+    saveProductType: taxonomySaveProductType,
+    deleteProductType: taxonomyDeleteProductType,
+    saveChildCategory: taxonomySaveChildCategory,
+    deleteChildCategory: taxonomyDeleteChildCategory,
   } = useTaxonomy();
 
   const [loading, setLoading] = useState(false);
@@ -211,9 +227,8 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   const handleToggleCategoryStatus = async (cat: Category) => {
     try {
       const newActive = (cat.active === 0 || cat.active === false) ? 1 : 0;
-      await storeService.saveCategory({ ...cat, active: newActive }, password);
+      await taxonomySaveCategory({ ...cat, active: newActive }, password);
       showToast(`Category "${cat.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to update category status', 'error');
@@ -223,9 +238,8 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   const handleToggleSubStatus = async (sub: SubCategory) => {
     try {
       const newActive = (sub.active === 0 || sub.active === false) ? 1 : 0;
-      await storeService.saveSubCategory({ ...sub, active: newActive }, password);
+      await taxonomySaveSubCategory({ ...sub, active: newActive }, password);
       showToast(`Subcategory "${sub.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to update subcategory status', 'error');
@@ -235,9 +249,8 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   const handleToggleTypeStatus = async (type: ProductType) => {
     try {
       const newActive = (type.active === 0 || type.active === false) ? 1 : 0;
-      await storeService.saveProductType({ ...type, active: newActive }, password);
+      await taxonomySaveProductType({ ...type, active: newActive }, password);
       showToast(`Product Type "${type.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to update product type status', 'error');
@@ -247,9 +260,8 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
   const handleToggleChildStatus = async (child: ChildCategory) => {
     try {
       const newActive = (child.active === 0 || child.active === false) ? 1 : 0;
-      await storeService.saveChildCategory({ ...child, active: newActive }, password);
+      await taxonomySaveChildCategory({ ...child, active: newActive }, password);
       showToast(`Child Category "${child.name}" is now ${newActive ? 'Active' : 'Hidden'}!`, 'success');
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to update child category status', 'error');
@@ -283,11 +295,10 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         image_url: editingCategory.image_url?.trim() || '',
       };
 
-      await storeService.saveCategory(catToSave, password);
+      await taxonomySaveCategory(catToSave, password);
       showToast('Category saved successfully!', 'success');
       setIsCategoryModalOpen(false);
       setEditingCategory(null);
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to save category', 'error');
@@ -350,11 +361,10 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         active: editingSub.active !== 0 && editingSub.active !== false ? 1 : 0,
       };
 
-      await storeService.saveSubCategory(subToSave, password);
+      await taxonomySaveSubCategory(subToSave, password);
       showToast('Subcategory saved successfully!', 'success');
       setIsSubModalOpen(false);
       setEditingSub(null);
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to save subcategory', 'error');
@@ -429,11 +439,10 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         active: editingType.active !== 0 && editingType.active !== false ? 1 : 0,
       };
 
-      await storeService.saveProductType(typeToSave, password);
+      await taxonomySaveProductType(typeToSave, password);
       showToast('Product Type saved successfully!', 'success');
       setIsTypeModalOpen(false);
       setEditingType(null);
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to save product type', 'error');
@@ -536,11 +545,10 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         active: editingChild.active !== 0 && editingChild.active !== false ? 1 : 0,
       };
 
-      await storeService.saveChildCategory(childToSave, password);
+      await taxonomySaveChildCategory(childToSave, password);
       showToast('Child Category saved successfully!', 'success');
       setIsChildModalOpen(false);
       setEditingChild(null);
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to save child category', 'error');
@@ -601,18 +609,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
 
     try {
       if (deleteTarget.tier === 'category') {
-        await storeService.deleteCategory(deleteTarget.id, password);
+        await taxonomyDeleteCategory(deleteTarget.id, password);
       } else if (deleteTarget.tier === 'subcategory') {
-        await storeService.deleteSubCategory(deleteTarget.id, password);
+        await taxonomyDeleteSubCategory(deleteTarget.id, password);
       } else if (deleteTarget.tier === 'product_type') {
-        await storeService.deleteProductType(deleteTarget.id, password);
+        await taxonomyDeleteProductType(deleteTarget.id, password);
       } else if (deleteTarget.tier === 'child_category') {
-        await storeService.deleteChildCategory(deleteTarget.id, password);
+        await taxonomyDeleteChildCategory(deleteTarget.id, password);
       }
 
       showToast(`Deleted ${deleteTarget.name} permanently`, 'success');
       setDeleteTarget(null);
-      await loadAllTaxonomy();
       if (onUpdated) onUpdated();
     } catch (err: any) {
       showToast(err.message || 'Failed to delete item', 'error');

@@ -58,12 +58,19 @@ import {
   Film,
   Mail,
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  Boxes,
+  PlusCircle,
   CheckCircle2,
   Headphones,
   Zap,
   Smartphone,
   Activity,
   Radio,
+  Menu,
+  SlidersHorizontal,
+  Shapes,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -168,6 +175,101 @@ const compressAndReadImage = (file: File): Promise<string> => {
   });
 };
 
+export type AdminTab =
+  | 'overview'
+  | 'products'
+  | 'categories'
+  | 'subcategories'
+  | 'product_types'
+  | 'brands'
+  | 'banners'
+  | 'ai-assistant'
+  | 'orders'
+  | 'customers'
+  | 'settings';
+
+export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boolean } => {
+  if (typeof window === 'undefined') return { tab: 'overview' };
+  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+  const searchParams = new URLSearchParams(window.location.search);
+  const hash = window.location.hash.toLowerCase().replace(/^#/, '');
+
+  if (pathname === '/admin/products/new') return { tab: 'products', openNewProduct: true };
+  if (pathname === '/admin/products/inventory' || pathname === '/admin/products') return { tab: 'products' };
+  if (pathname === '/admin/products/brands' || pathname === '/admin/brands') return { tab: 'brands' };
+  if (pathname === '/admin/products/categories' || pathname === '/admin/categories') return { tab: 'categories' };
+  if (pathname === '/admin/products/subcategories' || pathname === '/admin/subcategories') return { tab: 'subcategories' };
+  if (
+    pathname === '/admin/products/types' ||
+    pathname === '/admin/product_types' ||
+    pathname === '/admin/product-types' ||
+    pathname === '/admin/types'
+  ) return { tab: 'product_types' };
+  if (pathname === '/admin/banners') return { tab: 'banners' };
+  if (pathname === '/admin/orders') return { tab: 'orders' };
+  if (pathname === '/admin/customers') return { tab: 'customers' };
+  if (pathname === '/admin/ai-assistant') return { tab: 'ai-assistant' };
+  if (pathname === '/admin/settings') return { tab: 'settings' };
+
+  // Query parameter support
+  const tabQuery = searchParams.get('tab')?.toLowerCase();
+  if (tabQuery === 'inventory' || tabQuery === 'products') return { tab: 'products' };
+  if (tabQuery === 'new-product' || tabQuery === 'new') return { tab: 'products', openNewProduct: true };
+  if (tabQuery === 'brands') return { tab: 'brands' };
+  if (tabQuery === 'categories') return { tab: 'categories' };
+  if (tabQuery === 'subcategories') return { tab: 'subcategories' };
+  if (tabQuery === 'product_types' || tabQuery === 'product-types' || tabQuery === 'types') return { tab: 'product_types' };
+  if (tabQuery === 'banners') return { tab: 'banners' };
+  if (tabQuery === 'orders') return { tab: 'orders' };
+  if (tabQuery === 'customers') return { tab: 'customers' };
+  if (tabQuery === 'ai-assistant') return { tab: 'ai-assistant' };
+  if (tabQuery === 'settings') return { tab: 'settings' };
+
+  // Hash support
+  if (hash === 'products' || hash === 'inventory') return { tab: 'products' };
+  if (hash === 'new-product' || hash === 'new') return { tab: 'products', openNewProduct: true };
+  if (hash === 'brands') return { tab: 'brands' };
+  if (hash === 'categories') return { tab: 'categories' };
+  if (hash === 'subcategories') return { tab: 'subcategories' };
+  if (hash === 'product_types' || hash === 'types') return { tab: 'product_types' };
+  if (hash === 'banners') return { tab: 'banners' };
+  if (hash === 'orders') return { tab: 'orders' };
+  if (hash === 'customers') return { tab: 'customers' };
+  if (hash === 'ai-assistant') return { tab: 'ai-assistant' };
+  if (hash === 'settings') return { tab: 'settings' };
+
+  return { tab: 'overview' };
+};
+
+export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string => {
+  if (subAction === 'new') return '/admin/products/new';
+  switch (tab) {
+    case 'products':
+      return '/admin/products/inventory';
+    case 'brands':
+      return '/admin/products/brands';
+    case 'categories':
+      return '/admin/products/categories';
+    case 'subcategories':
+      return '/admin/products/subcategories';
+    case 'product_types':
+      return '/admin/products/types';
+    case 'banners':
+      return '/admin/banners';
+    case 'orders':
+      return '/admin/orders';
+    case 'customers':
+      return '/admin/customers';
+    case 'ai-assistant':
+      return '/admin/ai-assistant';
+    case 'settings':
+      return '/admin/settings';
+    case 'overview':
+    default:
+      return '/admin';
+  }
+};
+
 interface AdminDashboardProps {
   onBackToStore: () => void;
   globalSettings: StoreSettings;
@@ -226,7 +328,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [otpTimerSeconds, setOtpTimerSeconds] = useState(300);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<AdminTab>(() => getAdminTabFromLocation().tab);
+  const [isProductsMenuExpanded, setIsProductsMenuExpanded] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const initial = getAdminTabFromLocation();
+      if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(initial.tab)) {
+        return true;
+      }
+    }
+    return true;
+  });
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -273,6 +385,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [productCategoryFilter, setProductCategoryFilter] = useState('');
   const [productBrandFilter, setProductBrandFilter] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState<string>('all');
+  const [productStockFilter, setProductStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all');
   const [isHierarchyNavOpen, setIsHierarchyNavOpen] = useState(false);
   const [currentTaxonomyFilter, setCurrentTaxonomyFilter] = useState<{
     category?: string;
@@ -1258,7 +1371,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadCategories();
       loadBrands();
     }
-    if (tab === 'categories') {
+    if (tab === 'categories' || tab === 'subcategories' || tab === 'product_types') {
       loadCategories();
       loadProducts(currentPassword);
     }
@@ -1282,10 +1395,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (
+    tab: AdminTab,
+    subAction?: string
+  ) => {
     setCurrentTab(tab);
+    if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(tab)) {
+      setIsProductsMenuExpanded(true);
+    }
+    setIsMobileSidebarOpen(false);
+
+    if (typeof window !== 'undefined') {
+      const targetRoute = getRouteForAdminTab(tab, subAction);
+      if (window.location.pathname !== targetRoute) {
+        window.history.pushState({ tab, subAction }, '', targetRoute);
+      }
+    }
     loadTabData(tab as any);
   };
+
+  const handleOpenAddProduct = () => {
+    setEditingProduct({
+      id: '',
+      name: '',
+      category: dbCategories[0]?.name || 'Smart Gadgets',
+      category_id: dbCategories[0]?.id || '',
+      category_slug: dbCategories[0]?.slug || '',
+      sub_category: '',
+      subcategory_id: '',
+      subcategory_slug: '',
+      child_category: '',
+      childcategory_id: '',
+      childcategory_slug: '',
+      product_type: availableProductTypes[0] || 'Standard Product',
+      sku: '',
+      buying_price: 0,
+      selling_price: 0,
+      discount: 0,
+      stock: 10,
+      sold_count: 0,
+      badge: 'NEW',
+      image_url: '',
+      images: [],
+      colors: [],
+      product_link: '',
+      description: '',
+      featured: 0,
+      active: 1,
+      meta_title: '',
+      meta_description: '',
+      meta_keywords: '',
+      slug: '',
+      brand: dbBrands[0]?.name || 'Maxora',
+      og_image: '',
+    });
+    setProductModalTab('general');
+    setIsProductModalOpen(true);
+    if (typeof window !== 'undefined' && window.location.pathname !== '/admin/products/new') {
+      window.history.pushState({ tab: 'products', subAction: 'new' }, '', '/admin/products/new');
+    }
+  };
+
+  const handleCloseProductModal = () => {
+    setIsProductModalOpen(false);
+    setShowAddCategoryInput(false);
+    setShowAddSubCategoryInput(false);
+    setShowAddChildCategoryInput(false);
+    setShowAddTypeInput(false);
+    if (typeof window !== 'undefined' && window.location.pathname === '/admin/products/new') {
+      window.history.replaceState({ tab: 'products' }, '', '/admin/products/inventory');
+    }
+  };
+
+  // Synchronize browser URL, back/forward history & initial route
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Check if initial route demands opening Add Product modal
+    const loc = getAdminTabFromLocation();
+    if (loc.openNewProduct) {
+      handleOpenAddProduct();
+    }
+
+    const handlePopState = () => {
+      const currentLoc = getAdminTabFromLocation();
+      setCurrentTab(currentLoc.tab);
+      if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentLoc.tab)) {
+        setIsProductsMenuExpanded(true);
+      }
+      if (currentLoc.openNewProduct) {
+        handleOpenAddProduct();
+      } else {
+        setIsProductModalOpen(false);
+      }
+      loadTabData(currentLoc.tab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isAuthenticated]);
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setStatusMessage({ text, type });
@@ -1938,6 +2146,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       (productStatusFilter === 'active' && p.active !== 0) ||
       (productStatusFilter === 'hidden' && p.active === 0);
 
+    const matchesStock = (() => {
+      if (productStockFilter === 'all') return true;
+      const qty = Number(p.stock ?? 0);
+      if (productStockFilter === 'in_stock') return qty > 5;
+      if (productStockFilter === 'low_stock') return qty > 0 && qty <= 5;
+      if (productStockFilter === 'out_of_stock') return qty <= 0;
+      return true;
+    })();
+
     const matchesTaxonomy = (() => {
       if (currentTaxonomyFilter.category) {
         const catMatch =
@@ -1966,7 +2183,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return true;
     })();
 
-    return matchesSearch && matchesCategory && matchesBrand && matchesProductType && matchesStatus && matchesTaxonomy;
+    return (
+      matchesSearch &&
+      matchesCategory &&
+      matchesBrand &&
+      matchesProductType &&
+      matchesStatus &&
+      matchesStock &&
+      matchesTaxonomy
+    );
   });
 
   const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
@@ -2268,15 +2493,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Responsive Mobile Topbar Header (< md) */}
+      <div className="md:hidden bg-zinc-950 border-b border-zinc-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {settingsForm.logo_url ? (
+            <div className="w-7 h-7 rounded-lg overflow-hidden bg-white p-0.5 flex items-center justify-center shrink-0">
+              <img
+                src={settingsForm.logo_url}
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center shrink-0">
+              {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <span className="text-white font-bold text-sm truncate block leading-tight">
+              {settingsForm.store_name || "MAXORA"}
+            </span>
+            <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider block">
+              Admin Panel
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-lg flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            aria-label="Toggle navigation menu"
+          >
+            {isMobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Drawer Backdrop */}
+      {isMobileSidebarOpen && (
+        <div
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-zinc-950 text-zinc-400 p-4 sm:p-6 flex flex-col justify-between shrink-0 border-r border-zinc-800">
+      <aside
+        className={`${
+          isMobileSidebarOpen
+            ? 'fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] flex flex-col shadow-2xl'
+            : 'hidden md:flex md:w-64 md:flex-col'
+        } bg-zinc-950 text-zinc-400 p-4 sm:p-6 justify-between shrink-0 border-r border-zinc-800 transition-all duration-200 overflow-y-auto`}
+      >
         <div className="space-y-6">
           {/* Logo & Store Info */}
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
             <div className="min-w-0 flex-1 mr-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {settingsForm.logo_url ? (
-                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-white p-0.5 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl overflow-hidden bg-white p-0.5 flex items-center justify-center shrink-0 shadow-xs">
                     <img
                       src={settingsForm.logo_url}
                       alt="Logo"
@@ -2284,23 +2565,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     />
                   </div>
                 ) : (
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black text-sm flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-zinc-950 font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
                     {(settingsForm.store_name?.trim() || 'M').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <h1 className="text-white font-black text-base tracking-tight truncate">
-                  {settingsForm.store_name || "MAXORA"}
-                </h1>
+                <div className="min-w-0">
+                  <h1 className="text-white font-black text-base tracking-tight truncate leading-tight">
+                    {settingsForm.store_name || "MAXORA"}
+                  </h1>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mt-0.5">
+                    Admin Control
+                  </span>
+                </div>
               </div>
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mt-0.5">
-                Admin Control
-              </span>
             </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="System Online" />
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="System Online" />
+              {isMobileSidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="md:hidden p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Real-Time Live Visitors Beacon in Sidebar */}
-          <div className="bg-zinc-900/90 border border-emerald-500/30 rounded-2xl p-3 flex items-center justify-between shadow-xs">
+          <div className="bg-zinc-900/90 border border-emerald-500/25 rounded-2xl p-3 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -2317,97 +2612,230 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-1.5">
+          <nav className="space-y-1">
+            {/* Dashboard */}
             <button
+              type="button"
               onClick={() => handleTabChange('overview')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'overview'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
-              <span>📊 Dashboard</span>
+              <span>Dashboard</span>
             </button>
 
-            <button
-              onClick={() => handleTabChange('products')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'products'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <Package className="w-4 h-4 shrink-0" />
-              <span>📦 Products</span>
-              {products.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'products' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {products.length}
-                </span>
+            {/* Expandable Products Menu */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProductsMenuExpanded((prev) => !prev);
+                  if (!['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentTab)) {
+                    handleTabChange('products');
+                  }
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                  ['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentTab)
+                    ? 'bg-zinc-900 text-emerald-400 border border-emerald-500/25 shadow-xs font-black'
+                    : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Package className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">Products</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-300">
+                    {products.length}
+                  </span>
+                  {isProductsMenuExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-emerald-400 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-zinc-400 transition-transform duration-200" />
+                  )}
+                </div>
+              </button>
+
+              {/* Submenu Items */}
+              {isProductsMenuExpanded && (
+                <div className="pl-3.5 pr-1 py-1 space-y-1 border-l-2 border-emerald-500/30 ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* 1. Inventory */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('products')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'products'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Boxes className="w-3.5 h-3.5 shrink-0" />
+                    <span>Inventory</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'products'
+                          ? 'bg-zinc-950 text-emerald-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {products.length}
+                    </span>
+                  </button>
+
+                  {/* 2. Add New Product */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('products', 'new');
+                      handleOpenAddProduct();
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border active:scale-95 ${
+                      isProductModalOpen && (!editingProduct || !editingProduct.id)
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs'
+                        : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 border-emerald-500/20'
+                    }`}
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>Add New Product</span>
+                  </button>
+
+                  {/* 3. Brands */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('brands')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'brands'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5 shrink-0" />
+                    <span>Brands</span>
+                    {dbBrands.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'brands'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbBrands.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 4. Categories */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('categories')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'categories'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <FolderTree className="w-3.5 h-3.5 shrink-0" />
+                    <span>Categories</span>
+                    {dbCategories.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'categories'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbCategories.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 5. Subcategories */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('subcategories')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'subcategories'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 shrink-0" />
+                    <span>Subcategories</span>
+                    {dbSubCategories.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'subcategories'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbSubCategories.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 6. Product Types */}
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('product_types')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'product_types'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+                    <span>Product Types</span>
+                    {availableProductTypes.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'product_types'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {availableProductTypes.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
 
+            {/* Banners & Slider */}
             <button
-              onClick={() => handleTabChange('categories')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'categories'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <FolderTree className="w-4 h-4 shrink-0" />
-              <span>🏷️ Categories</span>
-              {dbCategories.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {dbCategories.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => handleTabChange('brands')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'brands'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <Tag className="w-4 h-4 shrink-0" />
-              <span>🏷️ Brands</span>
-              {dbBrands.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'brands' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {dbBrands.length}
-                </span>
-              )}
-            </button>
-
-            <button
+              type="button"
               onClick={() => handleTabChange('banners')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'banners'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <Sliders className="w-4 h-4 shrink-0" />
-              <span>🖼️ Banners & Slider</span>
+              <span>Banners & Slider</span>
               <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'banners' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                 {settingsForm.hero_banners?.length || 3}
               </span>
             </button>
 
+            {/* Orders */}
             <button
+              type="button"
               onClick={() => handleTabChange('orders')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'orders'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <ShoppingBag className="w-4 h-4 shrink-0" />
-              <span>🛒 Orders</span>
+              <span>Orders</span>
               {totals?.pending ? (
-                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-black">
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-black animate-pulse">
                   {totals.pending} new
                 </span>
               ) : orders.length > 0 ? (
@@ -2417,16 +2845,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ) : null}
             </button>
 
+            {/* Customers */}
             <button
+              type="button"
               onClick={() => handleTabChange('customers')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'customers'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <Users className="w-4 h-4 shrink-0" />
-              <span>👥 Customers</span>
+              <span>Customers</span>
               {customers.length > 0 && (
                 <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'customers' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
                   {customers.length}
@@ -2434,31 +2864,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               )}
             </button>
 
+            {/* AI Assistant */}
             <button
+              type="button"
               onClick={() => handleTabChange('ai-assistant')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'ai-assistant'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <Bot className="w-4 h-4 shrink-0" />
-              <span>🤖 AI Assistant</span>
+              <span>AI Assistant</span>
               <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'ai-assistant' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-emerald-400'}`}>
                 Active
               </span>
             </button>
 
+            {/* Settings */}
             <button
+              type="button"
               onClick={() => handleTabChange('settings')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 currentTab === 'settings'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
             >
               <SettingsIcon className="w-4 h-4 shrink-0" />
-              <span>⚙️ Settings</span>
+              <span>Settings</span>
             </button>
           </nav>
         </div>
@@ -3243,64 +3677,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ==================================================== */}
         {currentTab === 'products' && (
           <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
-                  Products & Inventory Management
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  Manage inventory, buying costs, selling prices, discounts, SKU and SEO tags
-                </p>
+            {/* Breadcrumb & Top Bar */}
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500 mb-1">
+                <span>Products</span>
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="text-emerald-600 font-bold">Inventory</span>
               </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-black text-zinc-900 tracking-tight flex items-center gap-2.5">
+                    <span>Inventory Management</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold">
+                      {products.length} Products
+                    </span>
+                  </h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Manage stock quantities, buying costs, selling prices, discounts, SKU and categories
+                  </p>
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsManageTypesModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 font-bold text-xs sm:text-sm hover:bg-zinc-50 shadow-xs transition-all cursor-pointer"
-                  title="Manage custom product types (প্রোডাক্ট টাইপসমূহ)"
-                >
-                  <SettingsIcon className="w-4 h-4 text-zinc-600" />
-                  <span>Product Types ({availableProductTypes.length})</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingProduct({
-                      name: '',
-                      category: 'Smart Gadgets',
-                      sub_category: '',
-                      child_category: '',
-                      product_type: availableProductTypes[0] || 'Standard Product',
-                      sku: '',
-                      buying_price: 0,
-                      selling_price: 0,
-                      discount: 0,
-                      stock: 10,
-                      sold_count: 0,
-                      badge: 'NEW',
-                      image_url: '',
-                      images: [],
-                      colors: [],
-                      product_link: '',
-                      description: '',
-                      featured: 0,
-                      active: 1,
-                      meta_title: '',
-                      meta_description: '',
-                      meta_keywords: '',
-                      slug: '',
-                      brand: 'Maxora',
-                      og_image: '',
-                    });
-                    setProductModalTab('general');
-                    setIsProductModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Product</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('categories')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 font-bold text-xs hover:bg-zinc-50 shadow-xs transition-all cursor-pointer"
+                  >
+                    <FolderTree className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>Categories ({dbCategories.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('brands')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 font-bold text-xs hover:bg-zinc-50 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-zinc-500" />
+                    <span>Brands ({dbBrands.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('products', 'new');
+                      handleOpenAddProduct();
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Product</span>
+                  </button>
+                </div>
               </div>
+            </div>
+
+            {/* Quick Stock Stats Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <button
+                type="button"
+                onClick={() => setProductStockFilter('all')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  productStockFilter === 'all'
+                    ? 'bg-zinc-950 text-white border-zinc-950 shadow-md ring-2 ring-emerald-500/20'
+                    : 'bg-white hover:bg-zinc-50 border-zinc-200 text-zinc-800'
+                }`}
+              >
+                <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Total Products</div>
+                <div className="text-xl font-black mt-1">{products.length}</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductStockFilter('in_stock')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  productStockFilter === 'in_stock'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-500/20'
+                    : 'bg-white hover:bg-emerald-50/50 border-zinc-200 text-zinc-800'
+                }`}
+              >
+                <div className={`text-[11px] font-bold uppercase tracking-wider ${productStockFilter === 'in_stock' ? 'text-white' : 'text-emerald-600'}`}>
+                  In Stock (&gt; 5)
+                </div>
+                <div className={`text-xl font-black mt-1 ${productStockFilter === 'in_stock' ? 'text-white' : 'text-emerald-600'}`}>
+                  {products.filter((p) => Number(p.stock || 0) > 5).length}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductStockFilter('low_stock')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  productStockFilter === 'low_stock'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-md ring-2 ring-amber-500/20'
+                    : 'bg-white hover:bg-amber-50/50 border-zinc-200 text-zinc-800'
+                }`}
+              >
+                <div className={`text-[11px] font-bold uppercase tracking-wider ${productStockFilter === 'low_stock' ? 'text-white' : 'text-amber-600'}`}>
+                  Low Stock (1-5)
+                </div>
+                <div className={`text-xl font-black mt-1 ${productStockFilter === 'low_stock' ? 'text-white' : 'text-amber-600'}`}>
+                  {products.filter((p) => Number(p.stock || 0) > 0 && Number(p.stock || 0) <= 5).length}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductStockFilter('out_of_stock')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  productStockFilter === 'out_of_stock'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-500/20'
+                    : 'bg-white hover:bg-rose-50/50 border-zinc-200 text-zinc-800'
+                }`}
+              >
+                <div className={`text-[11px] font-bold uppercase tracking-wider ${productStockFilter === 'out_of_stock' ? 'text-white' : 'text-rose-600'}`}>
+                  Out of Stock (0)
+                </div>
+                <div className={`text-xl font-black mt-1 ${productStockFilter === 'out_of_stock' ? 'text-white' : 'text-rose-600'}`}>
+                  {products.filter((p) => Number(p.stock || 0) <= 0).length}
+                </div>
+              </button>
             </div>
 
             {/* Product Filters Toolbar */}
@@ -3316,7 +3806,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* 4-Tier Interactive Category Hierarchy Trigger & Panel */}
                 <div className="relative">
                   <button
@@ -3426,6 +3916,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   ))}
                 </select>
 
+                {/* Stock Status Filter */}
+                <select
+                  value={productStockFilter}
+                  onChange={(e) => setProductStockFilter(e.target.value as any)}
+                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700 font-bold"
+                >
+                  <option value="all">All Stock Status</option>
+                  <option value="in_stock">In Stock (&gt; 5)</option>
+                  <option value="low_stock">Low Stock (1-5)</option>
+                  <option value="out_of_stock">Out of Stock (0)</option>
+                </select>
+
+                {/* Product Active Status Filter */}
                 <select
                   value={productStatusFilter}
                   onChange={(e) => setProductStatusFilter(e.target.value)}
@@ -3437,6 +3940,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </select>
 
                 <button
+                  type="button"
                   onClick={() => loadProducts()}
                   className="p-2 border border-zinc-300 rounded-xl bg-zinc-50 hover:bg-zinc-100 text-zinc-700 cursor-pointer"
                   title="Reload Products"
@@ -3447,7 +3951,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Filter Active Notice with Clear Filter button */}
-            {(productSearch || productCategoryFilter || productBrandFilter || productTypeFilter || productStatusFilter !== 'all' || currentTaxonomyFilter.category || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.childCategory) && (
+            {(productSearch || productCategoryFilter || productBrandFilter || productTypeFilter || productStatusFilter !== 'all' || productStockFilter !== 'all' || currentTaxonomyFilter.category || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.childCategory) && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-amber-900 animate-fade-in">
                 <div className="flex flex-wrap items-center gap-2 font-medium">
                   <span className="font-bold">ফিল্টার সক্রিয়:</span>
@@ -3467,6 +3971,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ব্র্যান্ড: {productBrandFilter}
                     </span>
                   )}
+                  {productStockFilter !== 'all' && (
+                    <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
+                      স্টক: {productStockFilter === 'in_stock' ? 'ইন স্টক (> 5)' : productStockFilter === 'low_stock' ? 'কম স্টক (১-৫)' : 'স্টক শেষ (০)'}
+                    </span>
+                  )}
                   {productSearch && (
                     <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
                       অনুসন্ধান: "{productSearch}"
@@ -3481,6 +3990,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     setProductBrandFilter('');
                     setProductTypeFilter('');
                     setProductStatusFilter('all');
+                    setProductStockFilter('all');
                     setCurrentTaxonomyFilter({});
                   }}
                   className="font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer bg-white px-3 py-1 rounded-lg border border-amber-300 shadow-xs hover:bg-emerald-50 transition-colors"
@@ -3848,13 +4358,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ====================================================
-            CATEGORIES & SUBCATEGORIES MANAGEMENT
+            CATEGORIES MANAGEMENT
         ==================================================== */}
         {currentTab === 'categories' && (
           <div className="space-y-6 animate-fade-in">
             <AdminCategories
               password={password}
               products={products}
+              initialTab="categories"
+              onUpdated={() => {
+                loadCategories();
+                loadProducts();
+                onSettingsUpdated();
+              }}
+              onSelectProduct={(prod) => {
+                const validSlug = prod.slug?.trim() || (prod.name ? generateSlug(prod.name) : '');
+                const currentLink = prod.product_link?.trim() || '';
+                const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                  ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                  : currentLink;
+
+                setEditingProduct({
+                  ...prod,
+                  sub_category: prod.sub_category || '',
+                  child_category: prod.child_category || '',
+                  product_type: prod.product_type || availableProductTypes[0] || 'Standard Product',
+                  product_link: initialLink,
+                  images: prod.images || [],
+                  colors: prod.colors || [],
+                  meta_title: prod.meta_title || '',
+                  meta_description: prod.meta_description || '',
+                  meta_keywords: prod.meta_keywords || '',
+                  slug: validSlug,
+                  brand: prod.brand || 'Maxora',
+                  og_image: prod.og_image || prod.image_url || '',
+                });
+                setProductModalTab('general');
+                setIsProductModalOpen(true);
+              }}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
+            SUBCATEGORIES MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'subcategories' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminCategories
+              password={password}
+              products={products}
+              initialTab="subcategories"
+              onUpdated={() => {
+                loadCategories();
+                loadProducts();
+                onSettingsUpdated();
+              }}
+              onSelectProduct={(prod) => {
+                const validSlug = prod.slug?.trim() || (prod.name ? generateSlug(prod.name) : '');
+                const currentLink = prod.product_link?.trim() || '';
+                const initialLink = (!currentLink || currentLink.includes('?product=') || currentLink.includes('maxora-admin'))
+                  ? (validSlug ? `${CUSTOMER_STOREFRONT_URL}/product/${validSlug}` : '')
+                  : currentLink;
+
+                setEditingProduct({
+                  ...prod,
+                  sub_category: prod.sub_category || '',
+                  child_category: prod.child_category || '',
+                  product_type: prod.product_type || availableProductTypes[0] || 'Standard Product',
+                  product_link: initialLink,
+                  images: prod.images || [],
+                  colors: prod.colors || [],
+                  meta_title: prod.meta_title || '',
+                  meta_description: prod.meta_description || '',
+                  meta_keywords: prod.meta_keywords || '',
+                  slug: validSlug,
+                  brand: prod.brand || 'Maxora',
+                  og_image: prod.og_image || prod.image_url || '',
+                });
+                setProductModalTab('general');
+                setIsProductModalOpen(true);
+              }}
+            />
+          </div>
+        )}
+
+        {/* ====================================================
+            PRODUCT TYPES MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'product_types' && (
+          <div className="space-y-6 animate-fade-in">
+            <AdminCategories
+              password={password}
+              products={products}
+              initialTab="product_types"
               onUpdated={() => {
                 loadCategories();
                 loadProducts();

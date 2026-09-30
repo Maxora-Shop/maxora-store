@@ -57,6 +57,10 @@ import {
   Music2,
   Loader2,
   Film,
+  ChevronDown,
+  ChevronRight,
+  Boxes,
+  PlusCircle,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -204,7 +208,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [otpTimerSeconds, setOtpTimerSeconds] = useState(300);
 
   // Navigation
-  const [currentTab, setCurrentTab] = useState<'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings'>('overview');
+  const [currentTab, setCurrentTab] = useState<
+    | 'overview'
+    | 'products'
+    | 'categories'
+    | 'subcategories'
+    | 'product_types'
+    | 'brands'
+    | 'banners'
+    | 'ai-assistant'
+    | 'orders'
+    | 'customers'
+    | 'settings'
+  >('overview');
+  const [isProductsMenuExpanded, setIsProductsMenuExpanded] = useState<boolean>(true);
 
   // Data States
   const [totals, setTotals] = useState<DashboardTotals | null>(null);
@@ -1086,7 +1103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       loadCategories();
       loadBrands();
     }
-    if (tab === 'categories') {
+    if (tab === 'categories' || tab === 'subcategories' || tab === 'product_types') {
       loadCategories();
       loadProducts(currentPassword);
     }
@@ -1110,9 +1127,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleTabChange = (tab: 'overview' | 'products' | 'categories' | 'brands' | 'banners' | 'ai-assistant' | 'orders' | 'customers' | 'settings') => {
+  const handleTabChange = (
+    tab:
+      | 'overview'
+      | 'products'
+      | 'categories'
+      | 'subcategories'
+      | 'product_types'
+      | 'brands'
+      | 'banners'
+      | 'ai-assistant'
+      | 'orders'
+      | 'customers'
+      | 'settings'
+  ) => {
     setCurrentTab(tab);
-    loadTabData(tab);
+    if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(tab)) {
+      setIsProductsMenuExpanded(true);
+    }
+    loadTabData(tab as any);
+  };
+
+  const handleOpenAddProduct = () => {
+    setEditingProduct({
+      id: '',
+      name: '',
+      category: dbCategories[0]?.name || 'Smart Gadgets',
+      category_id: dbCategories[0]?.id || '',
+      category_slug: dbCategories[0]?.slug || '',
+      sub_category: '',
+      subcategory_id: '',
+      subcategory_slug: '',
+      child_category: '',
+      childcategory_id: '',
+      childcategory_slug: '',
+      product_type: availableProductTypes[0] || 'Standard Product',
+      sku: '',
+      buying_price: 0,
+      selling_price: 0,
+      discount: 0,
+      stock: 10,
+      sold_count: 0,
+      badge: 'NEW',
+      image_url: '',
+      images: [],
+      colors: [],
+      product_link: '',
+      description: '',
+      featured: 0,
+      active: 1,
+      meta_title: '',
+      meta_description: '',
+      meta_keywords: '',
+      slug: '',
+      brand: dbBrands[0]?.name || 'Maxora',
+      og_image: '',
+    });
+    setProductModalTab('general');
+    setIsProductModalOpen(true);
   };
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -1981,56 +2053,172 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>📊 Dashboard</span>
             </button>
 
-            <button
-              onClick={() => handleTabChange('products')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'products'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <Package className="w-4 h-4 shrink-0" />
-              <span>📦 Products</span>
-              {products.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'products' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {products.length}
-                </span>
-              )}
-            </button>
+            {/* Expandable Products Menu */}
+            <div className="space-y-1">
+              <button
+                onClick={() => {
+                  setIsProductsMenuExpanded((prev) => !prev);
+                  if (!['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentTab)) {
+                    handleTabChange('products');
+                  }
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                  ['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentTab)
+                    ? 'bg-zinc-900 text-emerald-400 border border-emerald-500/20 shadow-xs'
+                    : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Package className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">📦 Products</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-300">
+                    {products.length}
+                  </span>
+                  {isProductsMenuExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-zinc-400 transition-transform duration-200" />
+                  )}
+                </div>
+              </button>
 
-            <button
-              onClick={() => handleTabChange('categories')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'categories'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <FolderTree className="w-4 h-4 shrink-0" />
-              <span>🏷️ Categories</span>
-              {dbCategories.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'categories' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {dbCategories.length}
-                </span>
-              )}
-            </button>
+              {/* Submenu Items */}
+              {isProductsMenuExpanded && (
+                <div className="pl-3 pr-1 py-1 space-y-1 border-l-2 border-emerald-500/30 ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* 1. Inventory */}
+                  <button
+                    onClick={() => handleTabChange('products')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'products'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Boxes className="w-3.5 h-3.5 shrink-0" />
+                    <span>Inventory</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'products'
+                          ? 'bg-zinc-950 text-emerald-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {products.length}
+                    </span>
+                  </button>
 
-            <button
-              onClick={() => handleTabChange('brands')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'brands'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <Tag className="w-4 h-4 shrink-0" />
-              <span>🏷️ Brands</span>
-              {dbBrands.length > 0 && (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'brands' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {dbBrands.length}
-                </span>
+                  {/* 2. Add New Product */}
+                  <button
+                    onClick={() => {
+                      handleTabChange('products');
+                      handleOpenAddProduct();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 border border-emerald-500/20 active:scale-95"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>Add New Product</span>
+                  </button>
+
+                  {/* 3. Brands */}
+                  <button
+                    onClick={() => handleTabChange('brands')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'brands'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5 shrink-0" />
+                    <span>Brands</span>
+                    {dbBrands.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'brands'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbBrands.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 4. Categories */}
+                  <button
+                    onClick={() => handleTabChange('categories')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'categories'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <FolderTree className="w-3.5 h-3.5 shrink-0" />
+                    <span>Categories</span>
+                    {dbCategories.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'categories'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbCategories.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 5. Subcategories */}
+                  <button
+                    onClick={() => handleTabChange('subcategories')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'subcategories'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 shrink-0" />
+                    <span>Subcategories</span>
+                    {dbSubCategories.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'subcategories'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {dbSubCategories.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 6. Product Types */}
+                  <button
+                    onClick={() => handleTabChange('product_types')}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'product_types'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Sliders className="w-3.5 h-3.5 shrink-0" />
+                    <span>Product Types</span>
+                    {availableProductTypes.length > 0 && (
+                      <span
+                        className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                          currentTab === 'product_types'
+                            ? 'bg-zinc-950 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        {availableProductTypes.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
 
             <button
               onClick={() => handleTabChange('banners')}
@@ -2599,38 +2787,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Product Types ({availableProductTypes.length})</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setEditingProduct({
-                      name: '',
-                      category: 'Smart Gadgets',
-                      sub_category: '',
-                      child_category: '',
-                      product_type: availableProductTypes[0] || 'Standard Product',
-                      sku: '',
-                      buying_price: 0,
-                      selling_price: 0,
-                      discount: 0,
-                      stock: 10,
-                      sold_count: 0,
-                      badge: 'NEW',
-                      image_url: '',
-                      images: [],
-                      colors: [],
-                      product_link: '',
-                      description: '',
-                      featured: 0,
-                      active: 1,
-                      meta_title: '',
-                      meta_description: '',
-                      meta_keywords: '',
-                      slug: '',
-                      brand: 'Maxora',
-                      og_image: '',
-                    });
-                    setProductModalTab('general');
-                    setIsProductModalOpen(true);
-                  }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer"
+                  onClick={handleOpenAddProduct}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-950 text-white font-bold text-xs sm:text-sm hover:bg-zinc-800 shadow-md transition-all cursor-pointer active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add New Product</span>
