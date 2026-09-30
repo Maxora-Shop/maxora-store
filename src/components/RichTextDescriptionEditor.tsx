@@ -193,6 +193,7 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastHtmlRef = useRef<string>(value || '');
+  const isInternalChangeRef = useRef(false);
 
   // Convert plain text with newlines to HTML if needed
   const formatInitialHtml = useCallback((raw: string) => {
@@ -206,15 +207,23 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
     return raw;
   }, []);
 
-  // Sync value from outside if changed externally
+  // Sync value from outside if changed externally (e.g. switching product or template)
   useEffect(() => {
-    if (editorRef.current && editorMode === 'visual') {
-      const currentInner = editorRef.current.innerHTML;
-      const formatted = formatInitialHtml(value || '');
-      if (formatted !== currentInner && value !== lastHtmlRef.current) {
-        editorRef.current.innerHTML = formatted;
-        lastHtmlRef.current = value;
-      }
+    if (!editorRef.current || editorMode !== 'visual') return;
+
+    // Skip DOM updates when triggered internally by user typing/formatting
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false;
+      return;
+    }
+
+    const currentInner = editorRef.current.innerHTML;
+    const formatted = formatInitialHtml(value || '');
+
+    // Only update DOM if empty or if external value genuinely differed
+    if (currentInner === '' || (value !== lastHtmlRef.current && formatted !== currentInner)) {
+      editorRef.current.innerHTML = formatted;
+      lastHtmlRef.current = value || '';
     }
   }, [value, editorMode, formatInitialHtml]);
 
@@ -223,6 +232,7 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
       lastHtmlRef.current = html;
+      isInternalChangeRef.current = true;
       onChange(html);
     }
   };
@@ -1185,17 +1195,24 @@ export const RichTextDescriptionEditor: React.FC<RichTextDescriptionEditorProps>
           </div>
         ) : (
           <div
-            ref={editorRef}
+            ref={(el) => {
+              editorRef.current = el;
+              if (el && el.innerHTML === '' && value) {
+                el.innerHTML = formatInitialHtml(value);
+                lastHtmlRef.current = value;
+              }
+            }}
             contentEditable
+            suppressContentEditableWarning
+            dir="ltr"
             onInput={handleVisualInput}
             onBlur={handleVisualInput}
             data-placeholder={placeholder}
-            dangerouslySetInnerHTML={{ __html: formatInitialHtml(value || '') }}
             style={{
               fontFamily:
                 "'Hind Siliguri', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
             }}
-            className={`w-full p-4 sm:p-5 text-xs sm:text-sm text-zinc-900 bg-white focus:outline-none overflow-y-auto leading-[1.8] resize-y ${
+            className={`w-full p-4 sm:p-5 text-xs sm:text-sm text-zinc-900 bg-white focus:outline-none overflow-y-auto leading-[1.8] resize-y empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 empty:before:pointer-events-none ${
               isFullscreen ? 'h-[calc(100vh-220px)]' : 'min-h-[320px] max-h-[640px]'
             } [&_h2]:text-lg sm:[&_h2]:text-xl [&_h2]:font-black [&_h2]:my-2.5 [&_h2]:text-zinc-950 [&_h3]:text-sm sm:[&_h3]:text-base [&_h3]:font-black [&_h3]:my-2 [&_h3]:text-zinc-900 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-1 [&_p]:my-1.5 [&_mark]:px-1.5 [&_mark]:py-0.5 [&_mark]:rounded-md [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-2xl [&_img]:my-3.5 [&_img]:shadow-xs [&_img]:mx-auto [&_img]:block [&_figure]:my-4 [&_figure]:mx-auto [&_figure]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-xs [&_figcaption]:text-zinc-500 [&_figcaption]:mt-1.5 [&_figcaption]:font-medium`}
           />
