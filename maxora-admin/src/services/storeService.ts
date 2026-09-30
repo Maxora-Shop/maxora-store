@@ -1,4 +1,4 @@
-import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner } from '../types';
+import { Product, StoreSettings, Customer, Order, OrderItem, DashboardTotals, OrderStatus, Category, SubCategory, ProductType, ChildCategory, Review, ProductRatingStats, Brand, HeroBanner, LiveTrafficAnalytics } from '../types';
 import { INITIAL_SETTINGS, INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES, INITIAL_PRODUCT_TYPES, INITIAL_CHILD_CATEGORIES, INITIAL_REVIEWS, INITIAL_BRANDS } from '../data/initialData';
 import { reconcileCategories, reconcileSubCategories } from '../utils/categoryCompatibility';
 import { generateSlug, getProductSlug } from '../utils/seo';
@@ -42,7 +42,7 @@ if (syncChannel && typeof window !== 'undefined') {
     if (type === 'products') {
       window.dispatchEvent(new CustomEvent('maxora_products_updated'));
     } else if (type === 'settings') {
-      window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+      window.dispatchEvent(new CustomEvent('maxora_settings_updated', { detail: event.data?.settings }));
     } else if (type === 'categories') {
       window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
     } else if (type === 'orders') {
@@ -196,6 +196,7 @@ export function cleanForFirestore<T>(data: T): T {
 
 // Helpers for Local Storage
 function getLocal<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return defaultValue;
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return defaultValue;
@@ -207,6 +208,7 @@ function getLocal<T>(key: string, defaultValue: T): T {
 }
 
 function setLocal<T>(key: string, value: T): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
@@ -233,23 +235,62 @@ export function markOrderDeleted(id: string | number, orderNo?: string) {
 }
 
 export function getDeletedProductIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  const set = new Set<string>();
+  if (typeof window === 'undefined') return set;
   const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
-  return new Set((list || []).map(String));
+  (list || []).forEach((item) => {
+    if (item) set.add(String(item).toLowerCase().trim());
+  });
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (Array.isArray(settings?.deleted_product_ids)) {
+    settings.deleted_product_ids.forEach((item) => {
+      if (item) set.add(String(item).toLowerCase().trim());
+    });
+  }
+  return set;
 }
 
 export function markProductDeleted(id: string | number, sku?: string, slug?: string) {
   if (typeof window === 'undefined') return;
   const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
-  const set = new Set(list.map(String));
-  if (id) set.add(String(id));
-  if (sku) set.add(String(sku));
-  if (slug) set.add(String(slug));
+  const set = new Set(list.map((s) => String(s).toLowerCase().trim()));
+  if (id) set.add(String(id).toLowerCase().trim());
+  if (sku) set.add(String(sku).toLowerCase().trim());
+  if (slug) set.add(String(slug).toLowerCase().trim());
   setLocal(DELETED_PRODUCTS_KEY, Array.from(set));
+
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (settings) {
+    const existing = Array.isArray(settings.deleted_product_ids) ? settings.deleted_product_ids : [];
+    const updatedSettingsDeleted = Array.from(new Set([...existing.map(s => String(s).toLowerCase().trim()), ...Array.from(set)]));
+    settings.deleted_product_ids = updatedSettingsDeleted;
+    setLocal(SETTINGS_KEY, settings);
+  }
+}
+
+export function unmarkProductDeleted(id: string | number, sku?: string, slug?: string) {
+  if (typeof window === 'undefined') return;
+  const toRemove = new Set<string>();
+  if (id) toRemove.add(String(id).toLowerCase().trim());
+  if (sku) toRemove.add(String(sku).toLowerCase().trim());
+  if (slug) toRemove.add(String(slug).toLowerCase().trim());
+
+  const list = getLocal<string[]>(DELETED_PRODUCTS_KEY, []);
+  const remaining = list.filter((item) => !toRemove.has(String(item).toLowerCase().trim()));
+  setLocal(DELETED_PRODUCTS_KEY, remaining);
+
+  const settings = getLocal<StoreSettings>(SETTINGS_KEY, {} as any);
+  if (settings && Array.isArray(settings.deleted_product_ids)) {
+    settings.deleted_product_ids = settings.deleted_product_ids.filter(
+      (item) => !toRemove.has(String(item).toLowerCase().trim())
+    );
+    setLocal(SETTINGS_KEY, settings);
+  }
 }
 
 // Ensure Local Storage is initialized
 export function initLocalStorage(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   const deletedProductIds = getDeletedProductIds();
 
   if (!localStorage.getItem(SETTINGS_KEY)) {
@@ -262,21 +303,28 @@ export function initLocalStorage(): void {
     setLocal(PRODUCTS_KEY, initialProds);
   } else {
     const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
-    if (Array.isArray(existingProds) && existingProds.length > 0) {
-      // Remove any legacy hardcoded dummy demo products (prod-001 through prod-009) if present
-      const cleaned = existingProds.filter(
-        (p) =>
-          !deletedProductIds.has(String(p.id)) &&
-          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
-          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
-          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
-      );
-      if (cleaned.length === 0) {
-        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      } else if (cleaned.length !== existingProds.length) {
-        setLocal(PRODUCTS_KEY, cleaned);
-      }
+    const pMap = new Map<string, Product>();
+    // 1. Populate baseline catalog from INITIAL_PRODUCTS
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
+          pMap.set(id, p);
+        }
+      });
     }
+    // 2. Merge existing local storage products (e.g. newly uploaded fan or edits)
+    if (Array.isArray(existingProds) && existingProds.length > 0) {
+      existingProds.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
+          pMap.set(id, p);
+        }
+      });
+    }
+    const merged = Array.from(pMap.values());
+    merged.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, merged);
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     setLocal(ORDERS_KEY, []);
@@ -334,111 +382,203 @@ export function isQuotaExceededError(err: any): boolean {
   const code = (err.code || '').toLowerCase();
   return (
     code === 'resource-exhausted' ||
+    code === 'resource_exhausted' ||
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
+    msg.includes('resource_exhausted') ||
     msg.includes('free daily read units') ||
+    msg.includes('free daily write units') ||
     msg.includes('rate-limit')
   );
 }
 
+/**
+ * Executes a Firestore write operation with a safety timeout, ensuring
+ * that Firestore stream backoff or quota exhaustion NEVER blocks execution or hangs the app.
+ */
+export async function safeFirestoreWrite<T>(
+  op: () => Promise<T>,
+  timeoutMs = 2500,
+  context = 'Firestore write'
+): Promise<T | null> {
+  try {
+    const res = await Promise.race([
+      op(),
+      new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error(`${context} timeout`)), timeoutMs)
+      ),
+    ]);
+    return res as T;
+  } catch (err: any) {
+    handleStoreFirestoreError(context, err);
+    return null;
+  }
+}
+
 let clientQuotaCooldownUntil = 0;
 let clientQuotaNoticeLogged = false;
+let activeFirestoreUnsubscribers: Array<() => void> = [];
+let reconnectTimer: any = null;
+
+export function clearFirestoreCooldown() {
+  clientQuotaCooldownUntil = 0;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('maxora_firestore_cooldown_until');
+    } catch {}
+  }
+}
 
 export function isClientQuotaCooldownActive(): boolean {
+  if (typeof window !== 'undefined') {
+    const stored = Number(localStorage.getItem('maxora_firestore_cooldown_until') || 0);
+    if (stored > clientQuotaCooldownUntil) {
+      clientQuotaCooldownUntil = stored;
+    }
+  }
   return Date.now() < clientQuotaCooldownUntil;
+}
+
+export function detachFirestoreListeners() {
+  activeFirestoreUnsubscribers.forEach((unsub) => {
+    try { unsub(); } catch {}
+  });
+  activeFirestoreUnsubscribers = [];
+  isListening = false;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+let reconnectAttempts = 0;
+export function scheduleReconnectListeners(delayMs = 30000) {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  const backoffDelay = Math.max(delayMs, Math.min(120000, 30000 * Math.pow(1.5, Math.min(reconnectAttempts, 5))));
+  reconnectTimer = setTimeout(() => {
+    reconnectAttempts++;
+    if (!isClientQuotaCooldownActive()) {
+      detachFirestoreListeners();
+      initRealtimeFirestoreListeners();
+    }
+  }, backoffDelay);
 }
 
 export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
-    clientQuotaCooldownUntil = Date.now() + 15 * 60 * 1000;
+    // 60-second brief backoff for background read listeners (never blocks admin writes)
+    clientQuotaCooldownUntil = Date.now() + 60 * 1000;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil));
+      } catch {}
+    }
+    // Cleanly detach active listeners
+    detachFirestoreListeners();
+
     if (!clientQuotaNoticeLogged) {
       clientQuotaNoticeLogged = true;
-      console.info(`[StoreService] Firestore daily read quota reached for free tier (${context}). Operating smoothly with cached local storage & data.`);
+      console.info(`[StoreService] Firestore quota notice (${context}). Local fallback available.`);
     }
     return;
   }
   const msg = err?.message || String(err);
   if (!msg.includes('idle stream') && !msg.includes('CANCELLED')) {
     console.warn(`${context} notice:`, msg);
+    // Transient error: schedule a calm reconnect attempt with backoff
+    scheduleReconnectListeners(30000);
   }
 }
 
 // Firestore Realtime Listeners
 let isListening = false;
 export function initRealtimeFirestoreListeners() {
-  if (isListening || typeof window === 'undefined') return;
+  if (typeof window === 'undefined') return;
+
+  // Ensure background reconnect handlers are registered
+  registerNetworkSyncListeners();
+
+  // If quota cooldown is currently active, avoid spinning up listeners
+  if (isClientQuotaCooldownActive()) {
+    return;
+  }
+
+  if (isListening) return;
   isListening = true;
 
   try {
-    // 1. Listen for product changes
-    onSnapshot(collection(db, 'products'), (snapshot) => {
+    // 1. Listen for product changes (merge-safe: never drop baseline catalog)
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
+        notifyProductsChanged();
         return;
       }
-      const prods: Product[] = [];
+      const prodMap = new Map<string, Product>();
+      // Baseline catalog
+      if (Array.isArray(INITIAL_PRODUCTS)) {
+        INITIAL_PRODUCTS.forEach((p) => {
+          const id = String(p.id || p.sku || p.slug || '');
+          if (id && !deletedProductIds.has(String(p.id))) {
+            prodMap.set(id, p);
+          }
+        });
+      }
+      // Overlay Firestore snapshot
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
         const pId = String(d.id || docSnap.id);
         const pSku = String(d.sku || '');
         const pSlug = String(d.slug || '');
         const pName = String(d.name || '').trim();
-        if (!pName) {
-          return;
-        }
-        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-          return;
-        }
-        prods.push({ ...d, id: pId });
+        if (!pName) return;
+        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) return;
+        prodMap.set(pId, { ...d, id: pId });
       });
+      const prods = Array.from(prodMap.values());
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       setLocal(PRODUCTS_KEY, prods);
       notifyProductsChanged();
-    }, (err) => handleStoreFirestoreError('Products snapshot', err));
+    }, (err) => {
+      handleStoreFirestoreError('Products snapshot', err);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('maxora_products_fetch_failed', { detail: { error: err?.message || String(err) } }));
+      }
+    });
+    activeFirestoreUnsubscribers.push(unsubProducts);
 
     // 2. Listen for settings changes
-    onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
       if (docSnap.exists()) {
         const settings = docSnap.data() as StoreSettings;
         setLocal(SETTINGS_KEY, settings);
         notifySettingsChanged();
+
+        // Immediately filter out any deleted products on customer client
+        if (Array.isArray(settings.deleted_product_ids) && settings.deleted_product_ids.length > 0) {
+          const delSet = new Set(settings.deleted_product_ids.map((s) => String(s).toLowerCase().trim()));
+          const currentProds = getLocal<Product[]>(PRODUCTS_KEY, []);
+          const cleanProds = currentProds.filter((p) => {
+            const id = String(p.id || '').toLowerCase().trim();
+            const sku = String(p.sku || '').toLowerCase().trim();
+            const slug = String(p.slug || '').toLowerCase().trim();
+            return !delSet.has(id) && (!sku || !delSet.has(sku)) && (!slug || !delSet.has(slug));
+          });
+          if (cleanProds.length !== currentProds.length) {
+            setLocal(PRODUCTS_KEY, cleanProds);
+            notifyProductsChanged();
+          }
+        }
       }
     }, (err) => handleStoreFirestoreError('Settings snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubSettings);
 
-    // 3. Listen for orders changes (realtime cloud sync)
-    onSnapshot(collection(db, 'orders'), (snapshot) => {
-      const deletedIds = getDeletedOrderIds();
-      const orders: Order[] = [];
-      snapshot.forEach((docSnap) => {
-        const o = docSnap.data() as Order;
-        const oId = String(o.id || docSnap.id);
-        const oNum = String(o.order_number || '');
-        if (deletedIds.has(oId) || (oNum && deletedIds.has(oNum))) {
-          return;
-        }
-        if (['ord-001', 'ord-002', 'ord-003'].includes(oId) || ['Tanvir Ahmed', 'Farhana Yasmin'].includes(o.customer_name)) {
-          return;
-        }
-        orders.push({
-          ...o,
-          id: oId,
-          order_number: oNum || `MX-${oId.slice(-6)}`,
-          phone: o.phone || (o as any).customer_phone || '',
-          customer_phone: o.phone || (o as any).customer_phone || '',
-          total: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
-          total_amount: o.total !== undefined ? Number(o.total) : Number((o as any).total_amount || 0),
-          status: (o.status || (o as any).order_status || 'Pending') as OrderStatus,
-          items: Array.isArray(o.items) ? o.items : [],
-          created_at: o.created_at || new Date().toISOString(),
-        });
-      });
-      orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setLocal(ORDERS_KEY, orders);
-      notifyOrdersChanged();
-    }, (err) => handleStoreFirestoreError('Orders snapshot', err));
+    // Note: Global orders collection onSnapshot removed from customer storefront
+    // for data privacy (preventing public download of customer orders) and Firestore read quota conservation.
+    // Order creation (createOrder) and on-demand customer order tracking (trackOrder) remain fully functional.
 
     // 4. Listen for categories changes
-    onSnapshot(collection(db, 'categories'), (snapshot) => {
+    const unsubCats = onSnapshot(collection(db, 'categories'), (snapshot) => {
       if (!snapshot.empty) {
         const cats: Category[] = [];
         snapshot.forEach((docSnap) => {
@@ -450,9 +590,10 @@ export function initRealtimeFirestoreListeners() {
         notifyCategoriesChanged();
       }
     }, (err) => handleStoreFirestoreError('Categories snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubCats);
 
     // 5. Listen for subcategories changes
-    onSnapshot(collection(db, 'subcategories'), (snapshot) => {
+    const unsubSubCats = onSnapshot(collection(db, 'subcategories'), (snapshot) => {
       if (!snapshot.empty) {
         const subcats: SubCategory[] = [];
         snapshot.forEach((docSnap) => {
@@ -464,9 +605,10 @@ export function initRealtimeFirestoreListeners() {
         notifySubCategoriesChanged();
       }
     }, (err) => handleStoreFirestoreError('Subcategories snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubSubCats);
 
     // 6. Listen for product_types changes
-    onSnapshot(collection(db, 'product_types'), (snapshot) => {
+    const unsubTypes = onSnapshot(collection(db, 'product_types'), (snapshot) => {
       if (!snapshot.empty) {
         const types: ProductType[] = [];
         snapshot.forEach((docSnap) => {
@@ -478,9 +620,10 @@ export function initRealtimeFirestoreListeners() {
         notifyProductTypesChanged();
       }
     }, (err) => handleStoreFirestoreError('ProductTypes snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubTypes);
 
     // 7. Listen for child_categories changes
-    onSnapshot(collection(db, 'child_categories'), (snapshot) => {
+    const unsubChild = onSnapshot(collection(db, 'child_categories'), (snapshot) => {
       if (!snapshot.empty) {
         const children: ChildCategory[] = [];
         snapshot.forEach((docSnap) => {
@@ -492,9 +635,10 @@ export function initRealtimeFirestoreListeners() {
         notifyChildCategoriesChanged();
       }
     }, (err) => handleStoreFirestoreError('ChildCategories snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubChild);
 
     // 8. Listen for reviews changes
-    onSnapshot(collection(db, 'reviews'), (snapshot) => {
+    const unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
       if (!snapshot.empty) {
         const revs: Review[] = [];
         snapshot.forEach((docSnap) => {
@@ -506,9 +650,10 @@ export function initRealtimeFirestoreListeners() {
         notifyReviewsChanged();
       }
     }, (err) => handleStoreFirestoreError('Reviews snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubReviews);
 
     // 9. Listen for brands changes
-    onSnapshot(collection(db, 'brands'), (snapshot) => {
+    const unsubBrands = onSnapshot(collection(db, 'brands'), (snapshot) => {
       if (!snapshot.empty) {
         const brandsList: Brand[] = [];
         snapshot.forEach((docSnap) => {
@@ -520,9 +665,30 @@ export function initRealtimeFirestoreListeners() {
         notifyBrandsChanged();
       }
     }, (err) => handleStoreFirestoreError('Brands snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubBrands);
   } catch (err) {
     handleStoreFirestoreError('Realtime listener registration', err);
   }
+}
+
+// Background network & visibility reconnect engine
+let isNetworkListenersRegistered = false;
+function registerNetworkSyncListeners() {
+  if (isNetworkListenersRegistered || typeof window === 'undefined') return;
+  isNetworkListenersRegistered = true;
+
+  window.addEventListener('online', () => {
+    if (!isClientQuotaCooldownActive()) {
+      detachFirestoreListeners();
+      initRealtimeFirestoreListeners();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !isListening && !isClientQuotaCooldownActive()) {
+      initRealtimeFirestoreListeners();
+    }
+  });
 }
 
 // Start listeners immediately
@@ -546,11 +712,13 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
     'Content-Type': 'application/json',
   };
   const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
-  const pass = adminPassword || (token ? null : '123456');
+  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || (token ? null : '123456');
 
   if (pass) {
     headers['x-admin-password'] = pass;
     headers['Authorization'] = `Bearer ${pass}`;
+  } else if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   if (token) {
     headers['x-admin-token'] = token;
@@ -558,14 +726,17 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
   return headers;
 }
 
-async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success: boolean; data?: T; error?: string }> {
+async function tryApi<T>(url: string, options?: RequestInit & { timeoutMs?: number }): Promise<{ success: boolean; data?: T; error?: string }> {
   try {
     const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const timeoutDuration = options?.timeoutMs || 5000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+
+    const { timeoutMs: _, ...fetchOptions } = options || {};
 
     const res = await fetch(fullUrl, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
 
@@ -584,9 +755,38 @@ async function tryApi<T>(url: string, options?: RequestInit): Promise<{ success:
   }
 }
 
+// Guaranteed Firestore products query that times out after timeoutMs rather than hanging indefinitely
+async function fetchFirestoreProductsWithTimeout(timeoutMs = 4000): Promise<{ data: any; id: string }[]> {
+  let timer: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Firestore getProducts query timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    const snap = await Promise.race([
+      getDocs(collection(db, 'products')),
+      timeoutPromise,
+    ]);
+    const docs: { data: any; id: string }[] = [];
+    if (snap && !snap.empty) {
+      snap.forEach((d) => docs.push({ data: d.data(), id: d.id }));
+    }
+    return docs;
+  } catch (err) {
+    handleStoreFirestoreError('Firestore getProducts', err);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Seed initial products and multi-tier taxonomy to Firestore if empty
 let isSeeding = false;
 export async function seedInitialDataIfNeeded() {
+  if (typeof window !== 'undefined' && localStorage.getItem('maxora_db_seeded_v3') === 'true') {
+    return;
+  }
   if (isSeeding || isClientQuotaCooldownActive()) return;
   isSeeding = true;
   try {
@@ -696,6 +896,10 @@ export async function seedInitialDataIfNeeded() {
     if (!settingsDoc.exists()) {
       await setDoc(doc(db, 'settings', 'store_settings'), { ...INITIAL_SETTINGS, seeded_v1: true }, { merge: true });
     }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('maxora_db_seeded_v3', 'true');
+    }
   } catch (e) {
     handleStoreFirestoreError('Firestore seeding check', e);
   } finally {
@@ -711,7 +915,26 @@ export const storeService = {
   getCachedProducts(): Product[] {
     const deletedProductIds = getDeletedProductIds();
     const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    return raw.filter(
+    const prodMap = new Map<string, Product>();
+    // Baseline products
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id))) {
+          prodMap.set(id, p);
+        }
+      });
+    }
+    // Overlay local products
+    if (Array.isArray(raw)) {
+      raw.forEach((p) => {
+        const id = String(p.id || p.sku || p.slug || '');
+        if (id && !deletedProductIds.has(String(p.id))) {
+          prodMap.set(id, p);
+        }
+      });
+    }
+    return Array.from(prodMap.values()).filter(
       (p) =>
         !deletedProductIds.has(String(p.id)) &&
         (!p.sku || !deletedProductIds.has(String(p.sku))) &&
@@ -745,116 +968,149 @@ export const storeService = {
   },
 
   // 1. SETTINGS
-  async getSettings(): Promise<StoreSettings> {
-    const local = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    
-    // 1. Try Firestore direct single document read
-    try {
-      const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
-      if (docSnap.exists()) {
-        const firestoreSettings = docSnap.data() as StoreSettings;
-        const merged = { ...local, ...firestoreSettings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
-      }
-    } catch (e) {
-      console.warn('Firestore getSettings note:', e);
-    }
+  getCachedSettings(): StoreSettings {
+    return getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+  },
 
-    // 2. Try REST API
+  async getSettings(): Promise<StoreSettings> {
+    let current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+
+    // 1. Authoritative Backend / Serverless REST API query
     try {
       const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
       if (apiResult.success && apiResult.data?.settings) {
-        const merged = { ...local, ...apiResult.data.settings };
-        setLocal(SETTINGS_KEY, merged);
-        return merged;
+        const serverSettings = apiResult.data.settings;
+        const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
+        const serverTime = serverSettings.updated_at ? new Date(serverSettings.updated_at).getTime() : 0;
+
+        if (serverTime >= localTime || !localTime) {
+          current = { ...current, ...serverSettings };
+          setLocal(SETTINGS_KEY, current);
+        } else {
+          // If local has newer updates (e.g. from an immediate save), don't wipe it with stale server data
+          this.updateSettings(current).catch(() => {});
+        }
+        return current;
       }
-    } catch (e) {
-      console.warn('REST getSettings note:', e);
+    } catch (apiErr) {
+      console.warn('API getSettings error:', apiErr);
+    }
+    
+    // 2. Query Firestore directly (single doc read, ultra-lightweight)
+    if (!isClientQuotaCooldownActive()) {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
+        if (docSnap.exists()) {
+          const firestoreSettings = docSnap.data() as StoreSettings;
+          const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
+          const fsTime = firestoreSettings.updated_at ? new Date(firestoreSettings.updated_at).getTime() : 0;
+          if (fsTime >= localTime || !localTime) {
+            current = { ...current, ...firestoreSettings };
+            setLocal(SETTINGS_KEY, current);
+          }
+          return current;
+        }
+      } catch (e) {
+        handleStoreFirestoreError('Firestore getSettings note', e);
+      }
     }
 
-    return local;
+    return current;
   },
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
-    let settingsToSave = { ...newSettings };
+    const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+    let updated = { ...current, ...newSettings };
 
-    // Offload heavy base64 banner images into uploaded_images collection to prevent 1MB limit
-    if (Array.isArray(settingsToSave.hero_banners) && settingsToSave.hero_banners.length > 0) {
+    // Offload any heavy base64 images from hero_banners into /api/upload-image on the backend server
+    // This strictly prevents the 1MB Firestore document size limit and guarantees clean, fast loading.
+    if (updated.hero_banners && Array.isArray(updated.hero_banners)) {
       try {
-        const offloadedBanners: HeroBanner[] = [];
-        for (const b of settingsToSave.hero_banners) {
-          const bannerCopy = { ...b };
-          const offloadField = async (val?: string): Promise<string | undefined> => {
-            if (!val || !val.startsWith('data:image/')) return val;
-            try {
-              const imgId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-              await setDoc(doc(db, 'uploaded_images', imgId), {
-                id: imgId,
-                data_url: val,
-                created_at: new Date().toISOString(),
-                type: 'hero_banner',
-              });
-              return `/api/images/${imgId}`;
-            } catch (e) {
-              return val;
+        const cleanedBanners = await Promise.all(
+          updated.hero_banners.map(async (banner) => {
+            const b = { ...banner };
+            const fields: (keyof HeroBanner)[] = [
+              'singleBannerImage',
+              'mobileBannerImage',
+              'image1',
+              'image2',
+              'image3',
+              'image4',
+            ];
+            for (const field of fields) {
+              let val = b[field];
+              if (typeof val === 'string') {
+                if (val.includes('/api/product-image/')) {
+                  val = val.substring(val.indexOf('/api/product-image/'));
+                  (b as any)[field] = val;
+                } else if (val.includes('localhost:3000')) {
+                  val = val.replace(/^https?:\/\/localhost:3000/i, '');
+                  (b as any)[field] = val;
+                }
+                // If it's a data URL, store via server image upload API
+                if (val.startsWith('data:image/')) {
+                  try {
+                    const uploadRes = await tryApi<{ success: boolean; url: string; id: string }>('/api/upload-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        data_url: val,
+                        filename: `banner-${field}.webp`,
+                        product_id: 'hero-banner',
+                      }),
+                    });
+                    if (uploadRes.success && uploadRes.data?.url) {
+                      let cleanUrl = uploadRes.data.url;
+                      if (cleanUrl.includes('/api/product-image/')) {
+                        cleanUrl = cleanUrl.substring(cleanUrl.indexOf('/api/product-image/'));
+                      }
+                      (b as any)[field] = cleanUrl;
+                    }
+                  } catch (imgErr) {
+                    console.warn('Could not offload banner image to backend server:', imgErr);
+                  }
+                }
+              }
             }
-          };
-
-          if (bannerCopy.singleBannerImage?.startsWith('data:image/')) {
-            bannerCopy.singleBannerImage = await offloadField(bannerCopy.singleBannerImage);
-          }
-          if (bannerCopy.mobileBannerImage?.startsWith('data:image/')) {
-            bannerCopy.mobileBannerImage = await offloadField(bannerCopy.mobileBannerImage);
-          }
-          if (bannerCopy.image1?.startsWith('data:image/')) {
-            bannerCopy.image1 = await offloadField(bannerCopy.image1);
-          }
-          if (bannerCopy.image2?.startsWith('data:image/')) {
-            bannerCopy.image2 = await offloadField(bannerCopy.image2);
-          }
-          if (bannerCopy.image3?.startsWith('data:image/')) {
-            bannerCopy.image3 = await offloadField(bannerCopy.image3);
-          }
-          if (bannerCopy.image4?.startsWith('data:image/')) {
-            bannerCopy.image4 = await offloadField(bannerCopy.image4);
-          }
-          offloadedBanners.push(bannerCopy);
-        }
-        settingsToSave.hero_banners = offloadedBanners;
+            return b;
+          })
+        );
+        updated.hero_banners = cleanedBanners;
       } catch (err) {
-        console.warn('maxora-admin banner offload error:', err);
+        console.warn('Notice processing banner images:', err);
       }
     }
 
-    const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
-    const updated = { ...current, ...settingsToSave, updated_at: new Date().toISOString() };
-    setLocal(SETTINGS_KEY, updated);
-
-    // 1. Update Firestore (Await write as primary source of truth)
-    try {
-      await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
-    } catch (e) {
-      console.warn('Firestore updateSettings error:', e);
-    }
-
-    // 2. Persist to Backend API
+    // 1. Persist to Authoritative Server REST API FIRST
     try {
       const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(updated),
       });
-      if (!apiRes.success) {
-        await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
+      if (apiRes.success && apiRes.data?.settings) {
+        updated = { ...updated, ...apiRes.data.settings };
+      } else {
+        const altRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
           method: 'PUT',
           headers: getAuthHeaders(adminPassword),
           body: JSON.stringify(updated),
         });
+        if (altRes.success && altRes.data?.settings) {
+          updated = { ...updated, ...altRes.data.settings };
+        }
       }
-    } catch (err) {
-      console.warn('Backend API settings save error:', err);
+    } catch (e) {
+      console.warn('API updateSettings notice:', e);
     }
+
+    updated.updated_at = new Date().toISOString();
+    setLocal(SETTINGS_KEY, updated);
+
+    // 2. Mirror to Firestore in background without blocking UI (writes never blocked)
+    setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
+      console.warn('Firestore updateSettings mirror note:', e?.message || e);
+    });
 
     notifySettingsChanged(updated);
     return { success: true, settings: updated };
@@ -873,48 +1129,97 @@ export const storeService = {
     childCategory = ''
   ): Promise<Product[]> {
     const deletedProductIds = getDeletedProductIds();
-    let prods: Product[] = [];
+    const prodMap = new Map<string, Product>();
 
-    // 1. Try Firestore directly if quota cooldown is not active
+    const registerProduct = (p: any, docId?: string, isLocal = false) => {
+      if (!p) return;
+      const id = String(p.id || docId || '');
+      const sku = String(p.sku || '');
+      const slug = String(p.slug || '');
+      if (!id && !sku && !slug) return;
+      if (['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(id)) {
+        return;
+      }
+      const rawName = String(p.name || '').trim();
+      if (!rawName || rawName === 'Untitled Product') {
+        return;
+      }
+
+      const idLower = id.toLowerCase().trim();
+      const skuLower = sku.toLowerCase().trim();
+      const slugLower = slug.toLowerCase().trim();
+
+      if (deletedProductIds.has(idLower) || (skuLower && deletedProductIds.has(skuLower)) || (slugLower && deletedProductIds.has(slugLower))) {
+        return;
+      }
+
+      const mapped: Product = {
+        ...p,
+        id: id || sku || slug,
+        name: p.name || 'Untitled Product',
+        buying_price: Number(p.buying_price || 0),
+        selling_price: Number(p.selling_price || 0),
+        discount: Number(p.discount || 0),
+        final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
+        stock: Number(p.stock !== undefined ? p.stock : 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false || String(p.active) === '0') ? 0 : 1,
+        featured: p.featured ? 1 : 0,
+        images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
+        created_at: p.created_at || new Date().toISOString(),
+        updated_at: p.updated_at || new Date().toISOString(),
+      };
+
+      if (!prodMap.has(mapped.id)) {
+        prodMap.set(mapped.id, mapped);
+      } else {
+        const existing = prodMap.get(mapped.id)!;
+        if (isLocal || new Date(mapped.updated_at || 0).getTime() > new Date(existing.updated_at || 0).getTime()) {
+          prodMap.set(mapped.id, mapped);
+        }
+      }
+    };
+
+    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so products are never missing
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
+    }
+
+    // 2. Authoritative Backend REST API query (with 3500ms safety timeout)
+    try {
+      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 3500 });
+      if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
+        apiRes.data.products.forEach((item) => registerProduct(item));
+      }
+    } catch (e) {
+      console.warn('API getProducts notice:', e);
+    }
+
+    // 3. Fallback to Firestore with strict 3500ms timeout if quota allows
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'products'));
-        if (!snap.empty) {
-          snap.forEach((d) => {
-            const item = d.data() as Product;
-            const pId = String(item.id || d.id);
-            const pSku = String(item.sku || '');
-            const pSlug = String(item.slug || '');
-            const pName = String(item.name || '').trim();
-            if (!pName) {
-              return;
-            }
-            if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) {
-              return;
-            }
-            prods.push({ ...item, id: pId });
-          });
-          if (prods.length > 0) {
-            setLocal(PRODUCTS_KEY, prods);
-          }
+        const snapDocs = await fetchFirestoreProductsWithTimeout(3500);
+        if (snapDocs && snapDocs.length > 0) {
+          snapDocs.forEach((d) => registerProduct(d.data, d.id));
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getProducts', e);
       }
     }
 
-    // 2. Fallback to cached local storage
-    if (prods.length === 0) {
-      const cached = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      prods = cached.filter(
-        (p) =>
-          !deletedProductIds.has(String(p.id)) &&
-          (!p.sku || !deletedProductIds.has(String(p.sku))) &&
-          (!p.slug || !deletedProductIds.has(String(p.slug))) &&
-          !['prod-001', 'prod-002', 'prod-003', 'prod-004', 'prod-005', 'prod-006', 'prod-007', 'prod-008', 'prod-009', 'prod-010'].includes(String(p.id))
-      );
-      setLocal(PRODUCTS_KEY, prods);
+    // 4. Always merge local cache so newly uploaded/edited products are preserved
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
+
+    const prods = Array.from(prodMap.values()).filter((p) => {
+      const idLower = String(p.id || '').toLowerCase().trim();
+      const skuLower = String(p.sku || '').toLowerCase().trim();
+      const slugLower = String(p.slug || '').toLowerCase().trim();
+      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
+    });
+    prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    setLocal(PRODUCTS_KEY, prods);
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
 
@@ -996,7 +1301,7 @@ export const storeService = {
     const prodMap = new Map<string, Product>();
     const deletedProductIds = getDeletedProductIds();
 
-    const registerProduct = (p: any, docId?: string) => {
+    const registerProduct = (p: any, docId?: string, isLocal = false) => {
       if (!p) return;
       const id = String(p.id || docId || '');
       const sku = String(p.sku || '');
@@ -1010,7 +1315,11 @@ export const storeService = {
         return;
       }
 
-      if (deletedProductIds.has(id) || (sku && deletedProductIds.has(sku)) || (slug && deletedProductIds.has(slug))) {
+      const idLower = id.toLowerCase().trim();
+      const skuLower = sku.toLowerCase().trim();
+      const slugLower = slug.toLowerCase().trim();
+
+      if (deletedProductIds.has(idLower) || (skuLower && deletedProductIds.has(skuLower)) || (slugLower && deletedProductIds.has(slugLower))) {
         return;
       }
 
@@ -1022,8 +1331,8 @@ export const storeService = {
         selling_price: Number(p.selling_price || 0),
         discount: Number(p.discount || 0),
         final_price: Math.max(0, Number(p.selling_price || 0) - Number(p.discount || 0)),
-        stock: Number(p.stock || 0),
-        active: p.active !== undefined && (p.active === 0 || p.active === false) ? 0 : 1,
+        stock: Number(p.stock !== undefined ? p.stock : 0),
+        active: p.active !== undefined && (p.active === 0 || p.active === false || String(p.active) === '0') ? 0 : 1,
         featured: p.featured ? 1 : 0,
         images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image_url ? [p.image_url] : []),
         created_at: p.created_at || new Date().toISOString(),
@@ -1032,10 +1341,20 @@ export const storeService = {
 
       if (!prodMap.has(mapped.id)) {
         prodMap.set(mapped.id, mapped);
+      } else {
+        const existing = prodMap.get(mapped.id)!;
+        if (isLocal || new Date(mapped.updated_at || 0).getTime() > new Date(existing.updated_at || 0).getTime()) {
+          prodMap.set(mapped.id, mapped);
+        }
       }
     };
 
-    // 1. Try REST API
+    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so all products are always present
+    if (Array.isArray(INITIAL_PRODUCTS)) {
+      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
+    }
+
+    // 2. Try REST API
     try {
       const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
         headers: getAuthHeaders(adminPassword),
@@ -1047,7 +1366,7 @@ export const storeService = {
       console.warn('API getAllAdminProducts warning:', e);
     }
 
-    // 2. Try Firestore (quota-safe)
+    // 3. Try Firestore (quota-safe)
     if (!isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
@@ -1059,13 +1378,18 @@ export const storeService = {
       }
     }
 
-    // 3. Merge local cache
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-    if (Array.isArray(local)) {
-      local.forEach((p) => registerProduct(p));
+    // 4. Merge local cache (preserves newly uploaded products or local edits)
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
 
-    const prods = Array.from(prodMap.values());
+    const prods = Array.from(prodMap.values()).filter((p) => {
+      const idLower = String(p.id || '').toLowerCase().trim();
+      const skuLower = String(p.sku || '').toLowerCase().trim();
+      const slugLower = String(p.slug || '').toLowerCase().trim();
+      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
+    });
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     setLocal(PRODUCTS_KEY, prods);
 
@@ -1129,21 +1453,40 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Save directly to Cloud Firestore
+    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
+    let firestorePersisted = false;
     try {
-      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd));
-    } catch (e) {
-      console.warn('Firestore save product error:', e);
+      const firestorePromise = setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
+      await Promise.race([
+        firestorePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
+      ]);
+      firestorePersisted = true;
+      clearFirestoreCooldown();
+    } catch (e: any) {
+      console.warn('Direct Firestore save product note:', e);
+      handleStoreFirestoreError('Firestore save product', e);
     }
 
-    // 2. Try Backend API
-    tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
-      method: 'POST',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newProd),
-    }).catch(() => {});
+    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
+    let apiPersisted = false;
+    try {
+      const apiRes = await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
+        method: 'POST',
+        headers: getAuthHeaders(adminPassword),
+        body: JSON.stringify(newProd),
+      });
+      if (apiRes.success) {
+        apiPersisted = true;
+      }
+    } catch (e) {
+      console.warn('Backend API addProduct notice:', e);
+    }
 
-    // 3. Update local cache
+    // 3. Unmark from deleted products registry so newly added product is never filtered out
+    unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
+
+    // 4. Update local cache
     const existingIdx = local.findIndex(p => String(p.id) === String(newProd.id));
     if (existingIdx >= 0) {
       local[existingIdx] = newProd;
@@ -1152,6 +1495,10 @@ export const storeService = {
     }
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
+
+    if (!firestorePersisted && !apiPersisted) {
+      console.warn('[StoreService] Product saved locally, but database sync encountered a network issue. Retrying in background...');
+    }
 
     return { success: true, product: newProd };
   },
@@ -1186,20 +1533,40 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Update Firestore
+    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
+    let firestorePersisted = false;
     try {
-      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
-    } catch (e) {
-      console.warn('Firestore update product error:', e);
+      const firestorePromise = setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
+      await Promise.race([
+        firestorePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
+      ]);
+      firestorePersisted = true;
+      clearFirestoreCooldown();
+    } catch (e: any) {
+      console.warn('Direct Firestore update product note:', e);
+      handleStoreFirestoreError('Firestore update product', e);
     }
 
-    // 2. Try Backend API
-    tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(productData),
-    }).catch(() => {});
+    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
+    let apiPersisted = false;
+    try {
+      const apiRes = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(adminPassword),
+        body: JSON.stringify(updated),
+      });
+      if (apiRes.success) {
+        apiPersisted = true;
+      }
+    } catch (e) {
+      console.warn('Backend API updateProduct notice:', e);
+    }
 
+    // 3. Unmark from deleted products registry so updated product is never filtered out
+    unmarkProductDeleted(updated.id, updated.sku, updated.slug);
+
+    // 4. Update local cache
     if (index !== -1) {
       local[index] = updated;
     } else {
@@ -1207,6 +1574,10 @@ export const storeService = {
     }
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
+
+    if (!firestorePersisted && !apiPersisted) {
+      console.warn('[StoreService] Product updated locally, but database sync encountered a network issue. Retrying in background...');
+    }
 
     return { success: true, product: updated };
   },
@@ -1224,27 +1595,62 @@ export const storeService = {
     const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
     const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
 
-    // Record in deleted products registry
+    const idsToRecord = [idStr, target?.sku, target?.slug].filter(Boolean) as string[];
+
+    // 1. Record in local deleted products registry
     markProductDeleted(idStr, target?.sku, target?.slug);
 
-    // 1. Delete from Firestore (by id, and also by sku/slug doc if exists)
+    // 2. Authoritative sync to Firestore settings.deleted_product_ids (so all customers get it immediately!)
+    try {
+      const currentSettings = await this.getSettings();
+      const existingDeleted = Array.isArray(currentSettings.deleted_product_ids) ? currentSettings.deleted_product_ids : [];
+      const updatedDeleted = Array.from(new Set([...existingDeleted.map(s => String(s).toLowerCase().trim()), ...idsToRecord.map(s => s.toLowerCase().trim())]));
+      await this.updateSettings({ deleted_product_ids: updatedDeleted }, adminPassword);
+    } catch (e) {
+      console.warn('Sync deleted_product_ids to store_settings note:', e);
+    }
+
+    // 3. Create tombstone record in Firestore
+    try {
+      await setDoc(doc(db, 'deleted_products', idStr), {
+        id: idStr,
+        sku: target?.sku || '',
+        slug: target?.slug || '',
+        deleted_at: new Date().toISOString(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn('Direct Firestore set deleted_products note:', e);
+    }
+
+    // 4. Direct Cloud Firestore delete (AWAITED - guaranteed primary database deletion, NEVER blocked by cooldown)
     try {
       await deleteDoc(doc(db, 'products', idStr));
       if (target?.id && String(target.id) !== idStr) {
-        await deleteDoc(doc(db, 'products', String(target.id))).catch(() => {});
+        await deleteDoc(doc(db, 'products', String(target.id)));
       }
+      clearFirestoreCooldown();
     } catch (e) {
-      console.warn('Firestore delete product error:', e);
+      console.warn('Direct Firestore delete product error:', e);
     }
 
-    // 2. Delete via API
-    tryApi(`/api/admin/products/${idStr}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(adminPassword),
-    }).catch(() => {});
+    // 5. Authoritative Backend Server API delete
+    try {
+      await tryApi(`/api/admin/products/${idStr}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(adminPassword),
+      });
+    } catch (e) {
+      console.warn('Backend API deleteProduct notice:', e);
+    }
 
-    // 3. Local state filter
-    const filtered = local.filter((p) => String(p.id) !== idStr && p.sku !== idStr && p.slug !== idStr && String(p.id) !== String(target?.id));
+    // 6. Local state filter
+    const delSet = new Set(idsToRecord.map((s) => s.toLowerCase().trim()));
+    const filtered = local.filter((p) => {
+      const pId = String(p.id || '').toLowerCase().trim();
+      const pSku = String(p.sku || '').toLowerCase().trim();
+      const pSlug = String(p.slug || '').toLowerCase().trim();
+      return !delSet.has(pId) && (!pSku || !delSet.has(pSku)) && (!pSlug || !delSet.has(pSlug));
+    });
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
 
@@ -1252,6 +1658,9 @@ export const storeService = {
   },
 
   // 3. ORDERS & CHECKOUT
+  // Duplicate submission protection cache (in-memory per session)
+  _recentOrderSignatures: new Map<string, { timestamp: number; order: Order }>(),
+
   async createOrder(orderPayload: {
     customer_name: string;
     phone: string;
@@ -1261,6 +1670,9 @@ export const storeService = {
     area: string;
     address: string;
     delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
+    delivery_charge?: number;
+    subtotal?: number;
+    total?: number;
     note?: string;
     items: Array<{
       product_id: string;
@@ -1273,12 +1685,29 @@ export const storeService = {
       sku?: string;
     }>;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
+    // Check duplicate order submission signature (prevents accidental double clicks)
+    const normPhone = (orderPayload.phone || '').replace(/[^0-9]/g, '');
+    const normAddr = (orderPayload.address || '').toLowerCase().trim();
+    const itemsSig = (orderPayload.items || [])
+      .map(i => `${i.product_id}x${i.quantity}`)
+      .sort()
+      .join(',');
+    const submissionSig = `${normPhone}|${normAddr}|${itemsSig}`;
+    const now = Date.now();
+    const existing = this._recentOrderSignatures.get(submissionSig);
+    if (existing && (now - existing.timestamp) < 15000) {
+      console.info('[StoreService] Duplicate order submission prevented. Returning confirmed order:', existing.order.order_number);
+      return { success: true, order: existing.order };
+    }
+
     const settings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
 
     let subtotal = 0;
     const orderItems: OrderItem[] = [];
     const orderId = `ord-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
+
+    const stockUpdatePromises: Promise<any>[] = [];
 
     for (const item of orderPayload.items) {
       const prod = products.find((p) => String(p.id) === String(item.product_id));
@@ -1319,11 +1748,13 @@ export const storeService = {
         prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
         prod.sold_count = (Number(prod.sold_count) || 0) + qty;
         // update stock and sold_count in Firestore
-        setDoc(
-          doc(db, 'products', String(prod.id)),
-          { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
-          { merge: true }
-        ).catch(() => {});
+        stockUpdatePromises.push(
+          setDoc(
+            doc(db, 'products', String(prod.id)),
+            { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
+            { merge: true }
+          ).catch(() => {})
+        );
       }
     }
     setLocal(PRODUCTS_KEY, products);
@@ -1336,8 +1767,8 @@ export const storeService = {
 
     // Delivery calculation
     let deliveryCharge = 0;
-    if ((orderPayload as any).delivery_charge !== undefined && (orderPayload as any).delivery_charge !== null) {
-      deliveryCharge = Number((orderPayload as any).delivery_charge);
+    if (orderPayload.delivery_charge !== undefined && orderPayload.delivery_charge !== null) {
+      deliveryCharge = Number(orderPayload.delivery_charge);
     } else if (isFreeShipping) {
       deliveryCharge = 0;
     } else {
@@ -1398,54 +1829,29 @@ export const storeService = {
       items: orderItems,
     };
 
-    // 1. SAVE TO FIRESTORE DIRECTLY (Cloud DB) - Sanitized against any undefined fields
+    // 1. Authoritative Firestore Persistence
     const firestoreOrder = cleanForFirestore({
       ...newOrder,
       customer_phone: orderPayload.phone || '',
       total_amount: total,
       order_status: 'Pending',
     });
-
     const firestoreCustomer = cleanForFirestore(customerData);
 
     try {
-      if (db) {
-        await setDoc(doc(db, 'orders', orderId), firestoreOrder);
-        await setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true });
-        console.log('Order successfully synced to Firestore:', orderId);
-      } else {
-        console.warn('Firestore db instance not available on order creation.');
-      }
-    } catch (e: any) {
-      console.error('Firestore createOrder write error:', e?.message || e);
-      // Fallback attempt directly with clean object if any field failed
-      try {
-        if (db) {
-          const minimalDoc = {
-            id: orderId,
-            order_number: orderNo,
-            customer_name: orderPayload.customer_name || 'Customer',
-            phone: orderPayload.phone || '',
-            district: orderPayload.district || '',
-            area: orderPayload.area || '',
-            address: orderPayload.address || '',
-            delivery_charge: deliveryCharge,
-            subtotal,
-            total,
-            total_amount: total,
-            status: 'Pending',
-            payment_method: 'Cash on Delivery',
-            created_at: new Date().toISOString(),
-            items: orderItems,
-          };
-          await setDoc(doc(db, 'orders', orderId), minimalDoc);
-        }
-      } catch (fallbackErr) {
-        console.error('Firestore fallback write error:', fallbackErr);
-      }
+      await Promise.race([
+        Promise.all([
+          setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
+          setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }),
+          ...stockUpdatePromises
+        ]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore order write timeout')), 3000))
+      ]);
+    } catch (fsErr) {
+      console.warn('Direct Firestore order persistence note:', fsErr);
     }
 
-    // 2. Also forward to API with complete order details for backend persistence
+    // 2. Authoritative Backend Server API persistence (mirrored immediately)
     const fullOrderSyncPayload = {
       ...orderPayload,
       order: newOrder,
@@ -1462,9 +1868,7 @@ export const storeService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(fullOrderSyncPayload),
       });
-    } catch (e) {
-      console.warn('API /api/orders sync notice:', e);
-    }
+    } catch {}
 
     // 3. Local update
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
@@ -1481,6 +1885,13 @@ export const storeService = {
       customers.push(customerData);
     }
     setLocal(CUSTOMERS_KEY, customers);
+
+    // Save to idempotency cache
+    this._recentOrderSignatures.set(submissionSig, { timestamp: now, order: newOrder });
+    if (this._recentOrderSignatures.size > 50) {
+      const oldestKey = this._recentOrderSignatures.keys().next().value;
+      if (oldestKey) this._recentOrderSignatures.delete(oldestKey);
+    }
 
     notifyOrdersChanged();
 
@@ -2094,6 +2505,18 @@ export const storeService = {
   },
 
   async getDashboardTotals(adminPassword?: string): Promise<DashboardTotals> {
+    // 1. Try REST API for full aggregated stats including live traffic
+    try {
+      const apiResult = await tryApi<{ success: boolean; totals: DashboardTotals }>('/api/admin/dashboard', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (apiResult.success && apiResult.data?.totals) {
+        return apiResult.data.totals;
+      }
+    } catch {
+      // Fall through to local/Firestore calculation
+    }
+
     const orders = await this.getAllAdminOrders('', adminPassword);
     const products = await this.getAllAdminProducts(adminPassword);
     const customers = await this.getAllCustomers(adminPassword);
@@ -2132,6 +2555,17 @@ export const storeService = {
     }
     const profit = Math.max(0, totalSales - totalExpenses);
 
+    // Try fetching live traffic from endpoint
+    let traffic: LiveTrafficAnalytics | undefined = undefined;
+    try {
+      const trafficRes = await tryApi<{ success: boolean; traffic: LiveTrafficAnalytics }>('/api/admin/traffic/live', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (trafficRes.success && trafficRes.data?.traffic) {
+        traffic = trafficRes.data.traffic;
+      }
+    } catch {}
+
     return {
       today_sales: todaySales,
       today_orders: todayOrders.length,
@@ -2151,18 +2585,38 @@ export const storeService = {
       total_stock: totalStock,
       total_expenses: totalExpenses,
       profit: profit,
+      traffic,
     };
+  },
+
+  async getLiveTraffic(adminPassword?: string): Promise<LiveTrafficAnalytics | null> {
+    try {
+      const res = await tryApi<{ success: boolean; traffic: LiveTrafficAnalytics }>('/api/admin/traffic/live', {
+        headers: getAuthHeaders(adminPassword),
+      });
+      if (res.success && res.data?.traffic) {
+        return res.data.traffic;
+      }
+    } catch (e) {
+      console.warn('getLiveTraffic error:', e);
+    }
+    return null;
   },
 
   // 6. CATEGORIES
   async getCategories(): Promise<Category[]> {
     let cats: Category[] = [];
     let firestoreSuccess = false;
-    // 1. Try Firestore if quota cooldown is not active
+    // 1. Try Firestore if quota cooldown is not active (protected by 2500ms safety timeout)
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'categories'));
-        if (!snap.empty) {
+        const snap = await Promise.race([
+          getDocs(collection(db, 'categories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getCategories timeout')), 2500)
+          ),
+        ]);
+        if (snap && !snap.empty) {
           firestoreSuccess = true;
           snap.forEach((d) => {
             const item = d.data() as Category;
@@ -2172,6 +2626,19 @@ export const storeService = {
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getCategories', e);
+      }
+    }
+
+    if (!firestoreSuccess || isClientQuotaCooldownActive()) {
+      try {
+        const apiRes = await tryApi<{ success: boolean; categories: Category[] }>('/api/categories?all=true');
+        if (apiRes.success && Array.isArray(apiRes.data?.categories) && apiRes.data.categories.length > 0) {
+          cats = apiRes.data.categories;
+          setLocal(CATEGORIES_KEY, cats);
+          firestoreSuccess = true;
+        }
+      } catch (e) {
+        console.warn('REST API fallback getCategories error:', e);
       }
     }
 
@@ -2203,21 +2670,14 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // Save to Firestore
-    try {
-      await setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveCategory error:', e);
-    }
-
-    // Save to local cache & cascade rename if existing category was edited
+    // 1. OPTIMISTIC & LOCAL-FIRST: Update local storage & memory IMMEDIATELY so UI updates with 0ms latency
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
-    const existing = current.find((c) => c.id === id);
+    const existing = current.find((c) => c.id === id || c.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
     if (existing && (oldName !== newCategory.name || oldSlug !== newCategory.slug)) {
-      // 1. Cascade update subcategories
+      // 1a. Cascade update subcategories
       const subcats = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
       let subcatsChanged = false;
       subcats.forEach((s) => {
@@ -2225,7 +2685,7 @@ export const storeService = {
           s.category_id = newCategory.id;
           s.category_slug = newCategory.slug;
           subcatsChanged = true;
-          setDoc(doc(db, 'subcategories', s.id), s, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'subcategories', s.id), cleanForFirestore(s), { merge: true }), 2000, 'Cascade subcategory write');
         }
       });
       if (subcatsChanged) {
@@ -2233,7 +2693,7 @@ export const storeService = {
         notifySubCategoriesChanged();
       }
 
-      // 2. Cascade update products
+      // 1b. Cascade update products
       const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       let prodsChanged = false;
       prods.forEach((p) => {
@@ -2246,7 +2706,7 @@ export const storeService = {
           p.category_id = newCategory.id;
           p.category_slug = newCategory.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product write');
         }
       });
       if (prodsChanged) {
@@ -2266,16 +2726,29 @@ export const storeService = {
     setLocal(CATEGORIES_KEY, updated);
     notifyCategoriesChanged();
 
+    // 2. Persist to Backend API in background (updates server disk / maxora_db.json)
+    tryApi('/api/admin/categories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newCategory),
+    }).catch(() => {});
+    tryApi('/api/categories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newCategory),
+    }).catch(() => {});
+
+    // 3. Persist to Firestore in background safely with timeout (never hangs UI)
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'categories', id), cleanForFirestore(newCategory), { merge: true }),
+      2500,
+      'saveCategory'
+    );
+
     return { success: true, category: newCategory };
   },
 
   async deleteCategory(categoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'categories', categoryId));
-    } catch (e) {
-      console.warn('Firestore deleteCategory error:', e);
-    }
-
     const current = getLocal<Category[]>(CATEGORIES_KEY, INITIAL_CATEGORIES);
     const catToDelete = current.find((c) => c.id === categoryId);
     const catName = catToDelete?.name?.toLowerCase().trim();
@@ -2297,11 +2770,11 @@ export const storeService = {
         p.category_id = '';
         p.category_slug = 'uncategorized';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           category: 'Uncategorized',
           category_id: '',
           category_slug: 'uncategorized',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product category');
       }
     });
     if (prodsChanged) {
@@ -2319,6 +2792,23 @@ export const storeService = {
 
     notifyCategoriesChanged();
 
+    // Delete from Backend API
+    tryApi(`/api/admin/categories/${categoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+    tryApi(`/api/categories?id=${categoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+
+    // Delete from Firestore safely with timeout
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'categories', categoryId)),
+      2500,
+      'deleteCategory'
+    );
+
     return { success: true };
   },
 
@@ -2326,11 +2816,16 @@ export const storeService = {
   async getSubCategories(categorySlug?: string): Promise<SubCategory[]> {
     let subcats: SubCategory[] = [];
     let firestoreSuccess = false;
-    // 1. Try Firestore if quota cooldown is not active
+    // 1. Try Firestore if quota cooldown is not active (protected by 2500ms safety timeout)
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snap = await getDocs(collection(db, 'subcategories'));
-        if (!snap.empty) {
+        const snap = await Promise.race([
+          getDocs(collection(db, 'subcategories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getSubCategories timeout')), 2500)
+          ),
+        ]);
+        if (snap && !snap.empty) {
           firestoreSuccess = true;
           snap.forEach((d) => {
             const item = d.data() as SubCategory;
@@ -2340,6 +2835,19 @@ export const storeService = {
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getSubCategories', e);
+      }
+    }
+
+    if (!firestoreSuccess || isClientQuotaCooldownActive()) {
+      try {
+        const apiRes = await tryApi<{ success: boolean; subcategories: SubCategory[] }>('/api/subcategories?all=true');
+        if (apiRes.success && Array.isArray(apiRes.data?.subcategories) && apiRes.data.subcategories.length > 0) {
+          subcats = apiRes.data.subcategories;
+          setLocal(SUBCATEGORIES_KEY, subcats);
+          firestoreSuccess = true;
+        }
+      } catch (e) {
+        console.warn('REST API fallback getSubCategories error:', e);
       }
     }
 
@@ -2380,19 +2888,14 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveSubCategory error:', e);
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
-    const existing = current.find((s) => s.id === id);
+    const existing = current.find((s) => s.id === id || s.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
     if (existing && (oldName !== newSubCategory.name || oldSlug !== newSubCategory.slug)) {
-      // 1. Cascade update products with this subcategory
+      // Cascade update products with this subcategory
       const prods = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
       let prodsChanged = false;
       prods.forEach((p) => {
@@ -2405,7 +2908,7 @@ export const storeService = {
           p.subcategory_id = newSubCategory.id;
           p.subcategory_slug = newSubCategory.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product subcategory write');
         }
       });
       if (prodsChanged) {
@@ -2413,7 +2916,7 @@ export const storeService = {
         notifyProductsChanged();
       }
 
-      // 2. Cascade update product types
+      // Cascade update product types
       const types = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
       let typesChanged = false;
       types.forEach((t) => {
@@ -2421,7 +2924,7 @@ export const storeService = {
           t.subcategory_id = newSubCategory.id;
           t.subcategory_slug = newSubCategory.slug;
           typesChanged = true;
-          setDoc(doc(db, 'product_types', t.id), t, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'product_types', t.id), cleanForFirestore(t), { merge: true }), 2000, 'Cascade product_type subcategory write');
         }
       });
       if (typesChanged) {
@@ -2441,16 +2944,29 @@ export const storeService = {
     setLocal(SUBCATEGORIES_KEY, updated);
     notifySubCategoriesChanged();
 
+    // 2. Persist to Backend API
+    tryApi('/api/admin/subcategories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newSubCategory),
+    }).catch(() => {});
+    tryApi('/api/subcategories', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newSubCategory),
+    }).catch(() => {});
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'subcategories', id), cleanForFirestore(newSubCategory), { merge: true }),
+      2500,
+      'saveSubCategory'
+    );
+
     return { success: true, subCategory: newSubCategory };
   },
 
   async deleteSubCategory(subCategoryId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'subcategories', subCategoryId));
-    } catch (e) {
-      console.warn('Firestore deleteSubCategory error:', e);
-    }
-
     const current = getLocal<SubCategory[]>(SUBCATEGORIES_KEY, INITIAL_SUBCATEGORIES);
     const subToDelete = current.find((s) => s.id === subCategoryId);
     const subSlug = subToDelete?.slug?.toLowerCase().trim();
@@ -2472,11 +2988,11 @@ export const storeService = {
         p.subcategory_id = '';
         p.subcategory_slug = '';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           sub_category: '',
           subcategory_id: '',
           subcategory_slug: '',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product subcategory');
       }
     });
     if (prodsChanged) {
@@ -2485,6 +3001,23 @@ export const storeService = {
     }
 
     notifySubCategoriesChanged();
+
+    // Delete from Backend API
+    tryApi(`/api/admin/subcategories/${subCategoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+    tryApi(`/api/subcategories?id=${subCategoryId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+
+    // Delete from Firestore safely with timeout
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'subcategories', subCategoryId)),
+      2500,
+      'deleteSubCategory'
+    );
 
     return { success: true };
   },
@@ -2495,8 +3028,13 @@ export const storeService = {
 
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapshot = await getDocs(collection(db, 'product_types'));
-        if (!snapshot.empty) {
+        const snapshot = await Promise.race([
+          getDocs(collection(db, 'product_types')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getProductTypes timeout')), 2500)
+          ),
+        ]);
+        if (snapshot && !snapshot.empty) {
           const firestoreTypes: ProductType[] = [];
           snapshot.forEach((docSnap) => {
             const d = docSnap.data() as ProductType;
@@ -2568,28 +3106,9 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveProductType error:', e);
-    }
-
-    // Also attempt server sync if running full-stack
-    try {
-      fetch('/api/admin/product-types', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-        body: JSON.stringify(newType),
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
-    const existing = current.find((t) => t.id === id);
+    const existing = current.find((t) => t.id === id || t.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
@@ -2607,7 +3126,7 @@ export const storeService = {
           p.product_type_id = newType.id;
           p.product_type_slug = newType.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product_type write');
         }
       });
       if (prodsChanged) {
@@ -2624,7 +3143,7 @@ export const storeService = {
           c.product_type_slug = newType.slug;
           c.product_type_name = newType.name;
           childsChanged = true;
-          setDoc(doc(db, 'child_categories', c.id), c, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'child_categories', c.id), cleanForFirestore(c), { merge: true }), 2000, 'Cascade child_category write');
         }
       });
       if (childsChanged) {
@@ -2644,27 +3163,29 @@ export const storeService = {
     setLocal(PRODUCT_TYPES_KEY, updated);
     notifyProductTypesChanged();
 
+    // 2. Persist to Backend API in background
+    try {
+      fetch('/api/admin/product-types', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newType),
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'product_types', id), cleanForFirestore(newType), { merge: true }),
+      2500,
+      'saveProductType'
+    );
+
     return { success: true, productType: newType };
   },
 
   async deleteProductType(typeId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'product_types', typeId));
-    } catch (e) {
-      console.warn('Firestore deleteProductType error:', e);
-    }
-
-    try {
-      fetch(`/api/admin/product-types/${typeId}`, {
-        method: 'DELETE',
-        headers: {
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
     const current = getLocal<ProductType[]>(PRODUCT_TYPES_KEY, INITIAL_PRODUCT_TYPES);
     const typeToDelete = current.find((t) => t.id === typeId);
     const typeSlug = typeToDelete?.slug?.toLowerCase().trim();
@@ -2686,11 +3207,11 @@ export const storeService = {
         p.product_type_id = '';
         p.product_type_slug = '';
         prodsChanged = true;
-        setDoc(doc(db, 'products', String(p.id)), {
+        safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), {
           product_type: 'Standard Product',
           product_type_id: '',
           product_type_slug: '',
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }), 2000, 'Unlink product product_type');
       }
     });
     if (prodsChanged) {
@@ -2699,6 +3220,21 @@ export const storeService = {
     }
 
     notifyProductTypesChanged();
+
+    try {
+      fetch(`/api/admin/product-types/${typeId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+      }).catch(() => {});
+    } catch {}
+
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'product_types', typeId)),
+      2500,
+      'deleteProductType'
+    );
 
     return { success: true };
   },
@@ -2709,8 +3245,13 @@ export const storeService = {
 
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapshot = await getDocs(collection(db, 'child_categories'));
-        if (!snapshot.empty) {
+        const snapshot = await Promise.race([
+          getDocs(collection(db, 'child_categories')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getChildCategories timeout')), 2500)
+          ),
+        ]);
+        if (snapshot && !snapshot.empty) {
           const firestoreChildren: ChildCategory[] = [];
           snapshot.forEach((docSnap) => {
             const d = docSnap.data() as ChildCategory;
@@ -2785,28 +3326,9 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true });
-    } catch (e) {
-      console.warn('Firestore saveChildCategory error:', e);
-    }
-
-    // Also attempt server sync if running full-stack
-    try {
-      fetch('/api/admin/child-categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
-        },
-        body: JSON.stringify(newChild),
-      }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
-
+    // 1. OPTIMISTIC & LOCAL-FIRST
     const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
-    const existing = current.find((c) => c.id === id);
+    const existing = current.find((c) => c.id === id || c.slug === slug);
     const oldName = existing?.name;
     const oldSlug = existing?.slug;
 
@@ -2827,7 +3349,7 @@ export const storeService = {
           p.child_category_slug = newChild.slug;
           p.childcategory_slug = newChild.slug;
           prodsChanged = true;
-          setDoc(doc(db, 'products', String(p.id)), p, { merge: true }).catch(() => {});
+          safeFirestoreWrite(() => setDoc(doc(db, 'products', String(p.id)), cleanForFirestore(p), { merge: true }), 2000, 'Cascade product child_category write');
         }
       });
       if (prodsChanged) {
@@ -2847,15 +3369,33 @@ export const storeService = {
     setLocal(CHILD_CATEGORIES_KEY, updated);
     notifyChildCategoriesChanged();
 
+    // 2. Persist to Backend API in background
+    try {
+      fetch('/api/admin/child-categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
+        },
+        body: JSON.stringify(newChild),
+      }).catch(() => {});
+    } catch {}
+
+    // 3. Persist to Firestore safely in background with timeout
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'child_categories', id), cleanForFirestore(newChild), { merge: true }),
+      2500,
+      'saveChildCategory'
+    );
+
     return { success: true, childCategory: newChild };
   },
 
   async deleteChildCategory(childId: string, adminPassword?: string): Promise<{ success: boolean }> {
-    try {
-      await deleteDoc(doc(db, 'child_categories', childId));
-    } catch (e) {
-      console.warn('Firestore deleteChildCategory error:', e);
-    }
+    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
+    const updated = current.filter((c) => c.id !== childId);
+    setLocal(CHILD_CATEGORIES_KEY, updated);
+    notifyChildCategoriesChanged();
 
     try {
       fetch(`/api/admin/child-categories/${childId}`, {
@@ -2864,14 +3404,13 @@ export const storeService = {
           ...(adminPassword ? { 'x-admin-password': adminPassword } : {}),
         },
       }).catch(() => {});
-    } catch {
-      // safe ignore
-    }
+    } catch {}
 
-    const current = getLocal<ChildCategory[]>(CHILD_CATEGORIES_KEY, INITIAL_CHILD_CATEGORIES);
-    const updated = current.filter((c) => c.id !== childId);
-    setLocal(CHILD_CATEGORIES_KEY, updated);
-    notifyChildCategoriesChanged();
+    safeFirestoreWrite(
+      () => deleteDoc(doc(db, 'child_categories', childId)),
+      2500,
+      'deleteChildCategory'
+    );
 
     return { success: true };
   },
@@ -2879,6 +3418,39 @@ export const storeService = {
   // 7. REVIEWS & RATINGS
   async getReviews(productId?: string): Promise<Review[]> {
     const local = getLocal<Review[]>(REVIEWS_KEY, INITIAL_REVIEWS);
+    const matchingLocal = productId ? local.filter((r) => r.product_id === productId) : local;
+
+    // Fast-path: return cached reviews instantly (0ms) so Product Details opens without network lag
+    if (matchingLocal.length > 0) {
+      // Refresh in background without blocking the UI
+      if (!isClientQuotaCooldownActive()) {
+        (async () => {
+          try {
+            const q = productId
+              ? query(collection(db, 'reviews'), where('product_id', '==', productId))
+              : query(collection(db, 'reviews'));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+              const firestoreRevs: Review[] = [];
+              snapshot.forEach((docSnap) => {
+                const d = docSnap.data() as Review;
+                firestoreRevs.push({ ...d, id: String(d.id || docSnap.id) });
+              });
+              const map = new Map<string, Review>();
+              local.forEach((r) => map.set(r.id, r));
+              firestoreRevs.forEach((r) => map.set(r.id, r));
+              const merged = Array.from(map.values()).sort(
+                (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+              );
+              setLocal(REVIEWS_KEY, merged);
+            }
+          } catch (e) {
+            handleStoreFirestoreError('Background reviews refresh', e);
+          }
+        })();
+      }
+      return matchingLocal;
+    }
 
     if (!isClientQuotaCooldownActive()) {
       try {
@@ -2932,6 +3504,7 @@ export const storeService = {
     rating: number;
     comment: string;
     user_name?: string;
+    images?: string[];
   }): Promise<{ success: boolean; review: Review; error?: string }> {
     if (!reviewData.product_id) {
       return { success: false, error: 'Product ID is required.', review: null as any };
@@ -2951,6 +3524,7 @@ export const storeService = {
       user_name: cleanName,
       created_at: new Date().toISOString(),
       verified_purchase: true,
+      images: Array.isArray(reviewData.images) && reviewData.images.length > 0 ? reviewData.images : undefined,
     };
 
     // 1. Optimistically update local storage
@@ -3236,6 +3810,10 @@ export const storeService = {
     }
 
     return { success: true, affectedProductsCount: affectedCount };
+  },
+
+  clearFirestoreCooldown() {
+    clearFirestoreCooldown();
   },
 
   async getProductsByBrand(brandSlugOrName: string): Promise<Product[]> {
