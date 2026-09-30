@@ -834,7 +834,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       // 2. Fallback to verification or local check
-      const validPass = (settings?.admin_password && settings.admin_password.trim()) || '123456';
+      const storePass = settingsForm?.admin_password || globalSettings?.admin_password;
+      const validPass = (storePass && storePass.trim()) || '123456';
       let isValid = p === validPass || p === '123456' || p === 'admin123';
 
       if (isValid) {
@@ -889,7 +890,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     const activePass = password || sessionStorage.getItem('maxora_admin_password') || '123456';
-    const isCurrentCorrect = currentPasswordInput === activePass || currentPasswordInput === '123456' || currentPasswordInput === 'admin123' || (settings?.admin_password && currentPasswordInput === settings.admin_password);
+    const storeAdminPass = settingsForm?.admin_password || globalSettings?.admin_password;
+    const isCurrentCorrect = currentPasswordInput === activePass || currentPasswordInput === '123456' || currentPasswordInput === 'admin123' || (storeAdminPass && currentPasswordInput === storeAdminPass);
     if (!isCurrentCorrect) {
       setChangePassStatus({ type: 'error', message: 'বর্তমান পাসওয়ার্ডটি সঠিক নয় (Current password is incorrect).' });
       return;
@@ -979,7 +981,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       const newSettings = {
-        ...settings,
+        ...settingsForm,
         admin_password: newPasswordInput,
       };
       await storeService.updateSettings(newSettings, newPasswordInput);
