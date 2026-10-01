@@ -23,10 +23,7 @@ export default function App() {
   };
 
   const handleBackToStore = () => {
-    const storeUrl = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STORE_URL) 
-      ? String((import.meta as any).env.VITE_STORE_URL) 
-      : 'https://maxora-store.vercel.app';
-    window.location.href = storeUrl;
+    window.location.href = 'https://maxorabd.com/';
   };
 
   return (

@@ -2590,7 +2590,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>•</span>
               <button
                 type="button"
-                onClick={onBackToStore}
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.open('https://maxorabd.com/', '_blank', 'noopener,noreferrer');
+                  } else if (onBackToStore) {
+                    onBackToStore();
+                  }
+                }}
                 className="hover:text-[#2d3748] transition-colors cursor-pointer"
               >
                 Return to Storefront
@@ -3243,7 +3249,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Bottom Actions */}
         <div className="pt-6 border-t border-zinc-800/80 space-y-2">
           <button
-            onClick={onBackToStore}
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.open('https://maxorabd.com/', '_blank', 'noopener,noreferrer');
+              } else if (onBackToStore) {
+                onBackToStore();
+              }
+            }}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold transition-colors cursor-pointer"
           >
             <Eye className="w-4 h-4 text-emerald-400" />
