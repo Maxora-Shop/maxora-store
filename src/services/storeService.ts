@@ -711,17 +711,17 @@ function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
-  const pass = adminPassword || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || (token ? null : '123456');
+  const token = typeof window !== 'undefined'
+    ? (sessionStorage.getItem('maxora_admin_token') || localStorage.getItem('maxora_admin_token'))
+    : null;
+  const pass = adminPassword || (token ? null : '123456');
 
-  if (pass) {
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    headers['x-admin-token'] = token;
+  } else if (pass) {
     headers['x-admin-password'] = pass;
     headers['Authorization'] = `Bearer ${pass}`;
-  } else if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  if (token) {
-    headers['x-admin-token'] = token;
   }
   return headers;
 }

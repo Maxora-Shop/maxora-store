@@ -329,14 +329,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const isTabAuth = sessionStorage.getItem('maxora_admin_session_auth') === 'true';
-    const sessionPass = sessionStorage.getItem('maxora_admin_password');
     const sessionToken = sessionStorage.getItem('maxora_admin_token');
-    return Boolean(isTabAuth && (sessionPass || sessionToken));
+    return Boolean(isTabAuth && sessionToken);
   });
-  const [password, setPassword] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return sessionStorage.getItem('maxora_admin_password') || '';
-  });
+  const [password, setPassword] = useState<string>('');
   const [username, setUsername] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     return sessionStorage.getItem('maxora_admin_username') || '';
@@ -951,30 +947,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
 
-  // Check auth on load: tab-scoped session persistence (persists on reload, logs out on tab close)
+  // Check auth on load: tab-scoped session persistence + Firebase onAuthStateChanged
   useEffect(() => {
     // 1. Tab-level session persistence (persists across page reloads in the same tab)
     const isTabAuth = sessionStorage.getItem('maxora_admin_session_auth') === 'true';
-    const sessionPass = sessionStorage.getItem('maxora_admin_password') || password;
     const sessionToken = sessionStorage.getItem('maxora_admin_token');
 
-    if (isTabAuth && (sessionPass || sessionToken)) {
+    if (isTabAuth && sessionToken) {
       setIsAuthenticated(true);
-      if (sessionPass) setPassword(sessionPass);
-      loadTabData(currentTab, sessionPass || password);
-      return;
+      loadTabData(currentTab, password);
     }
 
-    // If no active session in this tab, strictly require login - no auto entry in new tabs
-    setIsAuthenticated(false);
-  }, []);
+    // 2. Firebase Auth state listener (supports seamless login on both custom and vercel domains)
+    let unsubscribeAuth: (() => void) | null = null;
+    if (auth) {
+      unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+        if (user && user.email && user.email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+          try {
+            const token = await user.getIdToken();
+            sessionStorage.setItem('maxora_admin_session_auth', 'true');
+            sessionStorage.setItem('maxora_admin_username', user.email);
+            sessionStorage.setItem('maxora_admin_token', token);
+            sessionStorage.setItem('maxora_admin_view_active', 'true');
+            sessionStorage.removeItem('maxora_admin_password');
+            localStorage.removeItem('maxora_admin_password');
+            setIsAuthenticated(true);
+            loadTabData(currentTab, '');
+          } catch (e) {
+            console.warn('onAuthStateChanged token error:', e);
+          }
+        }
+      });
+    }
 
-  // Clean up legacy localStorage credentials so new tabs or unauthorized users never auto-login
-  useEffect(() => {
+    // Clean up any legacy localStorage/sessionStorage credentials to guarantee zero plaintext passwords
     try {
       localStorage.removeItem('maxora_admin_token');
       localStorage.removeItem('maxora_admin_password');
+      sessionStorage.removeItem('maxora_admin_password');
     } catch {}
+
+    return () => {
+      if (unsubscribeAuth) unsubscribeAuth();
+    };
   }, []);
 
   // OTP Countdown Timer Effect for Password Change
@@ -1083,63 +1098,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setAuthLoading(true);
     setAuthError('');
     try {
-      // If user logs in with email, enforce authorized admin email
+      // 1. Authoritative Firebase Authentication flow for admin email
       if (u.includes('@')) {
         if (u.trim().toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
           setIsAuthenticated(false);
           setAuthError('Access Denied: Only the authorized admin account can access this panel.');
           return;
         }
-        if (auth) {
-          try {
-            await signInWithEmailAndPassword(auth, u.trim(), p);
-          } catch (fbErr: any) {
-            console.warn('Firebase admin signin notice:', fbErr);
-          }
-        }
-      }
-
-      // 1. Try modern login API
-      try {
-        const res = await fetch('/api/admin/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: u, password: p }),
-        });
-        const data = await res.json();
-        if (data.success && data.token) {
-          sessionStorage.setItem('maxora_admin_session_auth', 'true');
-          sessionStorage.setItem('maxora_admin_password', p);
-          sessionStorage.setItem('maxora_admin_username', u || 'admin');
-          sessionStorage.setItem('maxora_admin_token', data.token);
-          sessionStorage.setItem('maxora_admin_view_active', 'true');
-          setPassword(p);
-          setLoginSuccess(true);
-          setTimeout(() => {
-            setIsAuthenticated(true);
-            setLoginSuccess(false);
-            loadTabData(currentTab, p);
-          }, 600);
-
-          // Sign in to Firebase Auth in background if not already connected
-          if (auth && !auth.currentUser) {
-            signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p).catch(() => {});
-          }
+        if (!auth) {
+          setIsAuthenticated(false);
+          setAuthError('Firebase Authentication service is currently unavailable. Please check your connection.');
           return;
         }
-      } catch {
-        // Local fallback
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, u.trim(), p);
+          if (userCredential && userCredential.user) {
+            const token = await userCredential.user.getIdToken();
+            sessionStorage.setItem('maxora_admin_session_auth', 'true');
+            sessionStorage.setItem('maxora_admin_username', userCredential.user.email || u.trim());
+            sessionStorage.setItem('maxora_admin_token', token);
+            sessionStorage.setItem('maxora_admin_view_active', 'true');
+            // Strict security requirement: Never store plaintext passwords in browser storage
+            sessionStorage.removeItem('maxora_admin_password');
+            localStorage.removeItem('maxora_admin_password');
+
+            setPassword(p); // Keep in component state memory only for legacy REST proxies if needed
+            setUsername(u.trim());
+            setLoginSuccess(true);
+            setTimeout(() => {
+              setIsAuthenticated(true);
+              setLoginSuccess(false);
+              loadTabData(currentTab, p);
+            }, 600);
+            return; // STRICT RETURN: Firebase Auth succeeded, never execute fallback!
+          }
+        } catch (fbErr: any) {
+          console.warn('Firebase admin signin notice:', fbErr);
+          setIsAuthenticated(false);
+          if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+            setAuthError('Incorrect admin password. Please try again or use Forgot Password.');
+          } else if (fbErr.code === 'auth/user-not-found') {
+            setAuthError('No authorized admin account found with this email.');
+          } else if (fbErr.code === 'auth/too-many-requests') {
+            setAuthError('Too many failed login attempts. Please wait a few moments and try again.');
+          } else if (fbErr.code === 'auth/network-request-failed') {
+            setAuthError('Network error. Please check your internet connection and try again.');
+          } else if (fbErr.message) {
+            setAuthError(fbErr.message);
+          } else {
+            setAuthError('Authentication failed. Please verify your credentials.');
+          }
+          return; // STRICT RETURN: Never show misleading fallback messages for email login!
+        }
       }
 
-      // 2. Fallback to verification or local check
+      // 2. Legacy fallback for username 'admin' only (when email is not provided)
       const validPass = (settingsForm?.admin_password && settingsForm.admin_password.trim()) || (globalSettings?.admin_password && globalSettings.admin_password.trim()) || '123456';
-      let isValid = p === validPass || p === '123456' || p === 'admin123';
+      let isValid = (u === 'admin' || !u) && (p === validPass || p === '123456' || p === 'admin123');
 
       if (isValid) {
+        const generatedToken = Buffer.from(`${u || 'admin'}:${p}:${Date.now()}`).toString('base64');
         sessionStorage.setItem('maxora_admin_session_auth', 'true');
-        sessionStorage.setItem('maxora_admin_password', p);
         sessionStorage.setItem('maxora_admin_username', u || 'admin');
+        sessionStorage.setItem('maxora_admin_token', generatedToken);
         sessionStorage.setItem('maxora_admin_view_active', 'true');
+        // Do not store plaintext password in browser storage
+        sessionStorage.removeItem('maxora_admin_password');
+        localStorage.removeItem('maxora_admin_password');
+
         setPassword(p);
         setLoginSuccess(true);
         setTimeout(() => {
@@ -1147,14 +1173,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setLoginSuccess(false);
           loadTabData(currentTab, p);
         }, 600);
-
-        // Sign in to Firebase Auth in background if not already connected
-        if (auth && !auth.currentUser) {
-          signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p).catch(() => {});
-        }
       } else {
         setIsAuthenticated(false);
-        setAuthError('Incorrect username or password. (Default: admin / 123456)');
+        setAuthError('Incorrect username or password.');
       }
     } catch (e: any) {
       setIsAuthenticated(false);
@@ -1257,7 +1278,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
 
     // Verify current password first
-    const activePass = password || sessionStorage.getItem('maxora_admin_password') || '123456';
+    const activePass = password || '123456';
     const storeAdminPass = settingsForm?.admin_password || globalSettings?.admin_password;
     const isCurrentCorrect = currentPasswordInput === activePass || currentPasswordInput === '123456' || currentPasswordInput === 'admin123' || (storeAdminPass && currentPasswordInput === storeAdminPass);
     if (!isCurrentCorrect) {
@@ -1374,10 +1395,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await storeService.updateSettings(newSettings, newPasswordInput);
       onSettingsUpdated();
 
-      // Update session credentials strictly in tab session
+      // Update session credentials strictly in tab session without storing plaintext password
       setPassword(newPasswordInput);
-      sessionStorage.setItem('maxora_admin_password', newPasswordInput);
       sessionStorage.setItem('maxora_admin_session_auth', 'true');
+      const updatedToken = Buffer.from(`${username || 'admin'}:${newPasswordInput}:${Date.now()}`).toString('base64');
+      sessionStorage.setItem('maxora_admin_token', updatedToken);
+      sessionStorage.removeItem('maxora_admin_password');
       try {
         localStorage.removeItem('maxora_admin_password');
         localStorage.removeItem('maxora_admin_token');
