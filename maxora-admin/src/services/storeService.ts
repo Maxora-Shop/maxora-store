@@ -1827,6 +1827,14 @@ export const storeService = {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       items: orderItems,
+      timeline: [
+        {
+          status: 'Pending',
+          timestamp: new Date().toISOString(),
+          note: 'Order placed by customer via Cash on Delivery',
+          by: 'Customer',
+        },
+      ],
     };
 
     // 1. Authoritative Firestore Persistence
@@ -2051,22 +2059,66 @@ export const storeService = {
     return orders;
   },
 
-  async updateOrderStatus(orderId: string | number, status: OrderStatus, adminPassword?: string): Promise<{ success: boolean }> {
+  async updateOrderStatus(
+    orderId: string | number,
+    status: OrderStatus,
+    adminPassword?: string,
+    note?: string
+  ): Promise<{ success: boolean }> {
     const idStr = String(orderId);
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
+    const existingOrder = index !== -1 ? orders[index] : null;
+
+    const timelineEvent = {
+      status,
+      timestamp: new Date().toISOString(),
+      note: note || `Status updated to ${status} by Admin`,
+      by: 'Admin',
+    };
+
+    let updatedTimeline = existingOrder?.timeline && Array.isArray(existingOrder.timeline) && existingOrder.timeline.length > 0
+      ? [...existingOrder.timeline, timelineEvent]
+      : [
+          {
+            status: 'Pending',
+            timestamp: existingOrder?.created_at || new Date().toISOString(),
+            note: 'Order placed by customer',
+            by: 'Customer',
+          },
+          ...(existingOrder && existingOrder.status !== 'Pending' && existingOrder.status !== status
+            ? [{
+                status: existingOrder.status,
+                timestamp: existingOrder.updated_at || existingOrder.created_at || new Date().toISOString(),
+                note: `Order was in ${existingOrder.status}`,
+                by: 'System',
+              }]
+            : []),
+          timelineEvent,
+        ];
 
     // 1. Update Firestore
     try {
-      await setDoc(doc(db, 'orders', idStr), { status, updated_at: new Date().toISOString() }, { merge: true });
+      await setDoc(
+        doc(db, 'orders', idStr),
+        {
+          status,
+          order_status: status,
+          updated_at: new Date().toISOString(),
+          timeline: updatedTimeline,
+        },
+        { merge: true }
+      );
     } catch (e) {
       console.warn('Firestore update order status error:', e);
     }
 
     // 2. Local
-    const orders = getLocal<Order[]>(ORDERS_KEY, []);
-    const index = orders.findIndex((o) => String(o.id) === idStr || String(o.order_number) === idStr);
     if (index !== -1) {
       orders[index].status = status;
+      orders[index].order_status = status;
       orders[index].updated_at = new Date().toISOString();
+      orders[index].timeline = updatedTimeline;
       setLocal(ORDERS_KEY, orders);
     }
 
@@ -2075,7 +2127,7 @@ export const storeService = {
       await tryApi(`/api/admin/orders/${idStr}`, {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, timeline: updatedTimeline }),
       });
     } catch (e) {
       console.warn('API update order status error:', e);

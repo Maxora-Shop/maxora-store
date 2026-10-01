@@ -166,6 +166,7 @@ export type OrderStatus =
   | 'Processing'
   | 'Shipped'
   | 'Delivered'
+  | 'Completed'
   | 'Cancelled'
   | 'Returned';
 
@@ -185,6 +186,13 @@ export interface OrderItem {
   slug?: string;
 }
 
+export interface OrderTimelineEvent {
+  status: OrderStatus | string;
+  timestamp: string;
+  note?: string;
+  by?: string;
+}
+
 export interface Order {
   id: string;
   order_number: string;
@@ -194,6 +202,7 @@ export interface Order {
   alt_phone?: string;
   email?: string;
   district: string;
+  thana?: string;
   area: string;
   address: string;
   delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
@@ -210,6 +219,7 @@ export interface Order {
   created_at: string;
   updated_at?: string;
   items?: OrderItem[];
+  timeline?: OrderTimelineEvent[];
 }
 
 export interface HeroBanner {

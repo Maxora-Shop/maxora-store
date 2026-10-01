@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, setLogLevel } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
+import { getAuth, Auth } from 'firebase/auth';
 import localConfig from '../firebase-applet-config.json';
 
 // Silence verbose internal Firestore gRPC/WebChannel idle stream disconnect warnings
@@ -67,5 +68,14 @@ try {
   }
 }
 
+// Initialize Firebase Auth safely
+let authInstance: Auth | null = null;
+try {
+  authInstance = getAuth(app);
+} catch (err) {
+  console.warn('Initializing Firebase Auth failed:', err);
+}
+
+export const auth = authInstance;
 export const storage = storageInstance;
 export default app;

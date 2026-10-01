@@ -71,6 +71,9 @@ import {
   Menu,
   SlidersHorizontal,
   Shapes,
+  Route,
+  PackageCheck,
+  ArrowRight,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -109,6 +112,8 @@ import {
 } from 'firebase/auth';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
+import { AdminOrderAnalytics } from './AdminOrderAnalytics';
+import { OrderJourneyModal } from './OrderJourneyModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
 import { AdminBanners } from './AdminBanners';
@@ -185,10 +190,15 @@ export type AdminTab =
   | 'banners'
   | 'ai-assistant'
   | 'orders'
+  | 'order_analytics'
   | 'customers'
   | 'settings';
 
-export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boolean } => {
+export const getAdminTabFromLocation = (): {
+  tab: AdminTab;
+  openNewProduct?: boolean;
+  orderStatus?: string;
+} => {
   if (typeof window === 'undefined') return { tab: 'overview' };
   const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
   const searchParams = new URLSearchParams(window.location.search);
@@ -206,13 +216,37 @@ export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boo
     pathname === '/admin/types'
   ) return { tab: 'product_types' };
   if (pathname === '/admin/banners') return { tab: 'banners' };
-  if (pathname === '/admin/orders') return { tab: 'orders' };
+
+  // Orders routes & sub-routes
+  if (
+    pathname === '/admin/orders/analytics' ||
+    pathname === '/admin/orders-analytics' ||
+    pathname === '/admin/order-analytics'
+  ) return { tab: 'order_analytics' };
+  if (pathname === '/admin/orders/pending') return { tab: 'orders', orderStatus: 'Pending' };
+  if (pathname === '/admin/orders/processing') return { tab: 'orders', orderStatus: 'Processing' };
+  if (pathname === '/admin/orders/shipped') return { tab: 'orders', orderStatus: 'Shipped' };
+  if (pathname === '/admin/orders/delivered' || pathname === '/admin/orders/completed') return { tab: 'orders', orderStatus: 'Delivered' };
+  if (pathname === '/admin/orders/cancelled') return { tab: 'orders', orderStatus: 'Cancelled' };
+  if (pathname === '/admin/orders/all' || pathname === '/admin/orders') return { tab: 'orders', orderStatus: '' };
+
   if (pathname === '/admin/customers') return { tab: 'customers' };
   if (pathname === '/admin/ai-assistant') return { tab: 'ai-assistant' };
   if (pathname === '/admin/settings') return { tab: 'settings' };
 
   // Query parameter support
   const tabQuery = searchParams.get('tab')?.toLowerCase();
+  const statusQuery = searchParams.get('status')?.toLowerCase();
+  if (tabQuery === 'order_analytics' || tabQuery === 'order-analytics' || tabQuery === 'analytics') return { tab: 'order_analytics' };
+  if (tabQuery === 'orders') {
+    let st = '';
+    if (statusQuery === 'pending') st = 'Pending';
+    else if (statusQuery === 'processing') st = 'Processing';
+    else if (statusQuery === 'shipped') st = 'Shipped';
+    else if (statusQuery === 'delivered' || statusQuery === 'completed') st = 'Delivered';
+    else if (statusQuery === 'cancelled') st = 'Cancelled';
+    return { tab: 'orders', orderStatus: st };
+  }
   if (tabQuery === 'inventory' || tabQuery === 'products') return { tab: 'products' };
   if (tabQuery === 'new-product' || tabQuery === 'new') return { tab: 'products', openNewProduct: true };
   if (tabQuery === 'brands') return { tab: 'brands' };
@@ -220,12 +254,18 @@ export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boo
   if (tabQuery === 'subcategories') return { tab: 'subcategories' };
   if (tabQuery === 'product_types' || tabQuery === 'product-types' || tabQuery === 'types') return { tab: 'product_types' };
   if (tabQuery === 'banners') return { tab: 'banners' };
-  if (tabQuery === 'orders') return { tab: 'orders' };
   if (tabQuery === 'customers') return { tab: 'customers' };
   if (tabQuery === 'ai-assistant') return { tab: 'ai-assistant' };
   if (tabQuery === 'settings') return { tab: 'settings' };
 
   // Hash support
+  if (hash === 'orders-analytics' || hash === 'order-analytics') return { tab: 'order_analytics' };
+  if (hash === 'orders-pending') return { tab: 'orders', orderStatus: 'Pending' };
+  if (hash === 'orders-processing') return { tab: 'orders', orderStatus: 'Processing' };
+  if (hash === 'orders-shipped') return { tab: 'orders', orderStatus: 'Shipped' };
+  if (hash === 'orders-delivered') return { tab: 'orders', orderStatus: 'Delivered' };
+  if (hash === 'orders-cancelled') return { tab: 'orders', orderStatus: 'Cancelled' };
+  if (hash === 'orders') return { tab: 'orders' };
   if (hash === 'products' || hash === 'inventory') return { tab: 'products' };
   if (hash === 'new-product' || hash === 'new') return { tab: 'products', openNewProduct: true };
   if (hash === 'brands') return { tab: 'brands' };
@@ -233,7 +273,6 @@ export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boo
   if (hash === 'subcategories') return { tab: 'subcategories' };
   if (hash === 'product_types' || hash === 'types') return { tab: 'product_types' };
   if (hash === 'banners') return { tab: 'banners' };
-  if (hash === 'orders') return { tab: 'orders' };
   if (hash === 'customers') return { tab: 'customers' };
   if (hash === 'ai-assistant') return { tab: 'ai-assistant' };
   if (hash === 'settings') return { tab: 'settings' };
@@ -243,6 +282,13 @@ export const getAdminTabFromLocation = (): { tab: AdminTab; openNewProduct?: boo
 
 export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string => {
   if (subAction === 'new') return '/admin/products/new';
+  if (tab === 'order_analytics') return '/admin/orders/analytics';
+  if (tab === 'orders') {
+    if (subAction && subAction.trim()) {
+      return `/admin/orders/${subAction.toLowerCase()}`;
+    }
+    return '/admin/orders';
+  }
   switch (tab) {
     case 'products':
       return '/admin/products/inventory';
@@ -256,8 +302,6 @@ export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string =
       return '/admin/products/types';
     case 'banners':
       return '/admin/banners';
-    case 'orders':
-      return '/admin/orders';
     case 'customers':
       return '/admin/customers';
     case 'ai-assistant':
@@ -338,6 +382,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return true;
   });
+  const [isOrdersMenuExpanded, setIsOrdersMenuExpanded] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const initial = getAdminTabFromLocation();
+      if (['orders', 'order_analytics'].includes(initial.tab) || window.location.pathname.startsWith('/admin/orders')) {
+        return true;
+      }
+    }
+    return true;
+  });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Data States
@@ -399,8 +452,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }>({});
   
   const [orderSearch, setOrderSearch] = useState('');
-  const [orderStatusFilter, setOrderStatusFilter] = useState('');
-  const [orderDateFilter, setOrderDateFilter] = useState<'all' | 'today' | 'this_month'>('all');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const initial = getAdminTabFromLocation();
+      if (initial.orderStatus) return initial.orderStatus;
+    }
+    return '';
+  });
+  const [orderDateFilter, setOrderDateFilter] = useState<'all' | 'today' | 'this_week' | 'this_month'>('all');
+  const [orderProductFilter, setOrderProductFilter] = useState<string>('');
+  const [ordersViewMode, setOrdersViewMode] = useState<'list' | 'analytics'>('list');
+  const [selectedOrderForJourney, setSelectedOrderForJourney] = useState<Order | null>(null);
   
   const [customerSearch, setCustomerSearch] = useState('');
 
@@ -1382,7 +1444,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (tab === 'banners') {
       loadSettings(currentPassword);
     }
-    if (tab === 'orders') {
+    if (tab === 'orders' || tab === 'order_analytics') {
       loadOrders(currentPassword);
       loadProducts(currentPassword);
     }
@@ -1397,18 +1459,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleTabChange = (
     tab: AdminTab,
-    subAction?: string
+    subAction?: string,
+    orderStatus?: string
   ) => {
     setCurrentTab(tab);
     if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(tab)) {
       setIsProductsMenuExpanded(true);
     }
+    if (['orders', 'order_analytics'].includes(tab)) {
+      setIsOrdersMenuExpanded(true);
+      if (orderStatus !== undefined) {
+        setOrderStatusFilter(orderStatus);
+      }
+    }
     setIsMobileSidebarOpen(false);
 
     if (typeof window !== 'undefined') {
-      const targetRoute = getRouteForAdminTab(tab, subAction);
+      const targetRoute = getRouteForAdminTab(tab, subAction || orderStatus);
       if (window.location.pathname !== targetRoute) {
-        window.history.pushState({ tab, subAction }, '', targetRoute);
+        window.history.pushState({ tab, subAction, orderStatus }, '', targetRoute);
       }
     }
     loadTabData(tab as any);
@@ -1482,6 +1551,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setCurrentTab(currentLoc.tab);
       if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(currentLoc.tab)) {
         setIsProductsMenuExpanded(true);
+      }
+      if (['orders', 'order_analytics'].includes(currentLoc.tab)) {
+        setIsOrdersMenuExpanded(true);
+        if (currentLoc.orderStatus !== undefined) {
+          setOrderStatusFilter(currentLoc.orderStatus);
+        }
       }
       if (currentLoc.openNewProduct) {
         handleOpenAddProduct();
@@ -1561,7 +1636,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const loadOrders = async (p = password) => {
     setLoading(true);
     try {
-      const list = await storeService.getAllAdminOrders(orderStatusFilter, p);
+      const list = await storeService.getAllAdminOrders('', p);
       setOrders(list);
       // Ensure products are always loaded for order item details and invoices
       if (products.length === 0) {
@@ -1780,9 +1855,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleQuickStatusUpdate = async (orderId: number | string, newStatus: OrderStatus) => {
+  const handleQuickStatusUpdate = async (orderId: number | string, newStatus: OrderStatus, note?: string) => {
     try {
-      await storeService.updateOrderStatus(orderId, newStatus, password);
+      await storeService.updateOrderStatus(orderId, newStatus, password, note);
       showToast(`Order status changed to ${newStatus}`, 'success');
       loadOrders();
       if (currentTab === 'overview') loadOverview();
@@ -2204,30 +2279,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Filtered Orders
   const filteredOrders = orders.filter((o) => {
+    const q = (orderSearch || '').toLowerCase().trim();
     const matchesSearch =
-      orderSearch === '' ||
-      o.order_number.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.customer_name.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.phone.includes(orderSearch) ||
-      (o.district && o.district.toLowerCase().includes(orderSearch.toLowerCase())) ||
-      (o.area && o.area.toLowerCase().includes(orderSearch.toLowerCase()));
+      q === '' ||
+      (o.id && String(o.id).toLowerCase().includes(q)) ||
+      (o.order_number && o.order_number.toLowerCase().includes(q)) ||
+      (o.customer_name && o.customer_name.toLowerCase().includes(q)) ||
+      (o.phone && String(o.phone).toLowerCase().includes(q)) ||
+      (o.alt_phone && String(o.alt_phone).toLowerCase().includes(q)) ||
+      (o.district && o.district.toLowerCase().includes(q)) ||
+      (o.thana && o.thana.toLowerCase().includes(q)) ||
+      (o.area && o.area.toLowerCase().includes(q)) ||
+      (o.address && o.address.toLowerCase().includes(q));
     
-    const matchesStatus = orderStatusFilter === '' || o.status === orderStatusFilter;
+    const matchesStatus = (() => {
+      if (!orderStatusFilter) return true;
+      const target = orderStatusFilter.toLowerCase().trim();
+      const current = (o.status || '').toLowerCase().trim();
+      if (target === 'delivered' || target === 'completed') {
+        return current === 'delivered' || current === 'completed';
+      }
+      if (target === 'processing') {
+        return current === 'processing' || current === 'confirmed';
+      }
+      if (target === 'cancelled') {
+        return current === 'cancelled' || current === 'returned';
+      }
+      return current === target;
+    })();
 
     let matchesDate = true;
-    if (orderDateFilter === 'today') {
-      const orderDate = new Date(o.created_at).toDateString();
-      const today = new Date().toDateString();
-      matchesDate = orderDate === today;
-    } else if (orderDateFilter === 'this_month') {
+    if (orderDateFilter !== 'all' && o.created_at) {
       const orderDate = new Date(o.created_at);
-      const now = new Date();
-      matchesDate =
-        orderDate.getMonth() === now.getMonth() &&
-        orderDate.getFullYear() === now.getFullYear();
+      if (!isNaN(orderDate.getTime())) {
+        if (orderDateFilter === 'today') {
+          const today = new Date();
+          matchesDate = orderDate.toDateString() === today.toDateString();
+        } else if (orderDateFilter === 'this_week') {
+          const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          matchesDate = orderDate.getTime() >= oneWeekAgo;
+        } else if (orderDateFilter === 'this_month') {
+          const now = new Date();
+          matchesDate =
+            orderDate.getMonth() === now.getMonth() &&
+            orderDate.getFullYear() === now.getFullYear();
+        }
+      } else {
+        matchesDate = false;
+      }
     }
 
-    return matchesSearch && matchesStatus && matchesDate;
+    const matchesProduct =
+      !orderProductFilter ||
+      (Array.isArray(o.items) &&
+        o.items.some(
+          (it) =>
+            String(it.product_id) === orderProductFilter ||
+            (it.sku && String(it.sku).toLowerCase() === orderProductFilter.toLowerCase()) ||
+            (it.product_name && it.product_name.toLowerCase().includes(orderProductFilter.toLowerCase()))
+        ));
+
+    return matchesSearch && matchesStatus && matchesDate && matchesProduct;
   });
 
   // Filtered Customers
@@ -2822,28 +2934,235 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </button>
 
-            {/* Orders */}
-            <button
-              type="button"
-              onClick={() => handleTabChange('orders')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'orders'
-                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
-                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
-              }`}
-            >
-              <ShoppingBag className="w-4 h-4 shrink-0" />
-              <span>Orders</span>
-              {totals?.pending ? (
-                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-black animate-pulse">
-                  {totals.pending} new
-                </span>
-              ) : orders.length > 0 ? (
-                <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${currentTab === 'orders' ? 'bg-zinc-950 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                  {orders.length}
-                </span>
-              ) : null}
-            </button>
+            {/* ====================================================
+                ORDERS (EXPANDABLE PARENT & SUBMENUS)
+            ==================================================== */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentTab !== 'orders' && currentTab !== 'order_analytics') {
+                    handleTabChange('orders', undefined, '');
+                  }
+                  setIsOrdersMenuExpanded(!isOrdersMenuExpanded);
+                }}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none ${
+                  ['orders', 'order_analytics'].includes(currentTab)
+                    ? 'bg-zinc-900 text-emerald-400 border border-emerald-500/25 shadow-xs font-black'
+                    : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <ShoppingBag className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">Orders</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {orders.filter((o) => o.status === 'Pending').length > 0 ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-500 text-zinc-950 animate-pulse">
+                      {orders.filter((o) => o.status === 'Pending').length} new
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-300">
+                      {orders.length}
+                    </span>
+                  )}
+                  {isOrdersMenuExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-emerald-400 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-zinc-400 transition-transform duration-200" />
+                  )}
+                </div>
+              </button>
+
+              {/* Orders Submenu */}
+              {isOrdersMenuExpanded && (
+                <div className="pl-3.5 pr-1 py-1 space-y-1 border-l-2 border-emerald-500/30 ml-4 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* 1. All Orders */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'all', '');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && orderStatusFilter === '' && ordersViewMode === 'list'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                    <span>All Orders</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && orderStatusFilter === '' && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-emerald-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.length}
+                    </span>
+                  </button>
+
+                  {/* 2. Pending */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'pending', 'Pending');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'pending' && ordersViewMode === 'list'
+                        ? 'bg-amber-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-amber-400/90 hover:text-amber-300 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>Pending</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'pending' && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-amber-400'
+                          : orders.filter((o) => o.status === 'Pending').length > 0
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.filter((o) => o.status === 'Pending').length}
+                    </span>
+                  </button>
+
+                  {/* 3. Processing */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'processing', 'Processing');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'processing' && ordersViewMode === 'list'
+                        ? 'bg-blue-500 text-white font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <PackageCheck className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                    <span>Processing</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'processing' && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-blue-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.filter((o) => o.status === 'Processing' || o.status === 'Confirmed').length}
+                    </span>
+                  </button>
+
+                  {/* 4. Shipped */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'shipped', 'Shipped');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'shipped' && ordersViewMode === 'list'
+                        ? 'bg-indigo-500 text-white font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <Truck className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+                    <span>Shipped</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'shipped' && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-indigo-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.filter((o) => o.status === 'Shipped').length}
+                    </span>
+                  </button>
+
+                  {/* 5. Delivered / Completed */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'delivered', 'Delivered');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && (orderStatusFilter.toLowerCase() === 'delivered' || orderStatusFilter.toLowerCase() === 'completed') && ordersViewMode === 'list'
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>Delivered / Completed</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && (orderStatusFilter.toLowerCase() === 'delivered' || orderStatusFilter.toLowerCase() === 'completed') && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-emerald-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.filter((o) => o.status === 'Delivered').length}
+                    </span>
+                  </button>
+
+                  {/* 6. Cancelled */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('orders', 'cancelled', 'Cancelled');
+                      setOrdersViewMode('list');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'cancelled' && ordersViewMode === 'list'
+                        ? 'bg-rose-500 text-white font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/80'
+                    }`}
+                  >
+                    <XCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                    <span>Cancelled</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'orders' && orderStatusFilter.toLowerCase() === 'cancelled' && ordersViewMode === 'list'
+                          ? 'bg-zinc-950 text-rose-400'
+                          : 'bg-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      {orders.filter((o) => o.status === 'Cancelled' || o.status === 'Returned').length}
+                    </span>
+                  </button>
+
+                  {/* 7. Order Analytics */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTabChange('order_analytics', 'analytics');
+                      setOrdersViewMode('analytics');
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentTab === 'order_analytics' || (currentTab === 'orders' && ordersViewMode === 'analytics')
+                        ? 'bg-emerald-500 text-zinc-950 font-black shadow-sm'
+                        : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40'
+                    }`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Order Analytics</span>
+                    <span
+                      className={`ml-auto text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                        currentTab === 'order_analytics' || (currentTab === 'orders' && ordersViewMode === 'analytics')
+                          ? 'bg-zinc-950 text-emerald-400'
+                          : 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                      }`}
+                    >
+                      Metrics
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Customers */}
             <button
@@ -4487,228 +4806,768 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ====================================================
-            3. TAB: ORDERS MANAGEMENT
+            3. TAB: ORDERS MANAGEMENT & ORDER STATUS ANALYTICS
         ==================================================== */}
-        {currentTab === 'orders' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
-                    Orders Management
-                  </h2>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Live Cloud Sync ({orders.length} orders)
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  Live real-time synced with Firebase database. Process orders, print slips & update status.
-                </p>
-              </div>
+        {(currentTab === 'orders' || currentTab === 'order_analytics') && (() => {
+          const totalOrdersCount = orders.length;
+          const pendingCount = orders.filter((o) => o.status === 'Pending').length;
+          const processingCount = orders.filter(
+            (o) => o.status === 'Processing' || o.status === 'Confirmed'
+          ).length;
+          const shippedCount = orders.filter((o) => o.status === 'Shipped').length;
+          const deliveredCount = orders.filter(
+            (o) => o.status === 'Delivered' || o.status === 'Completed'
+          ).length;
+          const cancelledCount = orders.filter(
+            (o) => o.status === 'Cancelled' || o.status === 'Returned'
+          ).length;
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const list = await storeService.getAllAdminOrders(orderStatusFilter, password);
-                      setOrders(list);
-                      if (list.length > 0) {
-                        showToast(`Successfully synced ${list.length} orders!`, 'success');
-                      } else {
-                        showToast('Sync complete: No orders yet.', 'info');
-                      }
-                    } catch (err: any) {
-                      console.error('Fetch orders error:', err);
-                      showToast('Sync error: ' + (err?.message || 'Check connection'), 'error');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs cursor-pointer"
-                  title="Fetch all orders from server and cloud database"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Sync Orders ({orders.length})</span>
-                </button>
-                <button
-                  onClick={handlePurgeDemoData}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
-                  title="Purge legacy fake orders and refresh cache"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Purge Cache</span>
-                </button>
-              </div>
-            </div>
+          const calcPercentage = (count: number) => {
+            if (totalOrdersCount === 0) return '0%';
+            const pct = (count / totalOrdersCount) * 100;
+            return `${pct.toFixed(pct % 1 === 0 ? 0 : 1)}%`;
+          };
 
-            {/* Orders Filter Toolbar */}
-            <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs flex flex-wrap gap-3 items-center justify-between">
-              <div className="relative flex-1 min-w-[240px]">
-                <input
-                  type="text"
-                  placeholder="Search order #, customer name, mobile number, district or thana..."
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                />
-                <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
-              </div>
+          const summaryCards = [
+            {
+              id: '',
+              label: 'Total Orders',
+              count: totalOrdersCount,
+              pct: '100%',
+              icon: ShoppingBag,
+              theme: 'zinc',
+              borderColor: 'border-zinc-200',
+              activeBorder: 'border-zinc-950 ring-2 ring-zinc-950/20 shadow-md',
+              bgColor: 'bg-white',
+              badgeColor: 'bg-zinc-100 text-zinc-900',
+              iconBg: 'bg-zinc-900 text-white',
+            },
+            {
+              id: 'Pending',
+              label: 'Pending',
+              count: pendingCount,
+              pct: calcPercentage(pendingCount),
+              icon: Clock,
+              theme: 'amber',
+              borderColor: 'border-amber-200',
+              activeBorder: 'border-amber-500 ring-2 ring-amber-500/20 shadow-md',
+              bgColor: 'bg-amber-50/50',
+              badgeColor: 'bg-amber-100 text-amber-900 border border-amber-300 font-bold',
+              iconBg: 'bg-amber-500 text-zinc-950',
+            },
+            {
+              id: 'Processing',
+              label: 'Processing',
+              count: processingCount,
+              pct: calcPercentage(processingCount),
+              icon: PackageCheck,
+              theme: 'blue',
+              borderColor: 'border-blue-200',
+              activeBorder: 'border-blue-500 ring-2 ring-blue-500/20 shadow-md',
+              bgColor: 'bg-blue-50/50',
+              badgeColor: 'bg-blue-100 text-blue-900 border border-blue-300 font-bold',
+              iconBg: 'bg-blue-600 text-white',
+            },
+            {
+              id: 'Shipped',
+              label: 'Shipped',
+              count: shippedCount,
+              pct: calcPercentage(shippedCount),
+              icon: Truck,
+              theme: 'indigo',
+              borderColor: 'border-indigo-200',
+              activeBorder: 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-md',
+              bgColor: 'bg-indigo-50/50',
+              badgeColor: 'bg-indigo-100 text-indigo-900 border border-indigo-300 font-bold',
+              iconBg: 'bg-indigo-600 text-white',
+            },
+            {
+              id: 'Delivered',
+              label: 'Delivered / Completed',
+              count: deliveredCount,
+              pct: calcPercentage(deliveredCount),
+              icon: CheckCircle2,
+              theme: 'emerald',
+              borderColor: 'border-emerald-200',
+              activeBorder: 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-md',
+              bgColor: 'bg-emerald-50/50',
+              badgeColor: 'bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold',
+              iconBg: 'bg-emerald-600 text-white',
+            },
+            {
+              id: 'Cancelled',
+              label: 'Cancelled',
+              count: cancelledCount,
+              pct: calcPercentage(cancelledCount),
+              icon: XCircle,
+              theme: 'rose',
+              borderColor: 'border-rose-200',
+              activeBorder: 'border-rose-500 ring-2 ring-rose-500/20 shadow-md',
+              bgColor: 'bg-rose-50/50',
+              badgeColor: 'bg-rose-100 text-rose-900 border border-rose-300 font-bold',
+              iconBg: 'bg-rose-600 text-white',
+            },
+          ];
 
-              <div className="flex items-center gap-2">
-                <select
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Confirmed">Confirmed</option>
-                  <option value="Processing">Processing</option>
-                  <option value="Shipped">Shipped</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Cancelled">Cancelled</option>
-                  <option value="Returned">Returned</option>
-                </select>
-
-                <select
-                  value={orderDateFilter}
-                  onChange={(e) => setOrderDateFilter(e.target.value as any)}
-                  className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700"
-                >
-                  <option value="all">All Dates</option>
-                  <option value="today">Today Only</option>
-                  <option value="this_month">This Month</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Orders Table */}
-            <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
-                    <tr>
-                      <th className="p-4">Order ID & Date</th>
-                      <th className="p-4">Customer Details</th>
-                      <th className="p-4">Address / District</th>
-                      <th className="p-4">Delivery Charge</th>
-                      <th className="p-4">Total Amount</th>
-                      <th className="p-4">Status Changer</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 font-medium">
-                    {filteredOrders.map((ord) => (
-                      <tr key={ord.id} className="hover:bg-zinc-50/70">
-                        <td className="p-4">
-                          <div className="font-mono font-bold text-zinc-950 text-sm">
-                            {ord.order_number}
-                          </div>
-                          <div className="text-[11px] text-zinc-400">
-                            {new Date(ord.created_at).toLocaleDateString('en-BD', { year: 'numeric', month: 'short', day: 'numeric' })}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-bold text-zinc-900">{ord.customer_name}</div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <a
-                              href={`tel:${ord.phone}`}
-                              className="text-zinc-700 hover:text-emerald-600 font-mono flex items-center gap-1 font-semibold"
-                            >
-                              <Phone className="w-3 h-3 text-emerald-600" />
-                              <span>{ord.phone}</span>
-                            </a>
-                            <a
-                              href={`https://wa.me/${ord.phone.replace(/[^0-9]/g, '')}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[10px] text-emerald-600 hover:underline font-bold"
-                            >
-                              WhatsApp
-                            </a>
-                          </div>
-                          {ord.alt_phone && (
-                            <div className="text-[10px] text-zinc-400">Alt: {ord.alt_phone}</div>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <div className="font-semibold text-zinc-900">{ord.district}</div>
-                          <div className="text-zinc-500 text-[11px]">{ord.area}</div>
-                          <div className="text-[10px] text-zinc-400 truncate max-w-[180px]" title={ord.address}>
-                            {ord.address}
-                          </div>
-                        </td>
-                        <td className="p-4 text-zinc-600 font-semibold">
-                          ৳{Number(ord.delivery_charge || 0).toLocaleString('en-BD')}
-                        </td>
-                        <td className="p-4">
-                          <div className="font-black text-zinc-950 text-sm">
-                            ৳{Number(ord.total).toLocaleString('en-BD')}
-                          </div>
-                          <div className="text-[10px] text-emerald-700 font-semibold">
-                            Cash on Delivery
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <select
-                            value={ord.status}
-                            onChange={(e) =>
-                              handleQuickStatusUpdate(ord.id, e.target.value as OrderStatus)
-                            }
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border cursor-pointer ${getStatusBadgeClass(
-                              ord.status
-                            )}`}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Processing">Processing</option>
-                            <option value="Shipped">Shipped</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Cancelled">Cancelled</option>
-                            <option value="Returned">Returned</option>
-                          </select>
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setSelectedOrderForInvoice(ord)}
-                              title="Print Invoice / Packing Slip"
-                              className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors cursor-pointer"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditOrderModal(ord)}
-                              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition-colors cursor-pointer"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteOrder(ord.id, ord.order_number)}
-                              title="Delete this order"
-                              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredOrders.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-400">
-                          No orders found matching criteria.
-                        </td>
-                      </tr>
+          return (
+            <div className="space-y-6 animate-fade-in">
+              {/* Header Bar */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-zinc-200 shadow-xs">
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-2xl font-black text-zinc-900 tracking-tight">
+                      Order Management & Journey
+                    </h2>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Live Sync ({orders.length} orders)
+                    </span>
+                    {orderStatusFilter && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-zinc-900 text-white">
+                        Filtered: {orderStatusFilter}
+                      </span>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Track the complete customer order journey, manage status updates & analyze stage conversion rates in real time.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* View Mode Switcher */}
+                  <div className="inline-flex p-1 rounded-2xl bg-zinc-100 border border-zinc-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrdersViewMode('list');
+                        if (currentTab === 'order_analytics') setCurrentTab('orders');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        ordersViewMode === 'list' && currentTab === 'orders'
+                          ? 'bg-white text-zinc-950 shadow-xs'
+                          : 'text-zinc-600 hover:text-zinc-950'
+                      }`}
+                    >
+                      📋 Orders List ({filteredOrders.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrdersViewMode('analytics');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        ordersViewMode === 'analytics' || currentTab === 'order_analytics'
+                          ? 'bg-emerald-500 text-zinc-950 font-black shadow-xs'
+                          : 'text-zinc-600 hover:text-zinc-950'
+                      }`}
+                    >
+                      📊 Order Analytics
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        const list = await storeService.getAllAdminOrders('', password);
+                        setOrders(list);
+                        if (list.length > 0) {
+                          showToast(`Successfully synced ${list.length} orders from cloud!`, 'success');
+                        } else {
+                          showToast('Sync complete: No orders found.', 'info');
+                        }
+                      } catch (err: any) {
+                        console.error('Fetch orders error:', err);
+                        showToast('Sync error: ' + (err?.message || 'Check connection'), 'error');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800 hover:bg-emerald-100 shadow-xs transition-colors cursor-pointer"
+                    title="Fetch all orders from Firebase Firestore"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Sync</span>
+                  </button>
+                  <button
+                    onClick={handlePurgeDemoData}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs transition-colors cursor-pointer"
+                    title="Purge legacy fake demo data"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Purge</span>
+                  </button>
+                </div>
               </div>
+
+              {/* ====================================================
+                  ORDER DASHBOARD CARDS (TOP 6 SUMMARY METRICS)
+              ==================================================== */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {summaryCards.map((c) => {
+                  const isSelected = orderStatusFilter.toLowerCase() === c.id.toLowerCase();
+                  const Icon = c.icon;
+
+                  return (
+                    <button
+                      key={c.label}
+                      type="button"
+                      onClick={() => {
+                        const next = isSelected ? '' : c.id;
+                        setOrderStatusFilter(next);
+                        if (ordersViewMode === 'analytics') setOrdersViewMode('list');
+                        if (currentTab === 'order_analytics') setCurrentTab('orders');
+                      }}
+                      className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                        isSelected
+                          ? c.activeBorder + ' scale-[1.02]'
+                          : `${c.borderColor} ${c.bgColor} hover:shadow-xs hover:border-zinc-400`
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 ${c.iconBg} shadow-xs`}>
+                          <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </div>
+                        <span className={`text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full ${c.badgeColor}`}>
+                          {c.pct}
+                        </span>
+                      </div>
+
+                      <div className="mt-2.5">
+                        <span className="text-[11px] font-bold text-zinc-500 block truncate">
+                          {c.label}
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="text-xl sm:text-2xl font-black font-mono text-zinc-950">
+                            {c.count}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">orders</span>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Conditional Rendering: Order Analytics View vs Orders List View */}
+              {ordersViewMode === 'analytics' || currentTab === 'order_analytics' ? (
+                <AdminOrderAnalytics
+                  orders={orders}
+                  onFilterByStatus={(st) => {
+                    setOrderStatusFilter(st);
+                    setOrdersViewMode('list');
+                    if (currentTab === 'order_analytics') setCurrentTab('orders');
+                  }}
+                  activeStatusFilter={orderStatusFilter}
+                  onRefresh={() => loadOrders(password)}
+                  isLoading={loading}
+                />
+              ) : (
+                <>
+                  {/* Order Progress / Status Distribution Bar */}
+                  <div className="bg-white p-4 sm:p-5 rounded-3xl border border-zinc-200 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Route className="w-4 h-4 text-emerald-600" />
+                        <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight">
+                          Order Status Distribution & Progress
+                        </h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600">
+                          Formula: (Count / Total) × 100
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setOrdersViewMode('analytics')}
+                        className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                      >
+                        <span>View Detailed Funnel Analytics</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Multi-segment Stacked Bar */}
+                    <div className="w-full h-3.5 bg-zinc-100 rounded-full overflow-hidden flex shadow-inner">
+                      {totalOrdersCount > 0 ? (
+                        <>
+                          {pendingCount > 0 && (
+                            <div
+                              title={`Pending: ${pendingCount} (${calcPercentage(pendingCount)})`}
+                              style={{ width: `${(pendingCount / totalOrdersCount) * 100}%` }}
+                              className="bg-amber-400 hover:bg-amber-500 transition-all cursor-pointer"
+                              onClick={() => setOrderStatusFilter('Pending')}
+                            />
+                          )}
+                          {processingCount > 0 && (
+                            <div
+                              title={`Processing: ${processingCount} (${calcPercentage(processingCount)})`}
+                              style={{ width: `${(processingCount / totalOrdersCount) * 100}%` }}
+                              className="bg-blue-500 hover:bg-blue-600 transition-all cursor-pointer"
+                              onClick={() => setOrderStatusFilter('Processing')}
+                            />
+                          )}
+                          {shippedCount > 0 && (
+                            <div
+                              title={`Shipped: ${shippedCount} (${calcPercentage(shippedCount)})`}
+                              style={{ width: `${(shippedCount / totalOrdersCount) * 100}%` }}
+                              className="bg-indigo-500 hover:bg-indigo-600 transition-all cursor-pointer"
+                              onClick={() => setOrderStatusFilter('Shipped')}
+                            />
+                          )}
+                          {deliveredCount > 0 && (
+                            <div
+                              title={`Delivered: ${deliveredCount} (${calcPercentage(deliveredCount)})`}
+                              style={{ width: `${(deliveredCount / totalOrdersCount) * 100}%` }}
+                              className="bg-emerald-500 hover:bg-emerald-600 transition-all cursor-pointer"
+                              onClick={() => setOrderStatusFilter('Delivered')}
+                            />
+                          )}
+                          {cancelledCount > 0 && (
+                            <div
+                              title={`Cancelled: ${cancelledCount} (${calcPercentage(cancelledCount)})`}
+                              style={{ width: `${(cancelledCount / totalOrdersCount) * 100}%` }}
+                              className="bg-rose-500 hover:bg-rose-600 transition-all cursor-pointer"
+                              onClick={() => setOrderStatusFilter('Cancelled')}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-zinc-200" />
+                      )}
+                    </div>
+
+                    {/* Mini Legend Row */}
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-semibold text-zinc-600">
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                        <span>Pending: <strong className="text-zinc-950 font-mono">{pendingCount} ({calcPercentage(pendingCount)})</strong></span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                        <span>Processing: <strong className="text-zinc-950 font-mono">{processingCount} ({calcPercentage(processingCount)})</strong></span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                        <span>Shipped: <strong className="text-zinc-950 font-mono">{shippedCount} ({calcPercentage(shippedCount)})</strong></span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <span>Delivered: <strong className="text-zinc-950 font-mono">{deliveredCount} ({calcPercentage(deliveredCount)})</strong></span>
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                        <span>Cancelled: <strong className="text-zinc-950 font-mono">{cancelledCount} ({calcPercentage(cancelledCount)})</strong></span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Orders Filter Toolbar */}
+                  <div className="bg-white p-4 rounded-3xl border border-zinc-200 shadow-xs flex flex-wrap gap-3 items-center justify-between">
+                    {/* Search Input */}
+                    <div className="relative flex-1 min-w-[240px]">
+                      <input
+                        type="text"
+                        placeholder="Search order #, customer name, mobile number, district, thana or address..."
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-8 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 transition-colors"
+                      />
+                      <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                      {orderSearch && (
+                        <button
+                          onClick={() => setOrderSearch('')}
+                          className="absolute right-2.5 top-3 text-zinc-400 hover:text-zinc-700 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter Dropdowns */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Status Filter */}
+                      <select
+                        value={orderStatusFilter}
+                        onChange={(e) => setOrderStatusFilter(e.target.value)}
+                        className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700 focus:outline-none focus:border-zinc-900 cursor-pointer"
+                      >
+                        <option value="">All Statuses ({orders.length})</option>
+                        <option value="Pending">Pending ({pendingCount})</option>
+                        <option value="Processing">Processing ({processingCount})</option>
+                        <option value="Shipped">Shipped ({shippedCount})</option>
+                        <option value="Delivered">Delivered / Completed ({deliveredCount})</option>
+                        <option value="Cancelled">Cancelled ({cancelledCount})</option>
+                      </select>
+
+                      {/* Date Filter */}
+                      <select
+                        value={orderDateFilter}
+                        onChange={(e) => setOrderDateFilter(e.target.value as any)}
+                        className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700 focus:outline-none focus:border-zinc-900 cursor-pointer"
+                      >
+                        <option value="all">All Dates</option>
+                        <option value="today">Today Only</option>
+                        <option value="this_week">This Week</option>
+                        <option value="this_month">This Month</option>
+                      </select>
+
+                      {/* Product Filter */}
+                      <select
+                        value={orderProductFilter}
+                        onChange={(e) => setOrderProductFilter(e.target.value)}
+                        className="bg-zinc-50 border border-zinc-300 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 text-zinc-700 focus:outline-none focus:border-zinc-900 max-w-[180px] sm:max-w-[220px] truncate cursor-pointer"
+                      >
+                        <option value="">All Products</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Clear Filter Button */}
+                      {(orderSearch || orderStatusFilter || orderDateFilter !== 'all' || orderProductFilter) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderSearch('');
+                            setOrderStatusFilter('');
+                            setOrderDateFilter('all');
+                            setOrderProductFilter('');
+                          }}
+                          className="px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Clear Filters</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Orders Table */}
+                  <div className="bg-white rounded-3xl border border-zinc-200 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
+                          <tr>
+                            <th className="p-4">Order ID & Date</th>
+                            <th className="p-4">Customer Details</th>
+                            <th className="p-4">Delivery Location</th>
+                            <th className="p-4">Ordered Products</th>
+                            <th className="p-4">Total Amount</th>
+                            <th className="p-4">Status & Order Journey</th>
+                            <th className="p-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100 font-medium">
+                          {filteredOrders.map((ord) => {
+                            const isOrdCancelled = ord.status === 'Cancelled' || ord.status === 'Returned';
+                            const orderItems = ord.items || [];
+
+                            return (
+                              <tr key={ord.id} className="hover:bg-zinc-50/70 transition-colors">
+                                {/* 1. Order ID & Date */}
+                                <td className="p-4">
+                                  <div className="font-mono font-bold text-zinc-950 text-sm">
+                                    {ord.order_number}
+                                  </div>
+                                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                                    {new Date(ord.created_at).toLocaleDateString('en-BD', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                    })}
+                                  </div>
+                                </td>
+
+                                {/* 2. Customer Details */}
+                                <td className="p-4">
+                                  <div className="font-bold text-zinc-900 text-sm">
+                                    {ord.customer_name}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <a
+                                      href={`tel:${ord.phone}`}
+                                      className="text-zinc-700 hover:text-emerald-600 font-mono flex items-center gap-1 font-semibold text-xs"
+                                    >
+                                      <Phone className="w-3 h-3 text-emerald-600" />
+                                      <span>{ord.phone}</span>
+                                    </a>
+                                    <a
+                                      href={`https://wa.me/${ord.phone.replace(/[^0-9]/g, '')}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 hover:bg-emerald-100 font-bold"
+                                    >
+                                      WhatsApp
+                                    </a>
+                                  </div>
+                                  {ord.alt_phone && (
+                                    <div className="text-[10px] text-zinc-400 mt-0.5">
+                                      Alt: {ord.alt_phone}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* 3. Delivery Location */}
+                                <td className="p-4">
+                                  <div className="font-semibold text-zinc-900">
+                                    {ord.district}
+                                  </div>
+                                  <div className="text-zinc-500 text-[11px]">{ord.area}</div>
+                                  <div
+                                    className="text-[10px] text-zinc-400 truncate max-w-[170px]"
+                                    title={ord.address}
+                                  >
+                                    {ord.address}
+                                  </div>
+                                  <div className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                                    Charge: ৳{Number(ord.delivery_charge || 0).toLocaleString('en-BD')}
+                                  </div>
+                                </td>
+
+                                {/* 4. Ordered Products */}
+                                <td className="p-4">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-bold text-zinc-900 text-xs">
+                                        {orderItems.length} item{orderItems.length === 1 ? '' : 's'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 overflow-hidden max-w-[180px]">
+                                      {orderItems.slice(0, 3).map((it, idx) => (
+                                        <div
+                                          key={it.id || idx}
+                                          className="relative group shrink-0"
+                                          title={`${it.product_name} x ${it.quantity}`}
+                                        >
+                                          {it.image_url ? (
+                                            <img
+                                              src={it.image_url}
+                                              alt={it.product_name}
+                                              className="w-8 h-8 rounded-lg object-cover border border-zinc-200"
+                                            />
+                                          ) : (
+                                            <div className="w-8 h-8 rounded-lg bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] text-zinc-400">
+                                              <Package className="w-3.5 h-3.5" />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {orderItems.length > 3 && (
+                                        <span className="text-[10px] text-zinc-500 font-bold">
+                                          +{orderItems.length - 3}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {orderItems[0] && (
+                                      <div
+                                        className="text-[11px] text-zinc-600 truncate max-w-[160px]"
+                                        title={orderItems[0].product_name}
+                                      >
+                                        {orderItems[0].product_name}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* 5. Total Amount */}
+                                <td className="p-4">
+                                  <div className="font-black text-zinc-950 text-sm font-mono">
+                                    ৳{Number(ord.total).toLocaleString('en-BD')}
+                                  </div>
+                                  <div className="text-[10px] text-emerald-700 font-semibold">
+                                    {ord.payment_method || 'Cash on Delivery'}
+                                  </div>
+                                </td>
+
+                                {/* 6. Customer Order Journey & Status Changer */}
+                                <td className="p-4 min-w-[210px]">
+                                  {/* Visual Order Progress Tracker */}
+                                  <div className="mb-2">
+                                    {isOrdCancelled ? (
+                                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 w-fit">
+                                        <span>✓ Placed</span>
+                                        <span>→</span>
+                                        <span>✕ Cancelled</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1 text-[10px] font-bold">
+                                        {/* Step 1: Placed */}
+                                        <span
+                                          className="text-emerald-700"
+                                          title="Order Placed"
+                                        >
+                                          ✓ Placed
+                                        </span>
+                                        <span className="text-zinc-300">→</span>
+
+                                        {/* Step 2: Processing */}
+                                        <span
+                                          className={
+                                            ord.status === 'Processing' || ord.status === 'Confirmed'
+                                              ? 'text-blue-700 font-black'
+                                              : ['Shipped', 'Delivered'].includes(ord.status)
+                                              ? 'text-emerald-700'
+                                              : 'text-zinc-400'
+                                          }
+                                          title="Processing in warehouse"
+                                        >
+                                          {['Shipped', 'Delivered'].includes(ord.status)
+                                            ? '✓ Processing'
+                                            : ord.status === 'Processing' || ord.status === 'Confirmed'
+                                            ? '● Processing'
+                                            : '○ Processing'}
+                                        </span>
+                                        <span className="text-zinc-300">→</span>
+
+                                        {/* Step 3: Shipped */}
+                                        <span
+                                          className={
+                                            ord.status === 'Shipped'
+                                              ? 'text-indigo-700 font-black'
+                                              : ord.status === 'Delivered'
+                                              ? 'text-emerald-700'
+                                              : 'text-zinc-400'
+                                          }
+                                          title="Shipped with courier"
+                                        >
+                                          {ord.status === 'Delivered'
+                                            ? '✓ Shipped'
+                                            : ord.status === 'Shipped'
+                                            ? '● Shipped'
+                                            : '○ Shipped'}
+                                        </span>
+                                        <span className="text-zinc-300">→</span>
+
+                                        {/* Step 4: Delivered */}
+                                        <span
+                                          className={
+                                            ord.status === 'Delivered'
+                                              ? 'text-emerald-700 font-black'
+                                              : 'text-zinc-400'
+                                          }
+                                          title="Delivered to customer"
+                                        >
+                                          {ord.status === 'Delivered' ? '✓ Delivered' : '○ Delivered'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Status Selector Dropdown */}
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={ord.status}
+                                      onChange={(e) =>
+                                        handleQuickStatusUpdate(
+                                          ord.id,
+                                          e.target.value as OrderStatus,
+                                          `Status changed to ${e.target.value} in Orders List`
+                                        )
+                                      }
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border cursor-pointer ${getStatusBadgeClass(
+                                        ord.status
+                                      )}`}
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="Confirmed">Confirmed</option>
+                                      <option value="Processing">Processing</option>
+                                      <option value="Shipped">Shipped</option>
+                                      <option value="Delivered">Delivered / Completed</option>
+                                      <option value="Cancelled">Cancelled</option>
+                                      <option value="Returned">Returned</option>
+                                    </select>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForJourney(ord)}
+                                      title="Open Customer Order Journey Modal"
+                                      className="p-1 rounded-md bg-zinc-100 hover:bg-emerald-50 hover:text-emerald-700 text-zinc-600 transition-colors cursor-pointer"
+                                    >
+                                      <Route className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+
+                                {/* 7. Actions */}
+                                <td className="p-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForJourney(ord)}
+                                      title="View Complete Customer Order Journey"
+                                      className="px-2.5 py-1.5 rounded-xl bg-zinc-100 hover:bg-emerald-100 text-zinc-800 hover:text-emerald-950 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Route className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span className="hidden xl:inline">Journey</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForInvoice(ord)}
+                                      title="Print Invoice / Packing Slip"
+                                      className="p-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors cursor-pointer"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditOrderModal(ord)}
+                                      className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs transition-colors cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteOrder(ord.id, ord.order_number)}
+                                      title="Delete this order"
+                                      className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {filteredOrders.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="p-12 text-center text-zinc-400">
+                                <ShoppingBag className="w-10 h-10 mx-auto text-zinc-300 mb-2" />
+                                <div className="font-bold text-zinc-600 text-sm">No orders found</div>
+                                <p className="text-xs text-zinc-400 mt-1">
+                                  No customer orders matched your selected filter criteria.
+                                </p>
+                                {(orderSearch || orderStatusFilter || orderDateFilter !== 'all' || orderProductFilter) && (
+                                  <button
+                                    onClick={() => {
+                                      setOrderSearch('');
+                                      setOrderStatusFilter('');
+                                      setOrderDateFilter('all');
+                                      setOrderProductFilter('');
+                                    }}
+                                    className="mt-3 px-3.5 py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold cursor-pointer"
+                                  >
+                                    Reset All Filters
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ====================================================
             4. TAB: CUSTOMERS
@@ -9056,6 +9915,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         onClose={() => setSelectedCustomerForHistory(null)}
         onSelectOrder={(ord) => {
           handleOpenEditOrderModal(ord);
+        }}
+      />
+
+      {/* Customer Order Journey & Tracking Modal */}
+      <OrderJourneyModal
+        order={selectedOrderForJourney}
+        onClose={() => setSelectedOrderForJourney(null)}
+        onStatusUpdate={async (orderId, newStatus, note) => {
+          await handleQuickStatusUpdate(orderId, newStatus, note);
+          if (selectedOrderForJourney && String(selectedOrderForJourney.id) === String(orderId)) {
+            setSelectedOrderForJourney({
+              ...selectedOrderForJourney,
+              status: newStatus,
+              timeline: selectedOrderForJourney.timeline
+                ? [
+                    ...selectedOrderForJourney.timeline,
+                    {
+                      status: newStatus,
+                      timestamp: new Date().toISOString(),
+                      note: note || `Status updated to ${newStatus} by Admin`,
+                      by: 'Admin',
+                    },
+                  ]
+                : [
+                    {
+                      status: 'Pending',
+                      timestamp: selectedOrderForJourney.created_at,
+                      note: 'Order placed by customer',
+                      by: 'Customer',
+                    },
+                    {
+                      status: newStatus,
+                      timestamp: new Date().toISOString(),
+                      note: note || `Status updated to ${newStatus} by Admin`,
+                      by: 'Admin',
+                    },
+                  ],
+            });
+          }
+        }}
+        onOpenEditModal={(ord) => {
+          setSelectedOrderForJourney(null);
+          handleOpenEditOrderModal(ord);
+        }}
+        onPrintInvoice={(ord) => {
+          setSelectedOrderForJourney(null);
+          setSelectedOrderForInvoice(ord);
         }}
       />
 
