@@ -1660,6 +1660,7 @@ export const storeService = {
   // 3. ORDERS & CHECKOUT
   // Duplicate submission protection cache (in-memory per session)
   _recentOrderSignatures: new Map<string, { timestamp: number; order: Order }>(),
+  _inFlightOrderSubmissions: new Map<string, Promise<{ success: boolean; order?: Order; error?: string }>>(),
 
   async createOrder(orderPayload: {
     customer_name: string;
@@ -1667,6 +1668,7 @@ export const storeService = {
     alt_phone?: string;
     email?: string;
     district: string;
+    thana?: string;
     area: string;
     address: string;
     delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
@@ -1685,20 +1687,68 @@ export const storeService = {
       sku?: string;
     }>;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
-    // Check duplicate order submission signature (prevents accidental double clicks)
+    // Generate idempotent signature based on customer phone, address, and items
     const normPhone = (orderPayload.phone || '').replace(/[^0-9]/g, '');
     const normAddr = (orderPayload.address || '').toLowerCase().trim();
     const itemsSig = (orderPayload.items || [])
-      .map(i => `${i.product_id}x${i.quantity}`)
+      .map((i) => `${i.product_id}x${i.quantity}`)
       .sort()
       .join(',');
     const submissionSig = `${normPhone}|${normAddr}|${itemsSig}`;
     const now = Date.now();
+
+    // 1. Prevent duplicate order if confirmed within past 30 seconds
     const existing = this._recentOrderSignatures.get(submissionSig);
-    if (existing && (now - existing.timestamp) < 15000) {
-      console.info('[StoreService] Duplicate order submission prevented. Returning confirmed order:', existing.order.order_number);
+    if (existing && now - existing.timestamp < 30000) {
+      console.info('[StoreService] Idempotent order duplicate prevented. Returning confirmed order:', existing.order.order_number);
       return { success: true, order: existing.order };
     }
+
+    // 2. Prevent concurrent duplicate if identical submission is already in-flight
+    if (this._inFlightOrderSubmissions.has(submissionSig)) {
+      console.info('[StoreService] Awaiting already in-flight order submission for:', normPhone);
+      return this._inFlightOrderSubmissions.get(submissionSig)!;
+    }
+
+    const orderPromise = this._executeCreateOrder(orderPayload, submissionSig);
+    this._inFlightOrderSubmissions.set(submissionSig, orderPromise);
+
+    try {
+      const res = await orderPromise;
+      return res;
+    } finally {
+      this._inFlightOrderSubmissions.delete(submissionSig);
+    }
+  },
+
+  async _executeCreateOrder(
+    orderPayload: {
+      customer_name: string;
+      phone: string;
+      alt_phone?: string;
+      email?: string;
+      district: string;
+      thana?: string;
+      area: string;
+      address: string;
+      delivery_area: 'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka' | string;
+      delivery_charge?: number;
+      subtotal?: number;
+      total?: number;
+      note?: string;
+      items: Array<{
+        product_id: string;
+        name: string;
+        quantity: number;
+        selected_color?: string;
+        selected_color_code?: string;
+        image_url?: string;
+        unit_price?: number;
+        sku?: string;
+      }>;
+    },
+    submissionSig: string
+  ): Promise<{ success: boolean; order?: Order; error?: string }> {
 
     const settings = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     const products = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
@@ -1827,6 +1877,7 @@ export const storeService = {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       items: orderItems,
+      thana: orderPayload.thana || orderPayload.area || '',
       timeline: [
         {
           status: 'Pending',
@@ -1837,7 +1888,9 @@ export const storeService = {
       ],
     };
 
-    // 1. Authoritative Firestore Persistence
+    console.log(`[ORDER_CREATE_START] id=${orderId} order_number=${orderNo} phone=${orderPayload.phone} total=${total}`);
+
+    // Authoritative clean object for Firestore
     const firestoreOrder = cleanForFirestore({
       ...newOrder,
       customer_phone: orderPayload.phone || '',
@@ -1846,45 +1899,83 @@ export const storeService = {
     });
     const firestoreCustomer = cleanForFirestore(customerData);
 
-    try {
-      await Promise.race([
-        Promise.all([
+    let firestorePersisted = false;
+    let persistenceError: any = null;
+
+    // ATTEMPT 1: Authoritative Direct Firestore write
+    if (db) {
+      try {
+        await Promise.race([
           setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
-          setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }),
-          ...stockUpdatePromises
-        ]),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore order write timeout')), 3000))
-      ]);
-    } catch (fsErr) {
-      console.warn('Direct Firestore order persistence note:', fsErr);
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore network write timeout (12s)')), 12000)
+          ),
+        ]);
+        firestorePersisted = true;
+        console.log(`[ORDER_CREATE_SUCCESS] Direct Firestore persistence confirmed for order ${orderId} (${orderNo})`);
+      } catch (directErr: any) {
+        persistenceError = directErr;
+        console.warn(`[ORDER_CREATE_DIRECT_WARN] Direct Firestore write note for ${orderId}:`, directErr?.message || directErr);
+      }
     }
 
-    // 2. Authoritative Backend Server API persistence (mirrored immediately)
-    const fullOrderSyncPayload = {
-      ...orderPayload,
-      order: newOrder,
-      id: orderId,
-      order_number: orderNo,
-      items: orderItems,
-      total,
-      subtotal,
-      delivery_charge: deliveryCharge,
-    };
+    // ATTEMPT 2: Server API Proxy to Firestore (mirrored if direct connection encountered client-side network barrier)
+    if (!firestorePersisted) {
+      try {
+        const fullOrderSyncPayload = {
+          ...orderPayload,
+          order: newOrder,
+          id: orderId,
+          order_number: orderNo,
+          items: orderItems,
+          total,
+          subtotal,
+          delivery_charge: deliveryCharge,
+        };
+        const apiRes = await tryApi<{ success: boolean; message?: string; order?: any; error?: string }>('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fullOrderSyncPayload),
+        });
+
+        if (apiRes.success && (apiRes.data?.success || apiRes.data?.order)) {
+          firestorePersisted = true;
+          console.log(`[ORDER_CREATE_SUCCESS] Server API fallback persistence confirmed for order ${orderId} (${orderNo})`);
+        } else {
+          persistenceError = new Error(apiRes.data?.error || apiRes.error || 'Server order endpoint rejected order');
+        }
+      } catch (apiErr: any) {
+        persistenceError = apiErr;
+        console.warn(`[ORDER_CREATE_API_WARN] Server API fallback error for ${orderId}:`, apiErr?.message || apiErr);
+      }
+    }
+
+    // STRICT PERSISTENCE GATE:
+    // Every successful customer order must be persisted in Firestore BEFORE the customer is told that the order was successfully placed.
+    if (!firestorePersisted) {
+      console.error(`[ORDER_CREATE_FAILED] Order ${orderId} (${orderNo}) could not be written to Firestore:`, persistenceError?.message || persistenceError);
+      return {
+        success: false,
+        error:
+          'অর্ডারটি ডাটাবেজে সংরক্ষণ করা সম্ভব হয়নি। অনুগ্রহ করে ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন। (Order could not be saved to server database. Please check connection and try again.)',
+      };
+    }
+
+    // Secondary non-blocking updates (customer record & stock count in Firestore)
     try {
-      await tryApi<{ success: boolean; message?: string; order?: any }>('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullOrderSyncPayload),
-      });
+      if (db) {
+        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }).catch(() => {});
+        Promise.all(stockUpdatePromises).catch(() => {});
+      }
     } catch {}
 
-    // 3. Local update
+    // Update local cache so customer device immediately sees their own order
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
     orders.unshift(newOrder);
     setLocal(ORDERS_KEY, orders);
 
     const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
-    const custIdx = customers.findIndex(c => c.phone === orderPayload.phone);
+    const custIdx = customers.findIndex((c) => c.phone === orderPayload.phone);
     if (custIdx >= 0) {
       customers[custIdx].total_orders = (customers[custIdx].total_orders || 0) + 1;
       customers[custIdx].total_spent = (customers[custIdx].total_spent || 0) + total;
@@ -1894,8 +1985,8 @@ export const storeService = {
     }
     setLocal(CUSTOMERS_KEY, customers);
 
-    // Save to idempotency cache
-    this._recentOrderSignatures.set(submissionSig, { timestamp: now, order: newOrder });
+    // Save to idempotency cache ONLY after confirmed successful write
+    this._recentOrderSignatures.set(submissionSig, { timestamp: Date.now(), order: newOrder });
     if (this._recentOrderSignatures.size > 50) {
       const oldestKey = this._recentOrderSignatures.keys().next().value;
       if (oldestKey) this._recentOrderSignatures.delete(oldestKey);
@@ -1954,6 +2045,7 @@ export const storeService = {
   },
 
   async getAllAdminOrders(statusFilter = '', adminPassword?: string): Promise<Order[]> {
+    console.log('[ADMIN_ORDERS_LOAD_START] Fetching orders for admin...');
     const orderMap = new Map<string, Order>();
     const deletedIds = getDeletedOrderIds();
 
@@ -1983,6 +2075,7 @@ export const storeService = {
         alt_phone: o.alt_phone || '',
         email: o.email || '',
         district: o.district || '',
+        thana: o.thana || o.area || '',
         area: o.area || '',
         address: o.address || '',
         delivery_area: o.delivery_area || 'inside_dhaka',
@@ -1994,6 +2087,14 @@ export const storeService = {
         payment_method: o.payment_method || 'Cash on Delivery',
         note: o.note || '',
         items: Array.isArray(o.items) ? o.items : [],
+        timeline: Array.isArray(o.timeline) && o.timeline.length > 0 ? o.timeline : [
+          {
+            status: (o.status || o.order_status || 'Pending'),
+            timestamp: o.created_at || new Date().toISOString(),
+            note: 'Order placed by customer via Cash on Delivery',
+            by: 'Customer',
+          },
+        ],
         created_at: o.created_at || new Date().toISOString(),
         updated_at: o.updated_at || new Date().toISOString(),
       };
@@ -2009,7 +2110,26 @@ export const storeService = {
       }
     };
 
-    // 1. Fetch from REST API (server database source of truth)
+    // 1. Authoritative Firestore Fetch
+    if (db) {
+      try {
+        const snap = await Promise.race([
+          getDocs(collection(db, 'orders')),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore getDocs timeout (8s)')), 8000)
+          ),
+        ]);
+        if (snap && !snap.empty) {
+          snap.forEach((d) => {
+            registerOrder(d.data(), d.id);
+          });
+        }
+      } catch (e: any) {
+        console.warn('[ADMIN_ORDERS_LOAD_FAILED] Firestore orders read note:', e?.message || e);
+      }
+    }
+
+    // 2. Fetch from REST API (server database source of truth)
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_token') : null;
       const pass = adminPassword || (token ? null : '123456');
@@ -2025,20 +2145,6 @@ export const storeService = {
       console.warn('API getAllAdminOrders notice:', e);
     }
 
-    // 2. Fetch from Firestore if quota cooldown is not active
-    if (!isClientQuotaCooldownActive()) {
-      try {
-        const snap = await getDocs(collection(db, 'orders'));
-        if (!snap.empty) {
-          snap.forEach((d) => {
-            registerOrder(d.data(), d.id);
-          });
-        }
-      } catch (e) {
-        handleStoreFirestoreError('Firestore getAllAdminOrders', e);
-      }
-    }
-
     // 3. Merge local cached orders
     const localOrders = getLocal<Order[]>(ORDERS_KEY, []);
     if (Array.isArray(localOrders)) {
@@ -2050,6 +2156,8 @@ export const storeService = {
 
     // Update local cache with sanitized orders
     setLocal(ORDERS_KEY, orders);
+
+    console.log(`[ADMIN_ORDERS_LOAD_SUCCESS] Total orders loaded: ${orders.length}`);
 
     if (statusFilter) {
       const filterLower = statusFilter.toLowerCase().trim();
@@ -2222,7 +2330,11 @@ export const storeService = {
   subscribeToOrders(callback: (orders: Order[]) => void): () => void {
     if (!db) return () => {};
     try {
+      console.log('[ADMIN_ORDERS_LISTENER_CONNECTED] Establishing real-time listener on orders collection');
       const q = collection(db, 'orders');
+      let isUnsubscribed = false;
+      let reconnectTimer: any = null;
+
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -2252,6 +2364,7 @@ export const storeService = {
               alt_phone: o.alt_phone || '',
               email: o.email || '',
               district: o.district || '',
+              thana: o.thana || o.area || '',
               area: o.area || '',
               address: o.address || '',
               delivery_area: o.delivery_area || 'inside_dhaka',
@@ -2263,6 +2376,14 @@ export const storeService = {
               payment_method: o.payment_method || 'Cash on Delivery',
               note: o.note || '',
               items: Array.isArray(o.items) ? o.items : [],
+              timeline: Array.isArray(o.timeline) && o.timeline.length > 0 ? o.timeline : [
+                {
+                  status: (o.status || o.order_status || 'Pending'),
+                  timestamp: o.created_at || new Date().toISOString(),
+                  note: 'Order placed by customer via Cash on Delivery',
+                  by: 'Customer',
+                },
+              ],
               created_at: o.created_at || new Date().toISOString(),
               updated_at: o.updated_at || new Date().toISOString(),
             };
@@ -2274,15 +2395,29 @@ export const storeService = {
             (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
           );
           setLocal(ORDERS_KEY, orders);
+          console.log(`[ADMIN_NEW_ORDER_RECEIVED] Real-time orders updated. Count: ${orders.length}`);
           callback(orders);
         },
         (err) => {
-          console.warn('Real-time order subscription notice:', err);
+          console.warn('[ADMIN_ORDERS_LOAD_FAILED] Real-time orders subscription warning:', err?.message || err);
+          if (!isUnsubscribed && !reconnectTimer) {
+            reconnectTimer = setTimeout(() => {
+              if (isUnsubscribed) return;
+              this.getAllAdminOrders('', '').then((list) => {
+                if (list && list.length > 0) callback(list);
+              }).catch(() => {});
+            }, 8000);
+          }
         }
       );
-      return unsubscribe;
+
+      return () => {
+        isUnsubscribed = true;
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        unsubscribe();
+      };
     } catch (e) {
-      console.warn('Failed to setup real-time orders subscription:', e);
+      console.warn('[ADMIN_ORDERS_LOAD_FAILED] Failed to initialize real-time orders listener:', e);
       return () => {};
     }
   },

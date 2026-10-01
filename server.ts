@@ -1160,7 +1160,7 @@ app.post('/api/ai/chat', handleAiChatRequest);
 app.post('/api/ai-chat', handleAiChatRequest);
 
 // POST /api/orders
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const body = req.body || {};
 
   // Support direct synchronization of an order object from client
@@ -1257,18 +1257,23 @@ app.post('/api/orders', (req, res) => {
 
     saveDB();
 
-    // Mirror to Firestore in background
+    // Persist to Firestore with error logging
     try {
       const fDb = getFirestoreInstance();
-      const firestoreOrder = cleanForFirestore({
-        ...orderRecord,
-        customer_phone: custPhone,
-        total_amount: orderRecord.total,
-        order_status: orderRecord.status,
-        items: db.order_items.filter(i => i.order_id === oId)
-      });
-      setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true }).catch(() => {});
-    } catch (e) {}
+      if (fDb) {
+        const firestoreOrder = cleanForFirestore({
+          ...orderRecord,
+          customer_phone: custPhone,
+          total_amount: orderRecord.total,
+          order_status: orderRecord.status,
+          items: db.order_items.filter(i => i.order_id === oId)
+        });
+        await setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true });
+        console.log(`[SERVER_ORDERS_FIRESTORE_SUCCESS] Order ${oId} written to Firestore`);
+      }
+    } catch (e: any) {
+      console.warn(`[SERVER_ORDERS_FIRESTORE_WARN] Order ${oId} Firestore write warning:`, e?.message || e);
+    }
 
     return res.status(201).json({
       success: true,
@@ -2283,8 +2288,55 @@ app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
 });
 
 // GET /api/admin/orders
-app.get('/api/admin/orders', requireAdmin, (req, res) => {
+app.get('/api/admin/orders', requireAdmin, async (req, res) => {
   const status = req.query.status as string;
+
+  // Sync from Firestore so any direct client orders are included in server memory
+  try {
+    const fDb = getFirestoreInstance();
+    if (fDb) {
+      const snap = await getDocs(collection(fDb, 'orders'));
+      snap.forEach((d) => {
+        const o = d.data() as any;
+        const oId = String(o.id || d.id);
+        const existingIdx = db.orders.findIndex((item) => item.id === oId || item.order_number === o.order_number);
+        if (existingIdx === -1) {
+          db.orders.unshift({
+            id: oId,
+            order_number: o.order_number || `MX-${oId.slice(-6)}`,
+            customer_id: o.customer_id || '',
+            customer_name: o.customer_name || 'Customer',
+            phone: o.phone || o.customer_phone || '',
+            alt_phone: o.alt_phone || '',
+            email: o.email || '',
+            district: o.district || '',
+            area: o.area || '',
+            address: o.address || '',
+            delivery_area: o.delivery_area || 'inside_dhaka',
+            delivery_charge: Number(o.delivery_charge || 0),
+            subtotal: Number(o.subtotal || 0),
+            total: Number(o.total || o.total_amount || 0),
+            status: o.status || o.order_status || 'Pending',
+            payment_method: o.payment_method || 'Cash on Delivery',
+            note: o.note || '',
+            created_at: o.created_at || new Date().toISOString(),
+            updated_at: o.updated_at || new Date().toISOString(),
+          });
+          if (Array.isArray(o.items)) {
+            for (const it of o.items) {
+              db.order_items.push({
+                ...it,
+                order_id: oId,
+              });
+            }
+          }
+        }
+      });
+    }
+  } catch (fsErr) {
+    // Continue with in-memory orders if Firestore read has an issue
+  }
+
   let list = [...db.orders];
   if (status) {
     list = list.filter(o => o.status === status);

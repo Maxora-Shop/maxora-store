@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, setLogLevel } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, setLogLevel } from 'firebase/firestore';
 
 try {
   setLogLevel('error');
@@ -43,6 +43,26 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   if (req.method === 'OPTIONS') {
     res.statusCode = 200;
     res.end();
+    return;
+  }
+
+  if (req.method === 'GET') {
+    try {
+      const db = getFirestoreDb();
+      const snap = await getDocs(collection(db, 'orders'));
+      const orders: any[] = [];
+      snap.forEach((d) => {
+        orders.push({ ...d.data(), id: d.id });
+      });
+      orders.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ success: true, orders }));
+    } catch (err: any) {
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 500;
+      res.end(JSON.stringify({ success: false, error: err?.message || 'Failed to fetch orders from database' }));
+    }
     return;
   }
 
