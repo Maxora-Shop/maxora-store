@@ -466,8 +466,8 @@ export function scheduleReconnectListeners(delayMs = 30000) {
 
 export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
-    // 60-second brief backoff for background read listeners (never blocks admin writes)
-    clientQuotaCooldownUntil = Date.now() + 60 * 1000;
+    // 30-minute calm backoff for background read listeners and direct writes
+    clientQuotaCooldownUntil = Date.now() + 30 * 60 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil));
@@ -1797,14 +1797,16 @@ export const storeService = {
       if (prod) {
         prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
         prod.sold_count = (Number(prod.sold_count) || 0) + qty;
-        // update stock and sold_count in Firestore
-        stockUpdatePromises.push(
-          setDoc(
-            doc(db, 'products', String(prod.id)),
-            { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
-            { merge: true }
-          ).catch(() => {})
-        );
+        if (db && !isClientQuotaCooldownActive()) {
+          // update stock and sold_count in Firestore
+          stockUpdatePromises.push(
+            setDoc(
+              doc(db, 'products', String(prod.id)),
+              { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
+              { merge: true }
+            ).catch((e) => handleStoreFirestoreError('Stock update', e))
+          );
+        }
       }
     }
     setLocal(PRODUCTS_KEY, products);
@@ -1903,23 +1905,24 @@ export const storeService = {
     let persistenceError: any = null;
 
     // ATTEMPT 1: Authoritative Direct Firestore write
-    if (db) {
+    if (db && !isClientQuotaCooldownActive()) {
       try {
         await Promise.race([
           setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore network write timeout (12s)')), 12000)
+            setTimeout(() => reject(new Error('Firestore network write timeout (3.5s)')), 3500)
           ),
         ]);
         firestorePersisted = true;
         console.log(`[ORDER_CREATE_SUCCESS] Direct Firestore persistence confirmed for order ${orderId} (${orderNo})`);
       } catch (directErr: any) {
         persistenceError = directErr;
+        handleStoreFirestoreError('Direct order write', directErr);
         console.warn(`[ORDER_CREATE_DIRECT_WARN] Direct Firestore write note for ${orderId}:`, directErr?.message || directErr);
       }
     }
 
-    // ATTEMPT 2: Server API Proxy to Firestore (mirrored if direct connection encountered client-side network barrier)
+    // ATTEMPT 2: Server API Proxy to Firestore & Server Database (mirrored if client direct write encountered network/quota barrier)
     if (!firestorePersisted) {
       try {
         const fullOrderSyncPayload = {
@@ -1936,11 +1939,12 @@ export const storeService = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fullOrderSyncPayload),
+          timeoutMs: 10000,
         });
 
         if (apiRes.success && (apiRes.data?.success || apiRes.data?.order)) {
           firestorePersisted = true;
-          console.log(`[ORDER_CREATE_SUCCESS] Server API fallback persistence confirmed for order ${orderId} (${orderNo})`);
+          console.log(`[ORDER_CREATE_SUCCESS] Server database persistence confirmed for order ${orderId} (${orderNo})`);
         } else {
           persistenceError = new Error(apiRes.data?.error || apiRes.error || 'Server order endpoint rejected order');
         }
@@ -1963,8 +1967,8 @@ export const storeService = {
 
     // Secondary non-blocking updates (customer record & stock count in Firestore)
     try {
-      if (db) {
-        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }).catch(() => {});
+      if (db && !isClientQuotaCooldownActive()) {
+        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }).catch((e) => handleStoreFirestoreError('Customer write', e));
         Promise.all(stockUpdatePromises).catch(() => {});
       }
     } catch {}

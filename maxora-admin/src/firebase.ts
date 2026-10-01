@@ -4,9 +4,9 @@ import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getAuth, Auth } from 'firebase/auth';
 import localConfig from '../firebase-applet-config.json';
 
-// Silence verbose internal Firestore gRPC/WebChannel idle stream disconnect warnings
+// Silence verbose internal Firestore gRPC/WebChannel idle stream & quota backoff warnings
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch (e) {}
 
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env || {} : {};

@@ -126,10 +126,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           updated_at: new Date().toISOString(),
         });
 
-        // 1. Save order to Firestore
-        await setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true });
-        // 2. Save customer to Firestore
-        await setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true });
+        // 1. Save order to Firestore with timeout
+        await Promise.race([
+          setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3000))
+        ]).catch((e) => console.warn('api/orders Firestore save note:', e));
+
+        // 2. Save customer to Firestore (non-blocking)
+        setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true }).catch(() => {});
 
         // 3. Update stock for ordered products in Firestore
         if (Array.isArray(orderRecord.items)) {

@@ -11,9 +11,9 @@ import { generateDynamicSitemapXml, invalidateSitemapCache } from './src/utils/s
 import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
 
-// Set Firestore log level to error to avoid noisy internal idle-stream disconnect warnings
+// Set Firestore log level to silent to prevent noisy internal quota backoff logs
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch (e) {}
 
 // Suppress benign gRPC idle stream cancellation notices from unhandled warning stream
@@ -58,9 +58,12 @@ function isQuotaExceededError(err: any): boolean {
   const code = (err.code || '').toLowerCase();
   return (
     code === 'resource-exhausted' ||
+    code === 'resource_exhausted' ||
     msg.includes('quota limit exceeded') ||
     msg.includes('quota exceeded') ||
     msg.includes('free daily read units') ||
+    msg.includes('free daily write units') ||
+    msg.includes('resource_exhausted') ||
     msg.includes('rate-limit')
   );
 }
@@ -82,7 +85,13 @@ function cleanForFirestore(obj: any): any {
   return obj;
 }
 
+const COOLDOWN_FILE = path.join(process.cwd(), '.firestore_cooldown');
 let firestoreQuotaCooldownUntil = 0;
+try {
+  if (fs.existsSync(COOLDOWN_FILE)) {
+    firestoreQuotaCooldownUntil = Number(fs.readFileSync(COOLDOWN_FILE, 'utf8') || 0);
+  }
+} catch {}
 let firestoreQuotaNoticeLogged = false;
 
 function isFirestoreQuotaCooldownActive(): boolean {
@@ -91,10 +100,13 @@ function isFirestoreQuotaCooldownActive(): boolean {
 
 function handleFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
-    firestoreQuotaCooldownUntil = Date.now() + 15 * 60 * 1000;
+    firestoreQuotaCooldownUntil = Date.now() + 30 * 60 * 1000;
+    try {
+      fs.writeFileSync(COOLDOWN_FILE, String(firestoreQuotaCooldownUntil));
+    } catch {}
     if (!firestoreQuotaNoticeLogged) {
       firestoreQuotaNoticeLogged = true;
-      console.log(`[Firestore Notice] Free quota limit reached during ${context}. Operating seamlessly in cached/local mode until quota resets.`);
+      console.log(`[Firestore Notice] Free quota limit reached during ${context}. Operating seamlessly in server database mode until quota resets.`);
     }
     return;
   }
@@ -1257,22 +1269,30 @@ app.post('/api/orders', async (req, res) => {
 
     saveDB();
 
-    // Persist to Firestore with error logging
-    try {
-      const fDb = getFirestoreInstance();
-      if (fDb) {
-        const firestoreOrder = cleanForFirestore({
-          ...orderRecord,
-          customer_phone: custPhone,
-          total_amount: orderRecord.total,
-          order_status: orderRecord.status,
-          items: db.order_items.filter(i => i.order_id === oId)
-        });
-        await setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true });
-        console.log(`[SERVER_ORDERS_FIRESTORE_SUCCESS] Order ${oId} written to Firestore`);
+    // Mirror to Cloud Firestore if quota is available without delaying HTTP response
+    if (!isFirestoreQuotaCooldownActive()) {
+      try {
+        const fDb = getFirestoreInstance();
+        if (fDb) {
+          const firestoreOrder = cleanForFirestore({
+            ...orderRecord,
+            customer_phone: custPhone,
+            total_amount: orderRecord.total,
+            order_status: orderRecord.status,
+            items: db.order_items.filter(i => i.order_id === oId)
+          });
+          Promise.race([
+            setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 2500))
+          ])
+            .then(() => console.log(`[SERVER_ORDERS_FIRESTORE_SUCCESS] Order ${oId} written to Firestore`))
+            .catch((e: any) => {
+              handleFirestoreError('Server orders sync mirror', e);
+            });
+        }
+      } catch (e: any) {
+        handleFirestoreError('Server orders sync mirror instance', e);
       }
-    } catch (e: any) {
-      console.warn(`[SERVER_ORDERS_FIRESTORE_WARN] Order ${oId} Firestore write warning:`, e?.message || e);
     }
 
     return res.status(201).json({
@@ -1461,16 +1481,22 @@ app.post('/api/orders', async (req, res) => {
   };
 
   // Mirror to Firestore in background
-  try {
-    const fDb = getFirestoreInstance();
-    const firestoreOrder = cleanForFirestore({
-      ...fullOrderResponse,
-      customer_phone: body.phone,
-      total_amount: total,
-      order_status: 'Pending'
-    });
-    setDoc(doc(fDb, 'orders', orderId), firestoreOrder, { merge: true }).catch(() => {});
-  } catch (e) {}
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const fDb = getFirestoreInstance();
+      if (fDb) {
+        const firestoreOrder = cleanForFirestore({
+          ...fullOrderResponse,
+          customer_phone: body.phone,
+          total_amount: total,
+          order_status: 'Pending'
+        });
+        setDoc(doc(fDb, 'orders', orderId), firestoreOrder, { merge: true }).catch((err) => {
+          handleFirestoreError('Mirror standard order checkout', err);
+        });
+      }
+    } catch (e) {}
+  }
 
   res.status(201).json({
     success: true,
