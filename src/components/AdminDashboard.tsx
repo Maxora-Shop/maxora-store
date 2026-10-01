@@ -1098,24 +1098,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setAuthLoading(true);
     setAuthError('');
     try {
-      // 1. Authoritative Firebase Authentication flow for admin email
-      if (u.includes('@')) {
-        if (u.trim().toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
-          setIsAuthenticated(false);
-          setAuthError('Access Denied: Only the authorized admin account can access this panel.');
-          return;
-        }
-        if (!auth) {
-          setIsAuthenticated(false);
-          setAuthError('Firebase Authentication service is currently unavailable. Please check your connection.');
-          return;
-        }
+      // If user typed an email that is not the authorized admin email, block immediately
+      if (u.includes('@') && u.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+        setIsAuthenticated(false);
+        setAuthError('Access Denied: Only the authorized admin account can access this panel.');
+        return;
+      }
+
+      // 1. Authoritative Firebase Authentication flow
+      // Works whether user enters their email (moonlofiofficial@gmail.com) OR username ('admin')
+      if (auth) {
         try {
-          const userCredential = await signInWithEmailAndPassword(auth, u.trim(), p);
+          const userCredential = await signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p);
           if (userCredential && userCredential.user) {
             const token = await userCredential.user.getIdToken();
             sessionStorage.setItem('maxora_admin_session_auth', 'true');
-            sessionStorage.setItem('maxora_admin_username', userCredential.user.email || u.trim());
+            sessionStorage.setItem('maxora_admin_username', userCredential.user.email || AUTHORIZED_ADMIN_EMAIL);
             sessionStorage.setItem('maxora_admin_token', token);
             sessionStorage.setItem('maxora_admin_view_active', 'true');
             // Strict security requirement: Never store plaintext passwords in browser storage
@@ -1123,7 +1121,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             localStorage.removeItem('maxora_admin_password');
 
             setPassword(p); // Keep in component state memory only for legacy REST proxies if needed
-            setUsername(u.trim());
+            setUsername(u || 'admin');
             setLoginSuccess(true);
             setTimeout(() => {
               setIsAuthenticated(true);
@@ -1134,25 +1132,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           }
         } catch (fbErr: any) {
           console.warn('Firebase admin signin notice:', fbErr);
-          setIsAuthenticated(false);
-          if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
-            setAuthError('Incorrect admin password. Please try again or use Forgot Password.');
-          } else if (fbErr.code === 'auth/user-not-found') {
-            setAuthError('No authorized admin account found with this email.');
-          } else if (fbErr.code === 'auth/too-many-requests') {
-            setAuthError('Too many failed login attempts. Please wait a few moments and try again.');
-          } else if (fbErr.code === 'auth/network-request-failed') {
-            setAuthError('Network error. Please check your internet connection and try again.');
-          } else if (fbErr.message) {
-            setAuthError(fbErr.message);
-          } else {
-            setAuthError('Authentication failed. Please verify your credentials.');
+          // If the user explicitly typed their email and Firebase rejected, show the exact error immediately
+          if (u.includes('@')) {
+            setIsAuthenticated(false);
+            if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
+              setAuthError('পাসওয়ার্ডটি সঠিক নয়। অনুগ্রহ করে আবার চেষ্টা করুন বা Forgot Password ব্যবহার করুন। (Incorrect password)');
+            } else if (fbErr.code === 'auth/user-not-found') {
+              setAuthError('No authorized admin account found with this email.');
+            } else if (fbErr.code === 'auth/too-many-requests') {
+              setAuthError('Too many failed login attempts. Please wait a few moments and try again.');
+            } else if (fbErr.code === 'auth/network-request-failed') {
+              setAuthError('Network error. Please check your internet connection and try again.');
+            } else if (fbErr.message) {
+              setAuthError(fbErr.message);
+            } else {
+              setAuthError('Authentication failed. Please verify your credentials.');
+            }
+            return;
           }
-          return; // STRICT RETURN: Never show misleading fallback messages for email login!
         }
       }
 
-      // 2. Legacy fallback for username 'admin' only (when email is not provided)
+      // 2. Legacy fallback for username 'admin' (when local password is provided)
       const validPass = (settingsForm?.admin_password && settingsForm.admin_password.trim()) || (globalSettings?.admin_password && globalSettings.admin_password.trim()) || '123456';
       let isValid = (u === 'admin' || !u) && (p === validPass || p === '123456' || p === 'admin123');
 
@@ -1175,7 +1176,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }, 600);
       } else {
         setIsAuthenticated(false);
-        setAuthError('Incorrect username or password.');
+        setAuthError('পাসওয়ার্ড বা ইউজারনেম সঠিক নয়। (Incorrect username or password)');
       }
     } catch (e: any) {
       setIsAuthenticated(false);
@@ -2521,7 +2522,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="admin or email"
                   required
                   className="w-full bg-[#e6ecf4] text-[#2d3748] font-bold rounded-full px-5 py-2.5 sm:py-3 text-sm sm:text-base shadow-[inset_4px_4px_8px_#c5cdd8,inset_-4px_-4px_8px_#ffffff] border-none outline-none placeholder:text-[#94a3b8] transition-all focus:shadow-[inset_5px_5px_10px_#b8c2ce,inset_-5px_-5px_10px_#ffffff]"
                 />
