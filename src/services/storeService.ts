@@ -1227,7 +1227,7 @@ export const storeService = {
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    if (firestoreLoaded) {
+    if (prods.length > 0) {
       setLocal(PRODUCTS_KEY, prods);
     }
 
@@ -1397,7 +1397,7 @@ export const storeService = {
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    if (firestoreLoaded) {
+    if (prods.length > 0) {
       setLocal(PRODUCTS_KEY, prods);
     }
 
