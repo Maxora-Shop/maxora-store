@@ -975,44 +975,44 @@ export const storeService = {
   async getSettings(): Promise<StoreSettings> {
     let current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
 
-    // 1. Authoritative Backend / Serverless REST API query
-    try {
-      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
-      if (apiResult.success && apiResult.data?.settings) {
-        const serverSettings = apiResult.data.settings;
-        const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
-        const serverTime = serverSettings.updated_at ? new Date(serverSettings.updated_at).getTime() : 0;
-
-        if (serverTime >= localTime || !localTime) {
-          current = { ...current, ...serverSettings };
-          setLocal(SETTINGS_KEY, current);
-        } else {
-          // If local has newer updates (e.g. from an immediate save), don't wipe it with stale server data
-          this.updateSettings(current).catch(() => {});
-        }
-        return current;
-      }
-    } catch (apiErr) {
-      console.warn('API getSettings error:', apiErr);
-    }
-    
-    // 2. Query Firestore directly (single doc read, ultra-lightweight)
+    // 1. PRIMARY & AUTHORITATIVE: Query Cloud Firestore directly
     if (!isClientQuotaCooldownActive()) {
       try {
         const docSnap = await getDoc(doc(db, 'settings', 'store_settings'));
         if (docSnap.exists()) {
           const firestoreSettings = docSnap.data() as StoreSettings;
-          const localTime = current.updated_at ? new Date(current.updated_at).getTime() : 0;
-          const fsTime = firestoreSettings.updated_at ? new Date(firestoreSettings.updated_at).getTime() : 0;
-          if (fsTime >= localTime || !localTime) {
-            current = { ...current, ...firestoreSettings };
-            setLocal(SETTINGS_KEY, current);
+          if (firestoreSettings.free_delivery_enabled !== undefined) {
+            firestoreSettings.free_delivery_enabled = Boolean(firestoreSettings.free_delivery_enabled);
           }
+          if (firestoreSettings.live_sales_popup_enabled !== undefined) {
+            firestoreSettings.live_sales_popup_enabled = Boolean(firestoreSettings.live_sales_popup_enabled);
+          }
+          current = { ...current, ...firestoreSettings };
+          setLocal(SETTINGS_KEY, current);
           return current;
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getSettings note', e);
       }
+    }
+
+    // 2. SECONDARY (only if Firestore read failed): Fall back to server REST API
+    try {
+      const apiResult = await tryApi<{ success: boolean; settings: StoreSettings }>('/api/settings');
+      if (apiResult.success && apiResult.data?.settings) {
+        const serverSettings = apiResult.data.settings;
+        if (serverSettings.free_delivery_enabled !== undefined) {
+          serverSettings.free_delivery_enabled = Boolean(serverSettings.free_delivery_enabled);
+        }
+        if (serverSettings.live_sales_popup_enabled !== undefined) {
+          serverSettings.live_sales_popup_enabled = Boolean(serverSettings.live_sales_popup_enabled);
+        }
+        current = { ...current, ...serverSettings };
+        setLocal(SETTINGS_KEY, current);
+        return current;
+      }
+    } catch (apiErr) {
+      console.warn('API getSettings fallback error:', apiErr);
     }
 
     return current;
@@ -1081,36 +1081,48 @@ export const storeService = {
       }
     }
 
-    // 1. Persist to Authoritative Server REST API FIRST
+    // Explicitly enforce boolean types for promotional flags
+    if (updated.free_delivery_enabled !== undefined) {
+      updated.free_delivery_enabled = Boolean(updated.free_delivery_enabled);
+    }
+    if (updated.live_sales_popup_enabled !== undefined) {
+      updated.live_sales_popup_enabled = Boolean(updated.live_sales_popup_enabled);
+    }
+    updated.updated_at = new Date().toISOString();
+
+    // 1. PRIMARY & AUTHORITATIVE WRITE: Cloud Firestore FIRST (Awaited with verification)
     try {
-      const apiRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
+      await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
+      clearFirestoreCooldown();
+    } catch (fsErr: any) {
+      console.error('CRITICAL: Firestore settings write failed:', fsErr);
+      throw new Error(`Failed to save settings to Firestore: ${fsErr?.message || 'Database write error'}`);
+    }
+
+    // 2. Read-back verification from Firestore
+    try {
+      const verifySnap = await getDoc(doc(db, 'settings', 'store_settings'));
+      if (verifySnap.exists()) {
+        const verified = verifySnap.data() as StoreSettings;
+        if (updated.free_delivery_enabled !== undefined && verified.free_delivery_enabled !== updated.free_delivery_enabled) {
+          console.warn('Firestore read-back mismatch for free_delivery_enabled');
+        }
+      }
+    } catch (e) {}
+
+    // 3. Update local cache
+    setLocal(SETTINGS_KEY, updated);
+
+    // 4. Secondary mirror: Persist to Server REST API
+    try {
+      await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
         method: 'PUT',
         headers: getAuthHeaders(adminPassword),
         body: JSON.stringify(updated),
       });
-      if (apiRes.success && apiRes.data?.settings) {
-        updated = { ...updated, ...apiRes.data.settings };
-      } else {
-        const altRes = await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
-          method: 'PUT',
-          headers: getAuthHeaders(adminPassword),
-          body: JSON.stringify(updated),
-        });
-        if (altRes.success && altRes.data?.settings) {
-          updated = { ...updated, ...altRes.data.settings };
-        }
-      }
     } catch (e) {
-      console.warn('API updateSettings notice:', e);
+      console.warn('Server settings mirror note:', e);
     }
-
-    updated.updated_at = new Date().toISOString();
-    setLocal(SETTINGS_KEY, updated);
-
-    // 2. Mirror to Firestore in background without blocking UI (writes never blocked)
-    setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }).catch((e) => {
-      console.warn('Firestore updateSettings mirror note:', e?.message || e);
-    });
 
     notifySettingsChanged(updated);
     return { success: true, settings: updated };
@@ -1179,47 +1191,45 @@ export const storeService = {
       }
     };
 
-    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so products are never missing
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
-    }
-
-    // 2. Authoritative Backend REST API query (with 3500ms safety timeout)
-    try {
-      const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 3500 });
-      if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
-        apiRes.data.products.forEach((item) => registerProduct(item));
-      }
-    } catch (e) {
-      console.warn('API getProducts notice:', e);
-    }
-
-    // 3. Fallback to Firestore with strict 3500ms timeout if quota allows
+    // 1. PRIMARY & AUTHORITATIVE: Fetch directly from Cloud Firestore
+    let firestoreLoaded = false;
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapDocs = await fetchFirestoreProductsWithTimeout(3500);
+        const snapDocs = await fetchFirestoreProductsWithTimeout(4000);
         if (snapDocs && snapDocs.length > 0) {
           snapDocs.forEach((d) => registerProduct(d.data, d.id));
+          firestoreLoaded = true;
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getProducts', e);
       }
     }
 
-    // 4. Always merge local cache so newly uploaded/edited products are preserved
-    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-    if (Array.isArray(local) && local.length > 0) {
-      local.forEach((p) => registerProduct(p, undefined, true));
+    // 2. SECONDARY (only if Firestore query returned 0 products or was unreachable):
+    if (!firestoreLoaded || prodMap.size === 0) {
+      try {
+        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 3500 });
+        if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
+          apiRes.data.products.forEach((item) => registerProduct(item));
+        }
+      } catch (e) {
+        console.warn('API getProducts fallback notice:', e);
+      }
     }
 
-    const prods = Array.from(prodMap.values()).filter((p) => {
-      const idLower = String(p.id || '').toLowerCase().trim();
-      const skuLower = String(p.sku || '').toLowerCase().trim();
-      const slugLower = String(p.slug || '').toLowerCase().trim();
-      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
-    });
+    // 3. TERTIARY OFFLINE FALLBACK (only if both Firestore and Server returned 0 products):
+    if (prodMap.size === 0) {
+      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+      if (Array.isArray(local) && local.length > 0) {
+        local.forEach((p) => registerProduct(p, undefined, true));
+      }
+    }
+
+    const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    setLocal(PRODUCTS_KEY, prods);
+    if (firestoreLoaded) {
+      setLocal(PRODUCTS_KEY, prods);
+    }
 
     let list = prods.filter((p) => p.active !== 0 && p.active !== false);
 
@@ -1349,49 +1359,47 @@ export const storeService = {
       }
     };
 
-    // 1. Seed baseline master catalog from INITIAL_PRODUCTS so all products are always present
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => registerProduct(p));
-    }
-
-    // 2. Try REST API
-    try {
-      const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
-        headers: getAuthHeaders(adminPassword),
-      });
-      if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
-        apiResult.data.products.forEach((p) => registerProduct(p));
-      }
-    } catch (e) {
-      console.warn('API getAllAdminProducts warning:', e);
-    }
-
-    // 3. Try Firestore (quota-safe)
+    // 1. PRIMARY & AUTHORITATIVE: Fetch directly from Cloud Firestore
+    let firestoreLoaded = false;
     if (!isClientQuotaCooldownActive()) {
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
           snap.forEach((d) => registerProduct(d.data(), d.id));
+          firestoreLoaded = true;
         }
       } catch (e) {
         handleStoreFirestoreError('Firestore getAllAdminProducts', e);
       }
     }
 
-    // 4. Merge local cache (preserves newly uploaded products or local edits)
-    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-    if (Array.isArray(local) && local.length > 0) {
-      local.forEach((p) => registerProduct(p, undefined, true));
+    // 2. SECONDARY (only if Firestore read returned 0 products or was unreachable): Try REST API
+    if (!firestoreLoaded || prodMap.size === 0) {
+      try {
+        const apiResult = await tryApi<{ success: boolean; products: Product[] }>('/api/admin/products', {
+          headers: getAuthHeaders(adminPassword),
+        });
+        if (apiResult.success && Array.isArray(apiResult.data?.products) && apiResult.data.products.length > 0) {
+          apiResult.data.products.forEach((p) => registerProduct(p));
+        }
+      } catch (e) {
+        console.warn('API getAllAdminProducts warning:', e);
+      }
     }
 
-    const prods = Array.from(prodMap.values()).filter((p) => {
-      const idLower = String(p.id || '').toLowerCase().trim();
-      const skuLower = String(p.sku || '').toLowerCase().trim();
-      const slugLower = String(p.slug || '').toLowerCase().trim();
-      return !deletedProductIds.has(idLower) && (!skuLower || !deletedProductIds.has(skuLower)) && (!slugLower || !deletedProductIds.has(slugLower));
-    });
+    // 3. TERTIARY OFFLINE FALLBACK (only if both Firestore and Server returned 0 products):
+    if (prodMap.size === 0) {
+      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+      if (Array.isArray(local) && local.length > 0) {
+        local.forEach((p) => registerProduct(p, undefined, true));
+      }
+    }
+
+    const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    setLocal(PRODUCTS_KEY, prods);
+    if (firestoreLoaded) {
+      setLocal(PRODUCTS_KEY, prods);
+    }
 
     return prods;
   },
@@ -1591,65 +1599,68 @@ export const storeService = {
   },
 
   async deleteProduct(id: string | number, adminPassword?: string): Promise<{ success: boolean }> {
-    const idStr = String(id);
-    const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const idStr = String(id).trim();
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
     const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
+    const targetDocId = target?.id ? String(target.id) : idStr;
 
-    const idsToRecord = [idStr, target?.sku, target?.slug].filter(Boolean) as string[];
-
-    // 1. Record in local deleted products registry
-    markProductDeleted(idStr, target?.sku, target?.slug);
-
-    // 2. Authoritative sync to Firestore settings.deleted_product_ids (so all customers get it immediately!)
+    // 1. Direct Cloud Firestore delete (PRIMARY & AUTHORITATIVE - must succeed)
     try {
-      const currentSettings = await this.getSettings();
-      const existingDeleted = Array.isArray(currentSettings.deleted_product_ids) ? currentSettings.deleted_product_ids : [];
-      const updatedDeleted = Array.from(new Set([...existingDeleted.map(s => String(s).toLowerCase().trim()), ...idsToRecord.map(s => s.toLowerCase().trim())]));
-      await this.updateSettings({ deleted_product_ids: updatedDeleted }, adminPassword);
-    } catch (e) {
-      console.warn('Sync deleted_product_ids to store_settings note:', e);
+      await deleteDoc(doc(db, 'products', targetDocId));
+      if (idStr !== targetDocId) {
+        await deleteDoc(doc(db, 'products', idStr)).catch(() => {});
+      }
+      clearFirestoreCooldown();
+    } catch (e: any) {
+      console.error('Direct Firestore delete product error:', e);
+      throw new Error(`Firestore delete failed: ${e?.message || 'Database write error'}`);
     }
 
-    // 3. Create tombstone record in Firestore
+    // 2. Read-back verification: verify doc is removed from Firestore
     try {
-      await setDoc(doc(db, 'deleted_products', idStr), {
-        id: idStr,
+      const verifySnap = await getDoc(doc(db, 'products', targetDocId));
+      if (verifySnap.exists()) {
+        throw new Error('Product still exists in Firestore after delete operation');
+      }
+    } catch (verErr: any) {
+      if (verErr.message?.includes('still exists')) throw verErr;
+    }
+
+    // 3. Create tombstone record in Firestore deleted_products so all clients ignore it
+    try {
+      await setDoc(doc(db, 'deleted_products', targetDocId), {
+        id: targetDocId,
         sku: target?.sku || '',
         slug: target?.slug || '',
+        deleted: true,
         deleted_at: new Date().toISOString(),
       }, { merge: true });
     } catch (e) {
-      console.warn('Direct Firestore set deleted_products note:', e);
+      console.warn('Tombstone deleted_products note:', e);
     }
 
-    // 4. Direct Cloud Firestore delete (AWAITED - guaranteed primary database deletion, NEVER blocked by cooldown)
+    // 4. Authoritative Backend Server API delete
     try {
-      await deleteDoc(doc(db, 'products', idStr));
-      if (target?.id && String(target.id) !== idStr) {
-        await deleteDoc(doc(db, 'products', String(target.id)));
-      }
-      clearFirestoreCooldown();
-    } catch (e) {
-      console.warn('Direct Firestore delete product error:', e);
-    }
-
-    // 5. Authoritative Backend Server API delete
-    try {
-      await tryApi(`/api/admin/products/${idStr}`, {
+      await tryApi(`/api/admin/products/${targetDocId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(adminPassword),
       });
+      if (idStr !== targetDocId) {
+        await tryApi(`/api/admin/products/${idStr}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(adminPassword),
+        }).catch(() => {});
+      }
     } catch (e) {
       console.warn('Backend API deleteProduct notice:', e);
     }
 
-    // 6. Local state filter
-    const delSet = new Set(idsToRecord.map((s) => s.toLowerCase().trim()));
+    // 5. Update local cache
     const filtered = local.filter((p) => {
-      const pId = String(p.id || '').toLowerCase().trim();
-      const pSku = String(p.sku || '').toLowerCase().trim();
-      const pSlug = String(p.slug || '').toLowerCase().trim();
-      return !delSet.has(pId) && (!pSku || !delSet.has(pSku)) && (!pSlug || !delSet.has(pSlug));
+      const pId = String(p.id || '').trim();
+      const pSku = String(p.sku || '').trim();
+      const pSlug = String(p.slug || '').trim();
+      return pId !== idStr && pId !== targetDocId && (!pSku || pSku !== target?.sku) && (!pSlug || pSlug !== target?.slug);
     });
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
@@ -1812,7 +1823,7 @@ export const storeService = {
     setLocal(PRODUCTS_KEY, products);
 
     // Free delivery threshold & enabled check from store settings
-    const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
+    const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled === true;
     const FREE_SHIPPING_THRESHOLD =
       Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000;
     const isFreeShipping = isFreeDeliveryFeatureEnabled && subtotal >= FREE_SHIPPING_THRESHOLD;

@@ -458,7 +458,7 @@ export const Hero: React.FC<HeroProps> = ({
                   {settings.hero_promo_card_1_badge || 'Free Shipping'}
                 </span>
                 <h4 className="text-xs sm:text-sm font-black text-zinc-900 leading-tight truncate">
-                  {settings.hero_promo_card_1_title || (settings.free_delivery_enabled !== false ? `Orders Over ৳${Number(settings.free_delivery_threshold || 2000).toLocaleString('en-BD')}` : 'Fast Nationwide Delivery')}
+                  {settings.hero_promo_card_1_title || (settings.free_delivery_enabled === true ? `Orders Over ৳${Number(settings.free_delivery_threshold || 2000).toLocaleString('en-BD')}` : 'Fast Nationwide Delivery')}
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
                   {settings.hero_promo_card_1_subtitle || 'সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি'}

@@ -35,6 +35,7 @@ function cleanForFirestore(data: any): any {
   return data;
 }
 
+// Global in-memory cache on edge / serverless
 let memorySettingsCache: any = null;
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -51,6 +52,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
+  // GET: Return latest store settings
   if (req.method === 'GET') {
     try {
       const db = getFirestoreDb();
@@ -60,7 +62,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         memorySettingsCache = { ...(memorySettingsCache || {}), ...firestoreData };
       }
     } catch (e: any) {
-      console.warn('Firestore settings read note:', e?.message || e);
+      console.warn('Firestore settings read note (using cache):', e?.message || e);
     }
 
     res.setHeader('Content-Type', 'application/json');
@@ -79,6 +81,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
+  // POST / PUT: Update settings
   if (req.method === 'POST' || req.method === 'PUT') {
     let bodyText = '';
     req.on('data', (chunk) => {
@@ -90,16 +93,24 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const parsed = JSON.parse(bodyText || '{}');
         const updates = parsed.settings || parsed;
 
+        if (updates.free_delivery_enabled !== undefined) {
+          updates.free_delivery_enabled = Boolean(updates.free_delivery_enabled);
+        }
+        if (updates.live_sales_popup_enabled !== undefined) {
+          updates.live_sales_popup_enabled = Boolean(updates.live_sales_popup_enabled);
+        }
         if (updates.free_delivery_threshold !== undefined && updates.free_delivery_threshold !== null && updates.free_delivery_threshold !== '') {
           updates.free_delivery_threshold = Number(updates.free_delivery_threshold);
         }
 
+        // Merge into serverless memory cache immediately
         memorySettingsCache = {
           ...(memorySettingsCache || {}),
           ...updates,
           updated_at: new Date().toISOString(),
         };
 
+        // Persist to Firestore
         try {
           const db = getFirestoreDb();
           await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(memorySettingsCache), { merge: true });

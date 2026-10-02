@@ -31,7 +31,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const totalItemsCount = cart.reduce((total, item) => total + Number(item.quantity), 0);
 
   // Free delivery toggle & threshold from store settings
-  const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled !== false;
+  const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled === true;
   const FREE_SHIPPING_THRESHOLD =
     Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000;
   const amountRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);

@@ -402,7 +402,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto flex items-center justify-between gap-3 w-full">
           <div className="flex items-center gap-2 text-[11px] sm:text-xs text-zinc-300 font-medium truncate">
             <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            {settings.free_delivery_enabled !== false ? (
+            {settings.free_delivery_enabled === true ? (
               <>
                 <span className="font-semibold text-white">
                   Free Delivery on orders above ৳{(Number(settings.free_delivery_threshold) > 0 ? Number(settings.free_delivery_threshold) : 2000).toLocaleString('en-BD')}

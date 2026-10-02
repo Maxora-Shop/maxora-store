@@ -2093,8 +2093,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     try {
       setLoading(true);
-      await storeService.saveSettings(settingsForm, password);
-      showToast('Store settings updated!', 'success');
+      const isFreeDelivery = settingsForm.free_delivery_enabled === true;
+      const isPopup = settingsForm.live_sales_popup_enabled === true;
+      const updated: StoreSettings = {
+        ...settingsForm,
+        free_delivery_enabled: isFreeDelivery,
+        live_sales_popup_enabled: isPopup,
+        updated_at: new Date().toISOString(),
+      };
+      const res = await storeService.saveSettings(updated, password);
+      if (res?.settings) {
+        setSettingsForm(res.settings);
+      }
+      showToast('Store settings updated and synced to Firestore!', 'success');
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to save settings: ' + err.message, 'error');
@@ -2108,9 +2119,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setLoading(true);
       const val = Number(settingsForm.free_delivery_threshold);
       const threshold = !isNaN(val) && val > 0 ? val : 2500;
+      const isEnabled = settingsForm.free_delivery_enabled === true;
       const updated = {
         ...settingsForm,
-        free_delivery_enabled: settingsForm.free_delivery_enabled !== false,
+        free_delivery_enabled: isEnabled,
         free_delivery_threshold: threshold,
         updated_at: new Date().toISOString(),
       };
@@ -2119,7 +2131,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (res?.settings) {
         setSettingsForm(res.settings);
       }
-      showToast(`ফ্রি ডেলিভারি অফার সংরক্ষিত হয়েছে! (টার্গেট: ৳${threshold.toLocaleString('en-BD')})`, 'success');
+      showToast(
+        isEnabled
+          ? `ফ্রি ডেলিভারি অফার চালু ও ফায়ারস্টোরে সংরক্ষিত হয়েছে! (টার্গেট: ৳${threshold.toLocaleString('en-BD')})`
+          : 'ফ্রি ডেলিভারি অফার সম্পূর্ণ বন্ধ ও ফায়ারস্টোরে সংরক্ষিত হয়েছে!',
+        'success'
+      );
+      onSettingsUpdated();
+    } catch (err: any) {
+      showToast('Failed to save settings: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveLiveSalesPopupSettings = async () => {
+    try {
+      setLoading(true);
+      const isEnabled = settingsForm.live_sales_popup_enabled === true;
+      const interval = Number(settingsForm.live_sales_popup_interval || 24);
+      const updated = {
+        ...settingsForm,
+        live_sales_popup_enabled: isEnabled,
+        live_sales_popup_interval: interval,
+        updated_at: new Date().toISOString(),
+      };
+      setSettingsForm(updated);
+      const res = await storeService.saveSettings(updated, password);
+      if (res?.settings) {
+        setSettingsForm(res.settings);
+      }
+      showToast(
+        isEnabled
+          ? `সেলস পপআপ চালু ও ফায়ারস্টোরে সংরক্ষিত হয়েছে! (ইন্টারভাল: ${interval}s)`
+          : 'সেলস পপআপ সম্পূর্ণ বন্ধ ও ফায়ারস্টোরে সংরক্ষিত হয়েছে!',
+        'success'
+      );
       onSettingsUpdated();
     } catch (err: any) {
       showToast('Failed to save settings: ' + (err?.message || 'Error'), 'error');
@@ -6633,11 +6680,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 Free Delivery Promotion (ফ্রি ডেলিভারি অফার)
                               </h4>
                               <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                                settingsForm.free_delivery_enabled !== false
+                                settingsForm.free_delivery_enabled === true
                                   ? 'bg-emerald-600 text-white'
                                   : 'bg-zinc-200 text-zinc-600'
                               }`}>
-                                {settingsForm.free_delivery_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                                {settingsForm.free_delivery_enabled === true ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
                               </span>
                             </div>
                             <p className="text-[11px] text-emerald-800/80 mt-0.5">
@@ -6651,7 +6698,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={settingsForm.free_delivery_enabled !== false}
+                              checked={settingsForm.free_delivery_enabled === true}
                               onChange={(e) => setSettingsForm({ ...settingsForm, free_delivery_enabled: e.target.checked })}
                               className="sr-only peer"
                             />
@@ -6660,7 +6707,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
 
-                      {settingsForm.free_delivery_enabled !== false && (
+                      {settingsForm.free_delivery_enabled === true && (
                         <div className="pt-3 border-t border-emerald-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in-50 duration-200">
                           <div>
                             <label className="block text-xs font-bold text-emerald-950 mb-0.5">
@@ -6717,11 +6764,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Live Sales Notification Popup (সাম্প্রতিক সেলস পপআপ)
                             </h4>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                              settingsForm.live_sales_popup_enabled !== false
+                              settingsForm.live_sales_popup_enabled === true
                                 ? 'bg-amber-500 text-zinc-950'
                                 : 'bg-zinc-200 text-zinc-600'
                             }`}>
-                              {settingsForm.live_sales_popup_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                              {settingsForm.live_sales_popup_enabled === true ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
                             </span>
                           </div>
                           <p className="text-[11px] text-amber-900/80 mt-1 max-w-xl leading-relaxed">
@@ -6734,7 +6781,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input
                           type="checkbox"
-                          checked={settingsForm.live_sales_popup_enabled !== false}
+                          checked={settingsForm.live_sales_popup_enabled === true}
                           onChange={(e) => setSettingsForm({ ...settingsForm, live_sales_popup_enabled: e.target.checked })}
                           className="sr-only peer"
                         />
@@ -6742,7 +6789,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </label>
                     </div>
 
-                    {settingsForm.live_sales_popup_enabled !== false && (
+                    {settingsForm.live_sales_popup_enabled === true && (
                       <div className="pt-3 border-t border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                           <label className="block text-xs font-bold text-amber-950 mb-0.5">
@@ -6767,6 +6814,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* Instant Save Button inside Live Sales Popup card */}
+                    <div className="pt-3 border-t border-amber-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="text-[11px] text-amber-800 font-medium text-center sm:text-left">
+                        বর্তমান স্ট্যাটাস: <strong className="font-extrabold text-amber-950">{settingsForm.live_sales_popup_enabled === true ? 'চালু (Active)' : 'বন্ধ (Off)'}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveLiveSalesPopupSettings}
+                        disabled={loading}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      >
+                        <Save className="w-4 h-4 text-amber-200" />
+                        <span>Save Popup Setting (পপআপ সেভ করুন)</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Trust Benefits & Guarantee Badges Customization */}

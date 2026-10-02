@@ -93,6 +93,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const parsed = JSON.parse(bodyText || '{}');
         const updates = parsed.settings || parsed;
 
+        if (updates.free_delivery_enabled !== undefined) {
+          updates.free_delivery_enabled = Boolean(updates.free_delivery_enabled);
+        }
+        if (updates.live_sales_popup_enabled !== undefined) {
+          updates.live_sales_popup_enabled = Boolean(updates.live_sales_popup_enabled);
+        }
         if (updates.free_delivery_threshold !== undefined && updates.free_delivery_threshold !== null && updates.free_delivery_threshold !== '') {
           updates.free_delivery_threshold = Number(updates.free_delivery_threshold);
         }

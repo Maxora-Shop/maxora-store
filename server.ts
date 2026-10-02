@@ -1363,7 +1363,7 @@ app.post('/api/orders', async (req, res) => {
 
   // Delivery charge calculation (Admin controlled Free Shipping Campaign)
   const deliveryArea = body.delivery_area || "inside_dhaka";
-  const isFreeDeliveryFeatureEnabled = db.settings.free_delivery_enabled !== false;
+  const isFreeDeliveryFeatureEnabled = db.settings.free_delivery_enabled === true;
   const freeThreshold =
     Number(db.settings.free_delivery_threshold) > 0 ? Number(db.settings.free_delivery_threshold) : 1500;
 
@@ -2546,6 +2546,14 @@ const handleSaveSettingsRoute = async (req: express.Request, res: express.Respon
     });
   }
 
+  // Enforce explicit booleans for promotions
+  if (body.free_delivery_enabled !== undefined) {
+    body.free_delivery_enabled = Boolean(body.free_delivery_enabled);
+  }
+  if (body.live_sales_popup_enabled !== undefined) {
+    body.live_sales_popup_enabled = Boolean(body.live_sales_popup_enabled);
+  }
+
   // Coerce free_delivery_threshold to number if provided
   if (body.free_delivery_threshold !== undefined && body.free_delivery_threshold !== null && body.free_delivery_threshold !== '') {
     body.free_delivery_threshold = Number(body.free_delivery_threshold);
@@ -2948,15 +2956,7 @@ async function syncFirestoreProducts() {
         }
       });
 
-      // Retain any existing in-memory db.products not present in Firestore (prevents loss on cold starts or partial collections)
-      for (const localP of db.products) {
-        const localId = String(localP.id);
-        if (!seenIds.has(localId)) {
-          seenIds.add(localId);
-          updatedList.push(localP);
-        }
-      }
-
+      // When Firestore has authoritative products, db.products matches Firestore exactly
       db.products = updatedList;
       saveDB();
     }

@@ -2209,7 +2209,7 @@ export default function App() {
       <LiveSalesNotification
         products={products}
         onSelectProduct={(p) => handleOpenProductDetail(p)}
-        enabled={settings.live_sales_popup_enabled !== false}
+        enabled={settings.live_sales_popup_enabled === true}
       />
     </div>
   );
