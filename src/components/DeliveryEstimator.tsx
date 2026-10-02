@@ -71,7 +71,7 @@ export const DeliveryEstimator: React.FC<DeliveryEstimatorProps> = ({
   }, [selectedLocId]);
 
   const isFreeDelivery = useMemo(() => {
-    if (!settings.free_delivery_enabled) return false;
+    if (settings.free_delivery_enabled !== true) return false;
     const threshold = Number(settings.free_delivery_threshold || 0);
     return threshold > 0 && productPrice >= threshold;
   }, [settings.free_delivery_enabled, settings.free_delivery_threshold, productPrice]);
@@ -225,7 +225,7 @@ export const DeliveryEstimator: React.FC<DeliveryEstimatorProps> = ({
               ৳{deliveryCost.toLocaleString('en-BD')}
             </div>
           )}
-          {settings.free_delivery_enabled && !isFreeDelivery && Number(settings.free_delivery_threshold || 0) > 0 && (
+          {settings.free_delivery_enabled === true && !isFreeDelivery && Number(settings.free_delivery_threshold || 0) > 0 && (
             <p className="text-[10px] text-amber-800 font-bold mt-0.5">
               💡 ৳{Number(settings.free_delivery_threshold).toLocaleString('en-BD')} টাকার অর্ডারে ফ্রি ডেলিভারি!
             </p>

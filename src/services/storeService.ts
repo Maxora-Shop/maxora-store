@@ -1921,11 +1921,28 @@ export const storeService = {
         await Promise.race([
           setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore network write timeout (3.5s)')), 3500)
+            setTimeout(() => reject(new Error('Firestore network write timeout (9s)')), 9000)
           ),
         ]);
         firestorePersisted = true;
         console.log(`[ORDER_CREATE_SUCCESS] Direct Firestore persistence confirmed for order ${orderId} (${orderNo})`);
+
+        // Asynchronously mirror order to server database in background without blocking customer UI
+        tryApi('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...orderPayload,
+            order: newOrder,
+            id: orderId,
+            order_number: orderNo,
+            items: orderItems,
+            total,
+            subtotal,
+            delivery_charge: deliveryCharge,
+          }),
+          timeoutMs: 8000,
+        }).catch(() => {});
       } catch (directErr: any) {
         persistenceError = directErr;
         handleStoreFirestoreError('Direct order write', directErr);

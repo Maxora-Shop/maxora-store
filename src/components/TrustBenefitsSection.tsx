@@ -7,7 +7,7 @@ interface TrustBenefitsSectionProps {
 }
 
 export const TrustBenefitsSection: React.FC<TrustBenefitsSectionProps> = ({ settings }) => {
-  const isFreeDeliveryEnabled = settings?.free_delivery_enabled !== false;
+  const isFreeDeliveryEnabled = settings?.free_delivery_enabled === true;
   const threshold = Number(settings?.free_delivery_threshold || 2000);
 
   const benefits = [

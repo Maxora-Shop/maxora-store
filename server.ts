@@ -1281,9 +1281,9 @@ app.post('/api/orders', async (req, res) => {
             order_status: orderRecord.status,
             items: db.order_items.filter(i => i.order_id === oId)
           });
-          Promise.race([
+          await Promise.race([
             setDoc(doc(fDb, 'orders', oId), firestoreOrder, { merge: true }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 2500))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
           ])
             .then(() => console.log(`[SERVER_ORDERS_FIRESTORE_SUCCESS] Order ${oId} written to Firestore`))
             .catch((e: any) => {
@@ -1491,9 +1491,14 @@ app.post('/api/orders', async (req, res) => {
           total_amount: total,
           order_status: 'Pending'
         });
-        setDoc(doc(fDb, 'orders', orderId), firestoreOrder, { merge: true }).catch((err) => {
-          handleFirestoreError('Mirror standard order checkout', err);
-        });
+        await Promise.race([
+          setDoc(doc(fDb, 'orders', orderId), firestoreOrder, { merge: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
+        ])
+          .then(() => console.log(`[SERVER_ORDERS_FIRESTORE_SUCCESS] Order ${orderId} written to Firestore`))
+          .catch((err) => {
+            handleFirestoreError('Mirror standard order checkout', err);
+          });
       }
     } catch (e) {}
   }

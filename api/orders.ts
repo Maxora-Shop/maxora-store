@@ -129,7 +129,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         // 1. Save order to Firestore with timeout
         await Promise.race([
           setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
         ]).catch((e) => console.warn('api/orders Firestore save note:', e));
 
         // 2. Save customer to Firestore (non-blocking)
