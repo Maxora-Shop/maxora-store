@@ -77,6 +77,7 @@ import {
   Volume2,
   VolumeX,
   Bell,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -130,6 +131,7 @@ import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
 import { CategoryImageUploader } from './CategoryImageUploader';
 import { RichTextDescriptionEditor } from './RichTextDescriptionEditor';
+import { ExcelProductImportModal } from './ExcelProductImportModal';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -548,6 +550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
   const [productModalTab, setProductModalTab] = useState<'general' | 'variants' | 'seo'>('general');
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
 
@@ -3040,6 +3043,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>Add New Product</span>
                   </button>
 
+                  {/* 2b. Import from Excel */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExcelImportModalOpen(true);
+                      if (isMobileSidebarOpen) setIsMobileSidebarOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-emerald-300 hover:text-white hover:bg-emerald-950/60 border-emerald-500/30 active:scale-95"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                    <span>Import from Excel</span>
+                  </button>
+
                   {/* 3. Brands */}
                   <button
                     type="button"
@@ -4398,6 +4414,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <Tag className="w-3.5 h-3.5 text-zinc-500" />
                     <span>Brands ({dbBrands.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsExcelImportModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs sm:text-sm shadow-xs transition-all cursor-pointer active:scale-95"
+                    title="এক্সেল ফাইল দিয়ে এক ক্লিকে অনেকগুলো প্রোডাক্ট আপলোড করুন"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Import from Excel</span>
                   </button>
                   <button
                     type="button"
@@ -7615,6 +7641,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
       </main>
+
+      {/* ====================================================
+          EXCEL PRODUCT IMPORT MODAL
+      ==================================================== */}
+      <ExcelProductImportModal
+        isOpen={isExcelImportModalOpen}
+        onClose={() => setIsExcelImportModalOpen(false)}
+        onSuccess={(count) => {
+          loadProducts(password);
+          if (currentTab === 'overview') loadOverview();
+        }}
+        categories={dbCategories}
+        adminPassword={password}
+        showToast={showToast}
+      />
 
       {/* ====================================================
           PRODUCT MODAL (ADD / EDIT)
