@@ -3050,10 +3050,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       setIsExcelImportModalOpen(true);
                       if (isMobileSidebarOpen) setIsMobileSidebarOpen(false);
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-emerald-300 hover:text-white hover:bg-emerald-950/60 border-emerald-500/30 active:scale-95"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-emerald-300 hover:text-white hover:bg-emerald-950/80 border-emerald-500/40 active:scale-95 bg-emerald-950/30"
                   >
-                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                    <span>Import from Excel</span>
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                      <span>এক্সেল আপলোড (Excel)</span>
+                    </div>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-black bg-emerald-500 text-zinc-950">
+                      NEW
+                    </span>
                   </button>
 
                   {/* 3. Brands */}
@@ -3617,6 +3622,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             )}
 
+            {/* Direct Excel Import Button (Always visible on all tabs!) */}
+            <button
+              type="button"
+              onClick={() => setIsExcelImportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-md shadow-emerald-600/30 transition-all cursor-pointer ring-1 ring-emerald-400/40"
+              title="এক্সেল ফাইল দিয়ে সরাসরি এক ক্লিকে অনেকগুলো প্রোডাক্ট আপলোড করুন"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+              <span>📊 এক্সেল প্রোডাক্ট আপলোড</span>
+            </button>
+
             {/* Quick Refresh */}
             <button
               type="button"
@@ -3647,7 +3663,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsExcelImportModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-black shadow-md shadow-emerald-600/30 transition-all cursor-pointer ring-2 ring-emerald-400/30"
+                  title="এক্সেল ফাইল দিয়ে প্রোডাক্ট আপলোড করুন"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>📊 এক্সেল থেকে প্রোডাক্ট আপলোড</span>
+                </button>
                 <button
                   onClick={handlePurgeDemoData}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
@@ -3664,6 +3689,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Refresh Data</span>
                 </button>
               </div>
+            </div>
+
+            {/* Quick Action Banner: Bulk Excel Product Upload */}
+            <div className="bg-gradient-to-r from-emerald-950 via-zinc-900 to-teal-950 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg text-white">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0 text-emerald-400 shadow-inner">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-sm sm:text-base text-white">
+                      এক্সেল ফাইল দিয়ে বাল্ক প্রোডাক্ট আপলোড ও অটো ক্যাটাগরি
+                    </h3>
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-zinc-950 px-2 py-0.5 rounded-full">
+                      নতুন ফিচার
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 mt-1 max-w-2xl">
+                    কম্পিউটারে এক্সেল ফাইলে সব প্রোডাক্টের নাম, মূল্য, ক্যাটাগরি ও স্টক লিখে এক ক্লিকে আপলোড করুন। স্বয়ংক্রিয়ভাবে ক্যাটাগরি তৈরি, ক্যাটাগরি অনুযায়ী ফিল্টার ও হাই-স্পিড গুগল এসইও সেট হয়ে যাবে।
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExcelImportModalOpen(true)}
+                className="self-start sm:self-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 flex items-center gap-2 transition-all cursor-pointer active:scale-95 shrink-0"
+              >
+                <Upload className="w-4 h-4" />
+                <span>এক্সেল আপলোড শুরু করুন</span>
+              </button>
             </div>
 
             {/* ====================================================
@@ -4419,11 +4474,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsExcelImportModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs sm:text-sm shadow-xs transition-all cursor-pointer active:scale-95"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-600/30 transition-all cursor-pointer active:scale-95 ring-1 ring-emerald-400/50"
                     title="এক্সেল ফাইল দিয়ে এক ক্লিকে অনেকগুলো প্রোডাক্ট আপলোড করুন"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Import from Excel</span>
+                    <FileSpreadsheet className="w-4 h-4 text-white" />
+                    <span>📊 এক্সেল থেকে আপলোড (Excel)</span>
                   </button>
                   <button
                     type="button"
@@ -7668,6 +7723,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <h3 className="font-extrabold text-base text-zinc-900">
                   {editingProduct?.id ? 'Edit Product' : 'Add New Product'}
                 </h3>
+                {!editingProduct?.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProductModalOpen(false);
+                      setIsExcelImportModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-bold transition-all cursor-pointer border border-emerald-300"
+                    title="এক ক্লিকে এক্সেল দিয়ে একাধিক প্রোডাক্ট আপলোড করুন"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Import via Excel</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-1 bg-zinc-200/80 p-0.5 rounded-xl">
                   <button
                     type="button"
