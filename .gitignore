@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+*.zip
+*.tar.gz
+.firestore_cooldown

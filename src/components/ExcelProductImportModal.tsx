@@ -338,19 +338,85 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
     setIsImporting(true);
     setImportProgress({ current: 0, total: validOnes.length });
 
+    const effectivePass = adminPassword || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
+    const storefrontBase = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://maxorashop.com';
+
+    // Map existing categories and auto-create any new categories mentioned in the Excel file
+    const knownCatMap = new Map<string, Category>();
+    (categories || []).forEach((c) => {
+      if (c.name) knownCatMap.set(c.name.toLowerCase().trim(), c);
+      if (c.slug) knownCatMap.set(c.slug.toLowerCase().trim(), c);
+    });
+
+    for (const p of validOnes) {
+      const rawCat = (p.category || 'Smart Gadgets').trim();
+      const catKey = rawCat.toLowerCase();
+      if (!knownCatMap.has(catKey)) {
+        try {
+          const newSlug = generateSlug(rawCat);
+          const catRes = await storeService.saveCategory(
+            {
+              name: rawCat,
+              slug: newSlug,
+              display_order: knownCatMap.size + 1,
+              active: 1,
+            },
+            effectivePass
+          );
+          if (catRes.success && catRes.category) {
+            knownCatMap.set(catKey, catRes.category);
+            knownCatMap.set(catRes.category.slug.toLowerCase(), catRes.category);
+          }
+        } catch (catErr) {
+          console.warn('Auto create category notice:', catErr);
+        }
+      }
+    }
+
     let successCount = 0;
     const errors: string[] = [];
 
     for (let i = 0; i < validOnes.length; i++) {
       const p = validOnes[i];
       try {
+        const rawCat = (p.category || 'Smart Gadgets').trim();
+        const matchedCat = knownCatMap.get(rawCat.toLowerCase());
+        const catId = matchedCat?.id || `cat-${generateSlug(rawCat)}`;
+        const catSlug = matchedCat?.slug || generateSlug(rawCat);
+
+        const subCatName = (p.sub_category || '').trim();
+        const subCatSlug = subCatName ? generateSlug(subCatName) : '';
+        const subCatId = subCatSlug ? `sub-${subCatSlug}` : '';
+
+        const typeName = (p.product_type || 'Standard Product').trim();
+        const typeSlug = typeName ? generateSlug(typeName) : '';
+        const typeId = typeSlug ? `pt-${typeSlug}` : '';
+
+        const childName = (p.child_category || '').trim();
+        const childSlug = childName ? generateSlug(childName) : '';
+        const childId = childSlug ? `child-${childSlug}` : '';
+
+        const brandName = (p.brand || 'Maxora').trim();
+        const brandSlug = generateSlug(brandName);
+
+        const cleanSlug = p.slug ? generateSlug(p.slug) : generateSlug(p.name || `prod-${Date.now().toString(36)}-${i}`);
+
         const productPayload: Partial<Product> = {
           name: p.name,
-          category: p.category || 'Smart Gadgets',
-          sub_category: p.sub_category || '',
-          product_type: p.product_type || 'Standard Product',
-          child_category: p.child_category || '',
-          brand: p.brand || 'Maxora',
+          category: rawCat,
+          category_id: catId,
+          category_slug: catSlug,
+          sub_category: subCatName,
+          subcategory_id: subCatId,
+          subcategory_slug: subCatSlug,
+          product_type: typeName,
+          product_type_id: typeId,
+          product_type_slug: typeSlug,
+          child_category: childName,
+          child_category_id: childId,
+          child_category_slug: childSlug,
+          brand: brandName,
+          brand_slug: brandSlug,
           selling_price: p.selling_price,
           discount: p.discount || 0,
           buying_price: p.buying_price || 0,
@@ -360,7 +426,8 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           images: p.gallery_images && p.gallery_images.length > 0 ? [p.image_url, ...p.gallery_images] : [p.image_url],
           colors: (p.colors || []).map((c) => ({ name: c, code: '#18181b', stock: Math.floor(p.stock / (p.colors?.length || 1)) })),
           description: p.description || '',
-          slug: p.slug,
+          slug: cleanSlug,
+          product_link: `${storefrontBase}/product/${cleanSlug}`,
           meta_title: p.meta_title,
           meta_description: p.meta_description,
           meta_keywords: p.meta_keywords,
@@ -368,7 +435,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           active: 1,
         };
 
-        const result = await storeService.addProduct(productPayload, adminPassword);
+        const result = await storeService.addProduct(productPayload, effectivePass);
         if (result.success) {
           successCount++;
         }
@@ -380,6 +447,12 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
     }
 
     setIsImporting(false);
+
+    // Dispatch global events so storefront & admin immediately re-render category collections
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('maxora_categories_updated'));
+      window.dispatchEvent(new CustomEvent('maxora_products_updated'));
+    }
 
     if (successCount > 0) {
       showToast(`🎉 অভিনন্দন! ${successCount}টি প্রোডাক্ট সফলভাবে আপলোড ও ক্যাটাগরাইজ হয়েছে!`, 'success');

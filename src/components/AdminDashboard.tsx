@@ -7719,7 +7719,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         isOpen={isExcelImportModalOpen}
         onClose={() => setIsExcelImportModalOpen(false)}
         onSuccess={(count) => {
-          loadProducts(password);
+          const effectivePass = password || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
+          loadProducts(effectivePass);
+          loadCategories();
+          onSettingsUpdated();
           if (currentTab === 'overview') loadOverview();
         }}
         categories={dbCategories}
