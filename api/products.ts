@@ -166,19 +166,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       } catch {}
 
       const prodMap = new Map<string, any>();
-      // First populate with baseline catalog so products are never lost
-      const fallbackList = loadFallbackProducts();
-      fallbackList.forEach((item: any) => {
-        const id = String(item.id || item.sku || '');
-        const idLower = id.toLowerCase().trim();
-        const skuLower = String(item.sku || '').toLowerCase().trim();
-        const slugLower = String(item.slug || '').toLowerCase().trim();
-        if (id && !deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower))) {
-          prodMap.set(id, item);
-        }
-      });
 
-      // Query Firestore (if quota allows)
+      // 1. PRIMARY: Query Cloud Firestore directly
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
@@ -211,19 +200,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           });
         }
       } catch (fsErr) {
-        console.warn('Firestore getDocs skipped or quota reached, using database cache:', fsErr);
+        console.warn('Firestore getDocs error in /api/products, falling back:', fsErr);
       }
 
-      // Merge any previously cached or newly uploaded products
-      if (Array.isArray(cachedProducts)) {
-        cachedProducts.forEach((p) => {
-          if (p && p.id) {
-            const idLower = String(p.id).toLowerCase().trim();
-            const skuLower = String(p.sku || '').toLowerCase().trim();
-            const slugLower = String(p.slug || '').toLowerCase().trim();
-            if (!deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower))) {
-              prodMap.set(String(p.id), p);
-            }
+      // 2. FALLBACK ONLY: If Firestore was unreachable or returned 0 products
+      if (prodMap.size === 0) {
+        const fallbackList = loadFallbackProducts();
+        fallbackList.forEach((item: any) => {
+          const id = String(item.id || item.sku || '');
+          const idLower = id.toLowerCase().trim();
+          const skuLower = String(item.sku || '').toLowerCase().trim();
+          const slugLower = String(item.slug || '').toLowerCase().trim();
+          if (id && !deletedIds.has(idLower) && (!skuLower || !deletedIds.has(skuLower)) && (!slugLower || !deletedIds.has(slugLower))) {
+            prodMap.set(id, item);
           }
         });
       }

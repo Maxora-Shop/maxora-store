@@ -507,24 +507,15 @@ export function initRealtimeFirestoreListeners() {
   isListening = true;
 
   try {
-    // 1. Listen for product changes (merge-safe: never drop baseline catalog)
+    // 1. Listen for product changes: Cloud Firestore is authoritative single source of truth
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
+        setLocal(PRODUCTS_KEY, []);
         notifyProductsChanged();
         return;
       }
       const prodMap = new Map<string, Product>();
-      // Baseline catalog
-      if (Array.isArray(INITIAL_PRODUCTS)) {
-        INITIAL_PRODUCTS.forEach((p) => {
-          const id = String(p.id || p.sku || p.slug || '');
-          if (id && !deletedProductIds.has(String(p.id))) {
-            prodMap.set(id, p);
-          }
-        });
-      }
-      // Overlay Firestore snapshot
       snapshot.forEach((docSnap) => {
         const d = docSnap.data() as Product;
         const pId = String(d.id || docSnap.id);
@@ -547,12 +538,18 @@ export function initRealtimeFirestoreListeners() {
     });
     activeFirestoreUnsubscribers.push(unsubProducts);
 
-    // 2. Listen for settings changes
+    // 2. Listen for settings changes: Cloud Firestore is authoritative single source of truth
     const unsubSettings = onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
       if (docSnap.exists()) {
         const settings = docSnap.data() as StoreSettings;
+        if (settings.free_delivery_enabled !== undefined) {
+          settings.free_delivery_enabled = Boolean(settings.free_delivery_enabled);
+        }
+        if (settings.live_sales_popup_enabled !== undefined) {
+          settings.live_sales_popup_enabled = Boolean(settings.live_sales_popup_enabled);
+        }
         setLocal(SETTINGS_KEY, settings);
-        notifySettingsChanged();
+        notifySettingsChanged(settings);
 
         // Immediately filter out any deleted products on customer client
         if (Array.isArray(settings.deleted_product_ids) && settings.deleted_product_ids.length > 0) {
@@ -914,20 +911,11 @@ export const storeService = {
   // Synchronous Cache Getters for zero-flicker instant hydration
   getCachedProducts(): Product[] {
     const deletedProductIds = getDeletedProductIds();
-    const raw = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
+    const raw = getLocal<Product[]>(PRODUCTS_KEY, []);
+    const baseline = Array.isArray(raw) && raw.length > 0 ? raw : INITIAL_PRODUCTS;
     const prodMap = new Map<string, Product>();
-    // Baseline products
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => {
-        const id = String(p.id || p.sku || p.slug || '');
-        if (id && !deletedProductIds.has(String(p.id))) {
-          prodMap.set(id, p);
-        }
-      });
-    }
-    // Overlay local products
-    if (Array.isArray(raw)) {
-      raw.forEach((p) => {
+    if (Array.isArray(baseline)) {
+      baseline.forEach((p) => {
         const id = String(p.id || p.sku || p.slug || '');
         if (id && !deletedProductIds.has(String(p.id))) {
           prodMap.set(id, p);
@@ -1491,6 +1479,19 @@ export const storeService = {
       console.warn('Backend API addProduct notice:', e);
     }
 
+    if (!apiPersisted) {
+      try {
+        const fallbackRes = await tryApi<{ success: boolean; product?: Product }>('/api/products', {
+          method: 'POST',
+          headers: getAuthHeaders(adminPassword),
+          body: JSON.stringify(newProd),
+        });
+        if (fallbackRes.success) {
+          apiPersisted = true;
+        }
+      } catch {}
+    }
+
     // 3. Unmark from deleted products registry so newly added product is never filtered out
     unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
 
@@ -1569,6 +1570,19 @@ export const storeService = {
       }
     } catch (e) {
       console.warn('Backend API updateProduct notice:', e);
+    }
+
+    if (!apiPersisted) {
+      try {
+        const fallbackRes = await tryApi<{ success: boolean; product?: Product }>(`/api/products?id=${encodeURIComponent(idStr)}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(adminPassword),
+          body: JSON.stringify(updated),
+        });
+        if (fallbackRes.success) {
+          apiPersisted = true;
+        }
+      } catch {}
     }
 
     // 3. Unmark from deleted products registry so updated product is never filtered out

@@ -560,8 +560,9 @@ export default function App() {
     const handleSettingsUpdated = (e?: any) => {
       if (e?.detail) {
         setSettings(e.detail);
+      } else {
+        fetchSettings();
       }
-      fetchSettings();
     };
 
     const handleCategoriesUpdated = () => {

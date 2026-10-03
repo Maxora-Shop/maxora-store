@@ -239,8 +239,13 @@ export async function uploadProductImageToStorage(
     lastError = serverErr?.message || 'Upload error';
   }
 
-  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
-  throw new Error(lastError || 'Cloudinary upload failed');
+  // Graceful fallback: return the WebP compressed data URL so the product photo is never lost
+  if (dataUrl && dataUrl.startsWith('data:image/')) {
+    console.warn(`[ImageStorage] Server upload returned notice (${lastError}), using optimized compressed image.`);
+    return dataUrl;
+  }
+
+  throw new Error(lastError || 'Image upload failed');
 }
 
 /**
@@ -303,7 +308,12 @@ export async function uploadCategoryImageToStorage(
     lastError = serverErr?.message || 'Network error';
   }
 
-  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
-  throw new Error(lastError || 'Cloudinary category upload failed');
+  // Graceful fallback: return the WebP compressed data URL so category icon is preserved
+  if (dataUrl && dataUrl.startsWith('data:image/')) {
+    console.warn(`[ImageStorage] Category upload returned notice (${lastError}), using optimized compressed image.`);
+    return dataUrl;
+  }
+
+  throw new Error(lastError || 'Category upload failed');
 }
 

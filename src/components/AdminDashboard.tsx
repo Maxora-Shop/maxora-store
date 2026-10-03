@@ -1916,11 +1916,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${trimmedTitle} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       };
 
-      const effectivePassword = password || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || undefined;
+      const effectivePassword = password || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
       await storeService.saveProduct(productToSave, effectivePassword);
+
+      // Optimistically update products state immediately so admin sees change without flicker
+      setProducts((prev) => {
+        const idStr = String(productToSave.id);
+        const idx = prev.findIndex((p) => String(p.id) === idStr || (p.sku && p.sku === productToSave.sku) || (p.slug && p.slug === productToSave.slug));
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = productToSave;
+          return next;
+        } else {
+          return [productToSave, ...prev];
+        }
+      });
+
       showToast(isEditingExisting ? 'Product updated successfully! (প্রোডাক্ট সফলভাবে আপডেট হয়েছে)' : 'Product saved successfully! (প্রোডাক্ট সফলভাবে যুক্ত হয়েছে)', 'success');
       setIsProductModalOpen(false);
       setEditingProduct(null);
+      setImageUploadError(null);
 
       // Reset filters so the admin can immediately see the newly created/updated product in the catalog table
       setProductCategoryFilter('ALL');

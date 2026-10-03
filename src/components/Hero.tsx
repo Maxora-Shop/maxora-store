@@ -455,13 +455,13 @@ export const Hero: React.FC<HeroProps> = ({
               </div>
               <div className="min-w-0">
                 <span className="inline-block text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md mb-0.5">
-                  {settings.hero_promo_card_1_badge || 'Free Shipping'}
+                  {settings.hero_promo_card_1_badge || (settings.free_delivery_enabled === true ? 'Free Delivery' : 'Fast Shipping')}
                 </span>
                 <h4 className="text-xs sm:text-sm font-black text-zinc-900 leading-tight truncate">
-                  {settings.hero_promo_card_1_title || (settings.free_delivery_enabled === true ? `Orders Over ৳${Number(settings.free_delivery_threshold || 2000).toLocaleString('en-BD')}` : 'Fast Nationwide Delivery')}
+                  {settings.hero_promo_card_1_title || (settings.free_delivery_enabled === true ? `Orders Over ৳${Number(settings.free_delivery_threshold || 2500).toLocaleString('en-BD')}` : 'Fast Nationwide Delivery')}
                 </h4>
                 <p className="text-[11px] text-zinc-500 font-medium truncate mt-0.5">
-                  {settings.hero_promo_card_1_subtitle || 'সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি'}
+                  {settings.hero_promo_card_1_subtitle || (settings.free_delivery_enabled === true ? 'সারা দেশে ফ্রি হোম ডেলিভারি' : 'সারা দেশে দ্রুত ক্যাশ অন ডেলিভারি')}
                 </p>
               </div>
             </div>

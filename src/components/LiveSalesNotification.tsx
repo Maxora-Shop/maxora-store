@@ -65,7 +65,7 @@ const TIME_AGOS = [
 export const LiveSalesNotification: React.FC<LiveSalesNotificationProps> = ({
   products,
   onSelectProduct,
-  enabled = true,
+  enabled = false,
 }) => {
   const [currentNotification, setCurrentNotification] = useState<SaleNotification | null>(null);
   const [isVisible, setIsVisible] = useState<boolean>(false);
@@ -108,6 +108,8 @@ export const LiveSalesNotification: React.FC<LiveSalesNotificationProps> = ({
   useEffect(() => {
     if (!enabled || activeProducts.length === 0 || isDismissed) {
       setIsVisible(false);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       return;
     }
 

@@ -256,6 +256,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         if (snapResult && Array.isArray(snapResult)) {
           const [prodsSnap, catsSnap, subsSnap] = snapResult;
           if (!prodsSnap.empty) {
+            prodMap.clear();
             prodsSnap.forEach((d) => {
               const data = d.data() as ProductData;
               const id = String(data.id || d.id);
@@ -263,6 +264,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             });
           }
           if (!catsSnap.empty) {
+            catMap.clear();
             catsSnap.forEach((d) => {
               const data = d.data();
               const id = String(data.id || d.id);
@@ -270,6 +272,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             });
           }
           if (!subsSnap.empty) {
+            subMap.clear();
             subsSnap.forEach((d) => {
               const data = d.data();
               const id = String(data.id || d.id);
@@ -957,7 +960,9 @@ ${JSON.stringify(itemListSchema, null, 2)}
         .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticHomeBody}`);
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.statusCode = 200;
       res.end(modifiedHtml);
       return;

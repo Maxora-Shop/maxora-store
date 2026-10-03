@@ -71,8 +71,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       success: true,
       settings: memorySettingsCache || {
         store_name: 'Maxora Shop BD',
-        free_delivery_enabled: true,
+        free_delivery_enabled: false,
         free_delivery_threshold: 2500,
+        live_sales_popup_enabled: false,
         delivery_inside_dhaka: 70,
         delivery_sub_dhaka: 100,
         delivery_outside_dhaka: 130,
