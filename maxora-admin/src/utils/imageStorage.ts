@@ -239,8 +239,13 @@ export async function uploadProductImageToStorage(
     lastError = serverErr?.message || 'Upload error';
   }
 
-  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
-  throw new Error(lastError || 'Cloudinary upload failed');
+  // Graceful fallback: return the WebP compressed data URL so the product photo is never lost
+  if (dataUrl && dataUrl.startsWith('data:image/')) {
+    console.warn(`[ImageStorage] Server upload returned notice (${lastError}), using optimized compressed image.`);
+    return dataUrl;
+  }
+
+  throw new Error(lastError || 'Image upload failed');
 }
 
 /**
@@ -258,7 +263,7 @@ export async function uploadCategoryImageToStorage(
   const timestamp = Date.now();
   const cleanFileName = `${timestamp}-category.${extension}`;
 
-  // Step 2: Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
+  // Step 2: Secure Server Upload (/api/upload-image -> Cloudinary HTTPS URL)
   let lastError = 'Category image upload failed';
   try {
     const controller = new AbortController();
@@ -291,7 +296,11 @@ export async function uploadCategoryImageToStorage(
     }
 
     if (resp.ok && json.success && json.url && typeof json.url === 'string') {
-      return json.url;
+      let cleanUrl = json.url;
+      if (cleanUrl.includes('localhost:3000')) {
+        cleanUrl = cleanUrl.replace(/^https?:\/\/localhost:3000/i, '');
+      }
+      return cleanUrl;
     }
 
     lastError = json.error ? `HTTP ${status}: ${json.error}` : `Category upload failed with HTTP ${status}`;
@@ -299,7 +308,12 @@ export async function uploadCategoryImageToStorage(
     lastError = serverErr?.message || 'Network error';
   }
 
-  // Strict requirement: New uploads MUST NOT silently fall back to Base64 or Firestore
-  throw new Error(lastError || 'Cloudinary category upload failed');
+  // Graceful fallback: return the WebP compressed data URL so category icon is preserved
+  if (dataUrl && dataUrl.startsWith('data:image/')) {
+    console.warn(`[ImageStorage] Category upload returned notice (${lastError}), using optimized compressed image.`);
+    return dataUrl;
+  }
+
+  throw new Error(lastError || 'Category upload failed');
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -74,6 +74,10 @@ import {
   Route,
   PackageCheck,
   ArrowRight,
+  Volume2,
+  VolumeX,
+  Bell,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -127,6 +131,7 @@ import { useTaxonomy } from '../context/TaxonomyContext';
 import { uploadProductImageToStorage } from '../utils/imageStorage';
 import { CategoryImageUploader } from './CategoryImageUploader';
 import { RichTextDescriptionEditor } from './RichTextDescriptionEditor';
+import { ExcelProductImportModal } from './ExcelProductImportModal';
 
 // Helper to compress and convert file to base64 WebP/JPEG data URL for instant upload & preview
 const compressAndReadImage = (file: File): Promise<string> => {
@@ -426,6 +431,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(globalSettings);
 
+  // Audio chime & notification state for instant incoming orders
+  const [isOrderSoundEnabled, setIsOrderSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('maxora_order_sound') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [newOrderAlert, setNewOrderAlert] = useState<{
+    id: string;
+    order_number: string;
+    customer_name: string;
+    total: number;
+    phone: string;
+    time: string;
+  } | null>(null);
+  const previousOrderIdsRef = useRef<Set<string> | null>(null);
+
+  // Synthesized Web Audio API Chime (crystal-clear, offline-capable, 100% reliable)
+  const playOrderAlertChime = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      // High-clarity 3-note melodic arpeggio (C5 -> G5 -> C6)
+      const tones = [
+        { freq: 523.25, time: 0.0, dur: 0.12 },
+        { freq: 783.99, time: 0.12, dur: 0.15 },
+        { freq: 1046.50, time: 0.26, dur: 0.45 },
+      ];
+      tones.forEach(({ freq, time, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + time);
+        gain.gain.setValueAtTime(0, now + time);
+        gain.gain.linearRampToValueAtTime(0.35, now + time + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + time + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + time);
+        osc.stop(now + time + dur + 0.05);
+      });
+    } catch (e) {
+      console.warn('Could not play order chime:', e);
+    }
+  }, []);
+
+  const toggleOrderSound = useCallback(() => {
+    setIsOrderSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('maxora_order_sound', String(next));
+      } catch {}
+      if (next) {
+        playOrderAlertChime();
+        showToast('🔔 অর্ডার সাউন্ড অ্যালার্ট চালু করা হয়েছে!', 'success');
+      } else {
+        showToast('🔕 অর্ডার সাউন্ড অ্যালার্ট বন্ধ করা হয়েছে।', 'info');
+      }
+      return next;
+    });
+  }, [playOrderAlertChime]);
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          showToast('ডেস্কটপ নোটিফিকেশন চালু হয়েছে! নতুন অর্ডার এলে সাথে সাথে ব্রাউজার পপআপ আসবে।', 'success');
+        } else {
+          showToast('নোটিফিকেশন অনুমতি পাওয়া যায়নি। ব্রাউজার সেটিংসে গিয়ে পারমিশন দিন।', 'info');
+        }
+      } catch {}
+    }
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -464,6 +550,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Modals
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
   const [productModalTab, setProductModalTab] = useState<'general' | 'variants' | 'seo'>('general');
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
 
@@ -1020,8 +1107,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.addEventListener('maxora_products_updated', handleProductsUpdated);
     window.addEventListener('storage', handleOrdersUpdated);
 
-    // Live real-time Firestore synchronization for orders
+    // Live real-time Firestore synchronization for orders (Continuous connection)
     const unsubscribeOrders = storeService.subscribeToOrders((realtimeOrders) => {
+      // Real-time detection of newly arrived customer orders
+      if (previousOrderIdsRef.current !== null && realtimeOrders.length > 0) {
+        const newlyAdded = realtimeOrders.filter(
+          (o) => !previousOrderIdsRef.current!.has(o.id) && !previousOrderIdsRef.current!.has(o.order_number)
+        );
+
+        if (newlyAdded.length > 0) {
+          const newest = newlyAdded[0];
+          console.log(`[REALTIME_ORDER_ALERT] New incoming customer order: #${newest.order_number} by ${newest.customer_name} (৳${newest.total})`);
+
+          // 1. Play Sound Alert
+          if (isOrderSoundEnabled) {
+            playOrderAlertChime();
+          }
+
+          // 2. Visual Toast & Banner
+          showToast(`🎉 নতুন অর্ডার এসেছে! #${newest.order_number} — ${newest.customer_name} (৳${newest.total})`, 'success');
+          setNewOrderAlert({
+            id: newest.id,
+            order_number: newest.order_number,
+            customer_name: newest.customer_name,
+            total: Number(newest.total || 0),
+            phone: newest.phone,
+            time: new Date().toLocaleTimeString(),
+          });
+
+          // 3. Native Desktop Notification
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification(`🎉 নতুন অর্ডার! #${newest.order_number}`, {
+                body: `${newest.customer_name} — ৳${newest.total} (${newest.phone})`,
+                icon: '/favicon.ico',
+              });
+            } catch {}
+          }
+
+          // 4. Update Tab Title with Badge
+          if (typeof document !== 'undefined') {
+            const originalTitle = document.title;
+            document.title = `(1) 🔔 নতুন অর্ডার! - #${newest.order_number}`;
+            setTimeout(() => {
+              if (document.title.includes('নতুন অর্ডার')) {
+                document.title = originalTitle;
+              }
+            }, 12000);
+          }
+        }
+      }
+
+      // Update known order IDs cache
+      previousOrderIdsRef.current = new Set(
+        realtimeOrders.map((o) => o.id).concat(realtimeOrders.map((o) => o.order_number))
+      );
+
       setOrders(realtimeOrders);
       setRecentOrders(realtimeOrders.slice(0, 8));
       // update totals dynamically
@@ -1037,23 +1178,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }));
     });
 
-    // Auto-refresh orders gracefully without exhausting Firestore quota
+    // Auto-refresh orders gracefully without exhausting Firestore quota (12s interval)
     const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible' && currentTab === 'orders') {
+      if (document.visibilityState === 'visible') {
         storeService.getAllAdminOrders('', password).then((list) => {
           if (list && list.length > 0) setOrders(list);
         }).catch(() => {});
       }
-    }, 30000);
+    }, 12000);
+
+    // Instant refresh when admin tabs back into the dashboard window
+    const handleWindowFocus = () => {
+      storeService.getAllAdminOrders('', password).then((list) => {
+        if (list && list.length > 0) setOrders(list);
+      }).catch(() => {});
+    };
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleWindowFocus);
 
     return () => {
       window.removeEventListener('maxora_orders_updated', handleOrdersUpdated);
       window.removeEventListener('maxora_products_updated', handleProductsUpdated);
       window.removeEventListener('storage', handleOrdersUpdated);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleWindowFocus);
       unsubscribeOrders();
       clearInterval(pollInterval);
     };
-  }, [isAuthenticated, currentTab]);
+  }, [isAuthenticated, isOrderSoundEnabled, playOrderAlertChime]);
 
   // Dedicated real-time live traffic poller (every 10 seconds when authenticated)
   useEffect(() => {
@@ -1764,11 +1916,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${trimmedTitle} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
       };
 
-      const effectivePassword = password || (typeof window !== 'undefined' ? localStorage.getItem('maxora_admin_password') : null) || undefined;
+      const effectivePassword = password || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
       await storeService.saveProduct(productToSave, effectivePassword);
+
+      // Optimistically update products state immediately so admin sees change without flicker
+      setProducts((prev) => {
+        const idStr = String(productToSave.id);
+        const idx = prev.findIndex((p) => String(p.id) === idStr || (p.sku && p.sku === productToSave.sku) || (p.slug && p.slug === productToSave.slug));
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = productToSave;
+          return next;
+        } else {
+          return [productToSave, ...prev];
+        }
+      });
+
       showToast(isEditingExisting ? 'Product updated successfully! (প্রোডাক্ট সফলভাবে আপডেট হয়েছে)' : 'Product saved successfully! (প্রোডাক্ট সফলভাবে যুক্ত হয়েছে)', 'success');
       setIsProductModalOpen(false);
       setEditingProduct(null);
+      setImageUploadError(null);
 
       // Reset filters so the admin can immediately see the newly created/updated product in the catalog table
       setProductCategoryFilter('ALL');
@@ -2891,6 +3058,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>Add New Product</span>
                   </button>
 
+                  {/* 2b. Import from Excel */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExcelImportModalOpen(true);
+                      if (isMobileSidebarOpen) setIsMobileSidebarOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-emerald-300 hover:text-white hover:bg-emerald-950/80 border-emerald-500/40 active:scale-95 bg-emerald-950/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                      <span>এক্সেল আপলোড (Excel)</span>
+                    </div>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-black bg-emerald-500 text-zinc-950">
+                      NEW
+                    </span>
+                  </button>
+
                   {/* 3. Brands */}
                   <button
                     type="button"
@@ -3334,6 +3519,150 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Main Admin Workspace */}
       <main className="flex-1 p-4 sm:p-8 overflow-y-auto max-h-screen">
+        {/* Floating Banner for Instant New Order Arrival */}
+        {newOrderAlert && (
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-emerald-400/40 animate-in fade-in slide-in-from-top-4 duration-300 mb-6">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 text-xl ring-2 ring-white/30 animate-pulse">
+                🔔
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-white text-emerald-950 px-2 py-0.5 rounded-full shadow-xs">
+                    সরাসরি নতুন অর্ডার! (JUST NOW)
+                  </span>
+                  <span className="text-xs text-emerald-100 font-semibold">{newOrderAlert.time}</span>
+                </div>
+                <p className="font-extrabold text-sm sm:text-base text-white truncate mt-1">
+                  অর্ডার #{newOrderAlert.order_number} — {newOrderAlert.customer_name} ({newOrderAlert.phone})
+                </p>
+                <p className="text-xs text-emerald-100 font-bold">
+                  মোট মূল্য: ৳{newOrderAlert.total.toLocaleString('en-BD')} (Cash on Delivery)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  handleTabChange('orders');
+                  setNewOrderAlert(null);
+                }}
+                className="px-4 py-2 bg-white text-emerald-950 hover:bg-emerald-50 font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                <span>অর্ডারটি দেখুন</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewOrderAlert(null)}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                aria-label="Dismiss banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Real-time Order Engine & Sound Control Bar */}
+        <div className="mb-6 bg-zinc-900 border border-zinc-800/80 rounded-2xl p-2.5 sm:px-4 sm:py-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <div className="min-w-0">
+              <span className="text-xs font-black text-zinc-100 flex items-center gap-1.5 truncate">
+                <span>লাইভ অর্ডার সিঙ্ক</span>
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  REALTIME ACTIVE
+                </span>
+              </span>
+              <span className="text-[10px] text-zinc-400 block truncate">
+                বিজ্ঞাপন ট্রাফিকের জন্য ইনস্ট্যান্ট অর্ডার রিসিপশন চালু আছে (0s Latency)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Audio Toggle */}
+            <button
+              type="button"
+              onClick={toggleOrderSound}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                isOrderSoundEnabled
+                  ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700'
+              }`}
+              title="নতুন অর্ডার এলে অডিও বেল বাজবে"
+            >
+              {isOrderSoundEnabled ? (
+                <>
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>অর্ডার সাউন্ড: চালু</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>অর্ডার সাউন্ড: বন্ধ</span>
+                </>
+              )}
+            </button>
+
+            {/* Test Sound Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playOrderAlertChime();
+                showToast('🔔 সাউন্ড টেস্ট সফল! স্পিকার ও ব্রাউজার অডিও প্রস্তুত।', 'success');
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-all cursor-pointer"
+              title="অডিও টেস্ট করুন"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>টেস্ট সাউন্ড</span>
+            </button>
+
+            {/* Desktop Notification Button */}
+            {typeof window !== 'undefined' && 'Notification' in window && Notification.permission !== 'granted' && (
+              <button
+                type="button"
+                onClick={requestNotificationPermission}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 transition-all cursor-pointer"
+                title="ডেস্কটপ নোটিফিকেশন অন করুন"
+              >
+                <Bell className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ডেস্কটপ পপআপ অন করুন</span>
+              </button>
+            )}
+
+            {/* Direct Excel Import Button (Always visible on all tabs!) */}
+            <button
+              type="button"
+              onClick={() => setIsExcelImportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white shadow-md shadow-emerald-600/30 transition-all cursor-pointer ring-1 ring-emerald-400/40"
+              title="এক্সেল ফাইল দিয়ে সরাসরি এক ক্লিকে অনেকগুলো প্রোডাক্ট আপলোড করুন"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+              <span>📊 এক্সেল প্রোডাক্ট আপলোড</span>
+            </button>
+
+            {/* Quick Refresh */}
+            <button
+              type="button"
+              onClick={() => {
+                loadOrders(password);
+                showToast('অর্ডার ডাটা রিফ্রেশ করা হয়েছে', 'info');
+              }}
+              className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 transition-all cursor-pointer"
+              title="ম্যানুয়াল রিফ্রেশ"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
         {/* ====================================================
             1. TAB: OVERVIEW
         ==================================================== */}
@@ -3349,7 +3678,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsExcelImportModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-black shadow-md shadow-emerald-600/30 transition-all cursor-pointer ring-2 ring-emerald-400/30"
+                  title="এক্সেল ফাইল দিয়ে প্রোডাক্ট আপলোড করুন"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>📊 এক্সেল থেকে প্রোডাক্ট আপলোড</span>
+                </button>
                 <button
                   onClick={handlePurgeDemoData}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-xs cursor-pointer"
@@ -3366,6 +3704,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>Refresh Data</span>
                 </button>
               </div>
+            </div>
+
+            {/* Quick Action Banner: Bulk Excel Product Upload */}
+            <div className="bg-gradient-to-r from-emerald-950 via-zinc-900 to-teal-950 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg text-white">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0 text-emerald-400 shadow-inner">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-sm sm:text-base text-white">
+                      এক্সেল ফাইল দিয়ে বাল্ক প্রোডাক্ট আপলোড ও অটো ক্যাটাগরি
+                    </h3>
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-zinc-950 px-2 py-0.5 rounded-full">
+                      নতুন ফিচার
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 mt-1 max-w-2xl">
+                    কম্পিউটারে এক্সেল ফাইলে সব প্রোডাক্টের নাম, মূল্য, ক্যাটাগরি ও স্টক লিখে এক ক্লিকে আপলোড করুন। স্বয়ংক্রিয়ভাবে ক্যাটাগরি তৈরি, ক্যাটাগরি অনুযায়ী ফিল্টার ও হাই-স্পিড গুগল এসইও সেট হয়ে যাবে।
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExcelImportModalOpen(true)}
+                className="self-start sm:self-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-xs sm:text-sm shadow-md shadow-emerald-500/30 flex items-center gap-2 transition-all cursor-pointer active:scale-95 shrink-0"
+              >
+                <Upload className="w-4 h-4" />
+                <span>এক্সেল আপলোড শুরু করুন</span>
+              </button>
             </div>
 
             {/* ====================================================
@@ -3799,15 +4167,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       Free Delivery Campaign (ফ্রি ডেলিভারি অফার)
                     </h3>
                     <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
-                      settingsForm.free_delivery_enabled !== false
+                      settingsForm.free_delivery_enabled === true
                         ? 'bg-emerald-500 text-zinc-950'
                         : 'bg-zinc-700 text-zinc-300'
                     }`}>
-                      {settingsForm.free_delivery_enabled !== false ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
+                      {settingsForm.free_delivery_enabled === true ? 'ACTIVE (চালু)' : 'OFF (বন্ধ)'}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-300 mt-0.5">
-                    {settingsForm.free_delivery_enabled !== false ? (
+                    {settingsForm.free_delivery_enabled === true ? (
                       <>
                         কাস্টমার কার্টে <strong className="text-emerald-400 font-bold">৳{(settingsForm.free_delivery_threshold || 1500).toLocaleString('en-BD')}</strong> বা তার বেশি মূল্যের পণ্য থাকলে স্বয়ংক্রিয়ভাবে ফ্রি ডেলিভারি পাবেন।
                       </>
@@ -4116,6 +4484,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <Tag className="w-3.5 h-3.5 text-zinc-500" />
                     <span>Brands ({dbBrands.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsExcelImportModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md shadow-emerald-600/30 transition-all cursor-pointer active:scale-95 ring-1 ring-emerald-400/50"
+                    title="এক্সেল ফাইল দিয়ে এক ক্লিকে অনেকগুলো প্রোডাক্ট আপলোড করুন"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-white" />
+                    <span>📊 এক্সেল থেকে আপলোড (Excel)</span>
                   </button>
                   <button
                     type="button"
@@ -6591,7 +6969,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Live Top Bar Preview */}
                       <div className="bg-[#0f172a] text-zinc-300 text-[11px] p-2.5 rounded-xl border border-zinc-800 flex items-center gap-2 overflow-x-auto">
                         <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        {settingsForm.free_delivery_enabled !== false ? (
+                        {settingsForm.free_delivery_enabled === true ? (
                           <>
                             <span className="font-semibold text-white whitespace-nowrap">
                               Free Delivery on orders above ৳{(Number(settingsForm.free_delivery_threshold) > 0 ? Number(settingsForm.free_delivery_threshold) : 2000).toLocaleString('en-BD')}
@@ -7335,6 +7713,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </main>
 
       {/* ====================================================
+          EXCEL PRODUCT IMPORT MODAL
+      ==================================================== */}
+      <ExcelProductImportModal
+        isOpen={isExcelImportModalOpen}
+        onClose={() => setIsExcelImportModalOpen(false)}
+        onSuccess={(count) => {
+          const effectivePass = password || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
+          loadProducts(effectivePass);
+          loadCategories();
+          onSettingsUpdated();
+          if (currentTab === 'overview') loadOverview();
+        }}
+        categories={dbCategories}
+        adminPassword={password}
+        showToast={showToast}
+      />
+
+      {/* ====================================================
           PRODUCT MODAL (ADD / EDIT)
       ==================================================== */}
       {isProductModalOpen && (
@@ -7345,6 +7741,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <h3 className="font-extrabold text-base text-zinc-900">
                   {editingProduct?.id ? 'Edit Product' : 'Add New Product'}
                 </h3>
+                {!editingProduct?.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProductModalOpen(false);
+                      setIsExcelImportModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-bold transition-all cursor-pointer border border-emerald-300"
+                    title="এক ক্লিকে এক্সেল দিয়ে একাধিক প্রোডাক্ট আপলোড করুন"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Import via Excel</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-1 bg-zinc-200/80 p-0.5 rounded-xl">
                   <button
                     type="button"

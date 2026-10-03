@@ -119,7 +119,7 @@ export function getHomepageCanonicalUrl(baseUrl = SITE_URL): string {
  * Example: https://maxorabd.com/category/smart-gadgets
  */
 export function getCategoryCanonicalUrl(
-  category: { slug?: string; name?: string} | string,
+  category: { slug?: string; name?: string } | string,
   baseUrl = SITE_URL
 ): string {
   const slug = typeof category === 'string'
