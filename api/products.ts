@@ -134,7 +134,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return [];
       };
 
-            // Load deleted_product_ids registry
+      // Check in-memory cache
+      const now = Date.now();
+      if (cachedProducts.length > 1 && now - cacheTimestamp < CACHE_TTL_MS) {
+        let prods = returnAll
+          ? cachedProducts
+          : cachedProducts.filter((p) => p.active !== 0 && p.active !== false && String(p.active) !== '0');
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, products: prods }));
+        return;
+      }
+
+      // Load deleted_product_ids registry
       const deletedIds = new Set<string>();
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
