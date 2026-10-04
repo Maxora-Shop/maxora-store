@@ -431,10 +431,9 @@ export function clearFirestoreCooldown() {
 
 export function isClientQuotaCooldownActive(): boolean {
   if (typeof window !== 'undefined') {
-    const stored = Number(localStorage.getItem('maxora_firestore_cooldown_until') || 0);
-    if (stored > clientQuotaCooldownUntil) {
-      clientQuotaCooldownUntil = stored;
-    }
+    try {
+      localStorage.removeItem('maxora_firestore_cooldown_until');
+    } catch {}
   }
   return Date.now() < clientQuotaCooldownUntil;
 }
@@ -466,19 +465,14 @@ export function scheduleReconnectListeners(delayMs = 30000) {
 
 export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
-    // 30-minute calm backoff for background read listeners and direct writes
-    clientQuotaCooldownUntil = Date.now() + 30 * 60 * 1000;
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil));
-      } catch {}
-    }
+    // 60-second in-memory backoff so subsequent requests can retry as soon as quota resets
+    clientQuotaCooldownUntil = Date.now() + 60 * 1000;
     // Cleanly detach active listeners
     detachFirestoreListeners();
 
     if (!clientQuotaNoticeLogged) {
       clientQuotaNoticeLogged = true;
-      console.info(`[StoreService] Firestore quota notice (${context}). Local fallback available.`);
+      console.info(`[StoreService] Firestore quota notice (${context}). Fallback cache available.`);
     }
     return;
   }

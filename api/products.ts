@@ -53,6 +53,32 @@ let cachedProducts: any[] = [];
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 15000; // 15 seconds
 
+// Load seed/fallback products from /tmp, maxora_db.json or userProducts.json
+function loadFallbackProducts(): any[] {
+  try {
+    const tmpPath = path.join('/tmp', 'maxora_live_products.json');
+    if (fs.existsSync(tmpPath)) {
+      try {
+        const liveData = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+        if (Array.isArray(liveData) && liveData.length > 0) return liveData;
+      } catch {}
+    }
+    const dbPath = path.join(process.cwd(), 'maxora_db.json');
+    if (fs.existsSync(dbPath)) {
+      const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+      if (Array.isArray(data.products) && data.products.length > 0) return data.products;
+    }
+    const userProdsPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+    if (fs.existsSync(userProdsPath)) {
+      const data = JSON.parse(fs.readFileSync(userProdsPath, 'utf8'));
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (e) {
+    console.warn('Error reading fallback products:', e);
+  }
+  return [];
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -114,32 +140,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }));
         return;
       }
-
-      // Load seed/fallback products from /tmp, maxora_db.json or userProducts.json
-      const loadFallbackProducts = () => {
-        try {
-          const tmpPath = path.join('/tmp', 'maxora_live_products.json');
-          if (fs.existsSync(tmpPath)) {
-            try {
-              const liveData = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
-              if (Array.isArray(liveData) && liveData.length > 0) return liveData;
-            } catch {}
-          }
-          const dbPath = path.join(process.cwd(), 'maxora_db.json');
-          if (fs.existsSync(dbPath)) {
-            const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-            if (Array.isArray(data.products) && data.products.length > 0) return data.products;
-          }
-          const userProdsPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
-          if (fs.existsSync(userProdsPath)) {
-            const data = JSON.parse(fs.readFileSync(userProdsPath, 'utf8'));
-            if (Array.isArray(data) && data.length > 0) return data;
-          }
-        } catch (e) {
-          console.warn('Error reading fallback products:', e);
-        }
-        return [];
-      };
 
       // Check in-memory cache
       const now = Date.now();

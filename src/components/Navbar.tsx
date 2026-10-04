@@ -20,7 +20,6 @@ import {
   Baby,
   ArrowRight,
   Tag,
-  Lock,
 } from 'lucide-react';
 import { StoreSettings, Category, Product, Customer } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState, matchesTaxonomyField } from '../utils/taxonomy';
@@ -41,7 +40,6 @@ interface NavbarProps {
   onOpenWishlist?: () => void;
   onOpenTracker: () => void;
   onOpenCustomerAccount: () => void;
-  onOpenAdmin?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   categories?: Category[];
@@ -68,7 +66,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenWishlist,
   onOpenTracker,
   onOpenCustomerAccount,
-  onOpenAdmin,
   searchQuery,
   onSearchChange,
   categories: propCategories = [],
@@ -434,20 +431,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <PackageCheck className="w-3.5 h-3.5 text-zinc-400" />
               <span>Track Order</span>
             </button>
-            {onOpenAdmin && (
-              <>
-                <span className="text-zinc-700 hidden sm:inline">•</span>
-                <button
-                  type="button"
-                  onClick={onOpenAdmin}
-                  className="hover:text-emerald-400 text-zinc-400 transition-colors flex items-center gap-1 cursor-pointer font-bold"
-                  title="Admin Portal"
-                >
-                  <Lock className="w-3 h-3 text-emerald-400" />
-                  <span>Admin</span>
-                </button>
-              </>
-            )}
             {settings.phone && (
               <>
                 <span className="text-zinc-700 hidden md:inline">•</span>

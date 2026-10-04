@@ -43,7 +43,6 @@ interface FooterSectionProps {
   onScrollToProducts: () => void;
   onSelectCategory?: (cat: string) => void;
   onScrollToHotDeals?: () => void;
-  onOpenAdmin?: () => void;
 }
 
 export const FooterSection: React.FC<FooterSectionProps> = ({
@@ -52,7 +51,6 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
   onScrollToProducts,
   onSelectCategory,
   onScrollToHotDeals,
-  onOpenAdmin,
 }) => {
   const [modalContent, setModalContent] = useState<{ title: string; content: string } | null>(null);
 

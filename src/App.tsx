@@ -10,10 +10,7 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
 
-// Code-split heavy admin suite and optional customer modals so customer homepage loads ultra-fast
-const AdminDashboard = React.lazy(() =>
-  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
-);
+// Customer Modals (loaded on-demand)
 const CustomerAccountModal = React.lazy(() =>
   import('./components/CustomerAccountModal').then((m) => ({ default: m.CustomerAccountModal }))
 );
@@ -69,24 +66,17 @@ import {
 } from './utils/taxonomy';
 
 export default function App() {
-  // Admin View State - tab session persistence (reloads in admin stay in admin, new tabs default to store)
-  const [isAdminView, setIsAdminView] = useState(() => {
+  // Clear any residual admin session flags on customer storefront
+  useEffect(() => {
     if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname.toLowerCase();
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      const search = window.location.search;
-      const sessionView = sessionStorage.getItem('maxora_admin_view_active') === 'true';
-      return (
-        hostname.includes('admin') ||
-        path.startsWith('/admin') ||
-        hash === '#admin' ||
-        search.includes('admin=true') ||
-        sessionView
-      );
+      try {
+        sessionStorage.removeItem('maxora_admin_view_active');
+        if (window.location.hash === '#admin') {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      } catch {}
     }
-    return false;
-  });
+  }, []);
 
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(() => {
@@ -173,30 +163,6 @@ export default function App() {
     return () => window.removeEventListener('maxora_customer_auth_changed', handleCustomerSync);
   }, []);
 
-  // Listen for Ctrl+Shift+A for discreet store owner admin access
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        setIsAdminView((prev) => {
-          const next = !prev;
-          if (next) {
-            sessionStorage.setItem('maxora_admin_view_active', 'true');
-            window.history.pushState({}, '', '/admin');
-          } else {
-            sessionStorage.removeItem('maxora_admin_view_active');
-            window.history.pushState({}, '', '/');
-          }
-          return next;
-        });
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [quickViewInitialTab, setQuickViewInitialTab] = useState<'details' | 'reviews'>('details');
   const [isProductNotFound, setIsProductNotFound] = useState(false);
@@ -248,24 +214,19 @@ export default function App() {
     productsRef.current = products;
   }, [products]);
 
-  // Route listener: handles /admin, /product/:slug, browser back/forward, and direct URLs
+  // Route listener: handles /product/:slug, browser back/forward, and direct URLs
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
       const hash = window.location.hash;
       const search = window.location.search;
 
-      // Admin check
-      const hostname = window.location.hostname.toLowerCase();
-      if (hostname.includes('admin') || path.startsWith('/admin') || hash === '#admin' || search.includes('admin=true')) {
-        sessionStorage.setItem('maxora_admin_view_active', 'true');
-        setIsAdminView(true);
-        setQuickViewProduct(null);
-        setIsProductNotFound(false);
-        return;
-      } else {
-        sessionStorage.removeItem('maxora_admin_view_active');
-        setIsAdminView(false);
+      // Clean up any stray admin hash or path on customer site
+      if (path.startsWith('/admin') || hash === '#admin') {
+        try {
+          sessionStorage.removeItem('maxora_admin_view_active');
+          window.history.replaceState(null, '', '/');
+        } catch {}
       }
 
       // Product check: /product/:slug or legacy #product-:slug
@@ -526,10 +487,8 @@ export default function App() {
 
   // Real-time visitor and traffic tracking on customer storefront
   useEffect(() => {
-    if (!isAdminView) {
-      visitorTrackingService.init();
-    }
-  }, [isAdminView]);
+    visitorTrackingService.init();
+  }, []);
 
   // Load Settings, Products & Categories on startup and listen for live updates
   useEffect(() => {
@@ -613,18 +572,6 @@ export default function App() {
       detachFirestoreListeners();
     };
   }, []);
-
-  // Fetch products, settings, and categories when returning from admin
-  const isInitialMountRef = useRef(true);
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
-    fetchProducts();
-    fetchSettings();
-    fetchCategories();
-  }, [isAdminView]);
 
   const fetchSettings = async () => {
     try {
@@ -1449,35 +1396,6 @@ export default function App() {
   };
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  if (isAdminView) {
-    return (
-      <React.Suspense
-        fallback={
-          <div className="min-h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-6 space-y-4">
-            <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm font-semibold text-zinc-400">Loading Secure Admin Panel...</p>
-          </div>
-        }
-      >
-        <AdminDashboard
-          onBackToStore={() => {
-            sessionStorage.removeItem('maxora_admin_view_active');
-            setIsAdminView(false);
-            window.history.pushState({}, '', '/');
-            fetchProducts();
-            fetchSettings();
-          }}
-          globalSettings={settings}
-          onSettingsUpdated={() => {
-            fetchSettings();
-            fetchProducts();
-            fetchCategories();
-          }}
-        />
-      </React.Suspense>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">
