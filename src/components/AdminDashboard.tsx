@@ -1941,7 +1941,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setProductCategoryFilter('ALL');
       setProductBrandFilter('ALL');
       setProductTypeFilter('ALL');
-      setCurrentTaxonomyFilter(null);
+      setCurrentTaxonomyFilter({});
 
       await loadProducts(effectivePassword);
       onSettingsUpdated();
@@ -2434,26 +2434,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Filtered Products
-  const filteredProducts = products.filter((p) => {
+  const filteredProducts = (products || []).filter((p) => {
+    if (!p) return false;
+    const cat = p.category || '';
+    const name = p.name || '';
+    const sku = p.sku || '';
+    const brand = p.brand || '';
+    const subCat = p.sub_category || '';
+    const childCat = p.child_category || '';
+    const prodType = p.product_type || '';
+    const metaKw = p.meta_keywords || '';
+    const colors = Array.isArray(p.colors) ? p.colors : [];
+
     const matchesSearch =
       productSearch === '' ||
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.brand && p.brand.toLowerCase().includes(productSearch.toLowerCase())) ||
-      p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (p.sub_category && p.sub_category.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.child_category && p.child_category.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.product_type && p.product_type.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (p.meta_keywords && p.meta_keywords.toLowerCase().includes(productSearch.toLowerCase())) ||
-      (Array.isArray(p.colors) && p.colors.some((c) => c.name.toLowerCase().includes(productSearch.toLowerCase())));
+      name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      sku.toLowerCase().includes(productSearch.toLowerCase()) ||
+      brand.toLowerCase().includes(productSearch.toLowerCase()) ||
+      cat.toLowerCase().includes(productSearch.toLowerCase()) ||
+      subCat.toLowerCase().includes(productSearch.toLowerCase()) ||
+      childCat.toLowerCase().includes(productSearch.toLowerCase()) ||
+      prodType.toLowerCase().includes(productSearch.toLowerCase()) ||
+      metaKw.toLowerCase().includes(productSearch.toLowerCase()) ||
+      colors.some((c) => (c?.name || '').toLowerCase().includes(productSearch.toLowerCase()));
+
     const matchesCategory =
-      productCategoryFilter === '' || p.category === productCategoryFilter;
+      productCategoryFilter === '' || productCategoryFilter === 'ALL' || cat === productCategoryFilter;
     const matchesBrand =
-      productBrandFilter === '' ||
-      (p.brand || 'Other').toLowerCase().trim() === productBrandFilter.toLowerCase().trim() ||
+      productBrandFilter === '' || productBrandFilter === 'ALL' ||
+      (brand || 'Other').toLowerCase().trim() === productBrandFilter.toLowerCase().trim() ||
       (p.brand_slug && p.brand_slug.toLowerCase().trim() === productBrandFilter.toLowerCase().trim());
     const matchesProductType =
-      productTypeFilter === '' || p.product_type === productTypeFilter;
+      productTypeFilter === '' || productTypeFilter === 'ALL' || prodType === productTypeFilter;
     const matchesStatus =
       productStatusFilter === 'all' ||
       (productStatusFilter === 'active' && p.active !== 0) ||
@@ -2468,29 +2480,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return true;
     })();
 
+    const taxFilter = currentTaxonomyFilter || {};
     const matchesTaxonomy = (() => {
-      if (currentTaxonomyFilter.category) {
+      if (taxFilter.category) {
         const catMatch =
-          (p.category_id && currentTaxonomyFilter.categoryId && p.category_id === currentTaxonomyFilter.categoryId) ||
-          p.category?.toLowerCase() === currentTaxonomyFilter.category.toLowerCase();
+          (p.category_id && taxFilter.categoryId && p.category_id === taxFilter.categoryId) ||
+          cat.toLowerCase() === taxFilter.category.toLowerCase();
         if (!catMatch) return false;
       }
-      if (currentTaxonomyFilter.subCategory) {
+      if (taxFilter.subCategory) {
         const subMatch =
-          (p.subcategory_id && currentTaxonomyFilter.subCategoryId && p.subcategory_id === currentTaxonomyFilter.subCategoryId) ||
-          p.sub_category?.toLowerCase() === currentTaxonomyFilter.subCategory.toLowerCase();
+          (p.subcategory_id && taxFilter.subCategoryId && p.subcategory_id === taxFilter.subCategoryId) ||
+          subCat.toLowerCase() === taxFilter.subCategory.toLowerCase();
         if (!subMatch) return false;
       }
-      if (currentTaxonomyFilter.productType) {
+      if (taxFilter.productType) {
         const typeMatch =
-          (p.product_type_id && currentTaxonomyFilter.productTypeId && p.product_type_id === currentTaxonomyFilter.productTypeId) ||
-          p.product_type?.toLowerCase() === currentTaxonomyFilter.productType.toLowerCase();
+          (p.product_type_id && taxFilter.productTypeId && p.product_type_id === taxFilter.productTypeId) ||
+          prodType.toLowerCase() === taxFilter.productType.toLowerCase();
         if (!typeMatch) return false;
       }
-      if (currentTaxonomyFilter.childCategory) {
+      if (taxFilter.childCategory) {
         const childMatch =
-          (p.childcategory_id && currentTaxonomyFilter.childCategoryId && p.childcategory_id === currentTaxonomyFilter.childCategoryId) ||
-          p.child_category?.toLowerCase() === currentTaxonomyFilter.childCategory.toLowerCase();
+          (p.childcategory_id && taxFilter.childCategoryId && p.childcategory_id === taxFilter.childCategoryId) ||
+          childCat.toLowerCase() === taxFilter.childCategory.toLowerCase();
         if (!childMatch) return false;
       }
       return true;
@@ -2507,11 +2520,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   });
 
-  const categoriesList = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
+  const categoriesList = Array.from(new Set((products || []).filter(Boolean).map((p) => p.category).filter(Boolean)));
   const brandsListFromProducts = Array.from(
     new Set([
       ...dbBrands.map((b) => b.name),
-      ...products.map((p) => p.brand || 'Other'),
+      ...(products || []).filter(Boolean).map((p) => p.brand || 'Other'),
     ].filter(Boolean))
   );
 
@@ -4596,7 +4609,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     data-hierarchy-trigger="true"
                     onClick={() => setIsHierarchyNavOpen(!isHierarchyNavOpen)}
                     className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all cursor-pointer shadow-xs ${
-                      isHierarchyNavOpen || currentTaxonomyFilter.category
+                      isHierarchyNavOpen || currentTaxonomyFilter?.category
                         ? 'bg-zinc-950 text-white border-zinc-950 shadow-md'
                         : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border-zinc-300'
                     }`}
@@ -4604,19 +4617,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <Layers
                       className={`w-4 h-4 ${
-                        isHierarchyNavOpen || currentTaxonomyFilter.category
+                        isHierarchyNavOpen || currentTaxonomyFilter?.category
                           ? 'text-emerald-400'
                           : 'text-emerald-600'
                       }`}
                     />
                     <span className="truncate max-w-[130px]">
-                      {currentTaxonomyFilter.childCategory ||
-                        currentTaxonomyFilter.productType ||
-                        currentTaxonomyFilter.subCategory ||
-                        currentTaxonomyFilter.category ||
+                      {currentTaxonomyFilter?.childCategory ||
+                        currentTaxonomyFilter?.productType ||
+                        currentTaxonomyFilter?.subCategory ||
+                        currentTaxonomyFilter?.category ||
                         'Category Hierarchy'}
                     </span>
-                    {currentTaxonomyFilter.category && (
+                    {currentTaxonomyFilter?.category && (
                       <span
                         onClick={(e) => {
                           e.preventDefault();
@@ -4732,17 +4745,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Filter Active Notice with Clear Filter button */}
-            {(productSearch || productCategoryFilter || productBrandFilter || productTypeFilter || productStatusFilter !== 'all' || productStockFilter !== 'all' || currentTaxonomyFilter.category || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.childCategory) && (
+            {(productSearch || productCategoryFilter || productBrandFilter || productTypeFilter || productStatusFilter !== 'all' || productStockFilter !== 'all' || currentTaxonomyFilter?.category || currentTaxonomyFilter?.subCategory || currentTaxonomyFilter?.productType || currentTaxonomyFilter?.childCategory) && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-amber-900 animate-fade-in">
                 <div className="flex flex-wrap items-center gap-2 font-medium">
                   <span className="font-bold">ফিল্টার সক্রিয়:</span>
                   <span>মোট {products.length} টির মধ্যে {filteredProducts.length} টি প্রোডাক্ট দেখানো হচ্ছে</span>
-                  {currentTaxonomyFilter.category && (
+                  {currentTaxonomyFilter?.category && (
                     <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
-                      ক্যাটেগরি: {currentTaxonomyFilter.childCategory || currentTaxonomyFilter.productType || currentTaxonomyFilter.subCategory || currentTaxonomyFilter.category}
+                      ক্যাটেগরি: {currentTaxonomyFilter?.childCategory || currentTaxonomyFilter?.productType || currentTaxonomyFilter?.subCategory || currentTaxonomyFilter?.category}
                     </span>
                   )}
-                  {productCategoryFilter && !currentTaxonomyFilter.category && (
+                  {productCategoryFilter && !currentTaxonomyFilter?.category && (
                     <span className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-xs font-semibold">
                       ক্যাটেগরি: {productCategoryFilter}
                     </span>
