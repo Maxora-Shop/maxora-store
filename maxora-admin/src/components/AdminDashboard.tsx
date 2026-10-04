@@ -1899,9 +1899,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
 
       const isEditingExisting = Boolean(editingProduct.id);
+      const newId = editingProduct.id || ('prod_' + Date.now());
+      const productImages = Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+        ? editingProduct.images
+        : [editingProduct.image_url || publicImage || ''];
+
       const productToSave: Product = {
         ...editingProduct,
-        id: editingProduct.id || ('prod_' + Date.now()),
+        id: newId,
         name: trimmedTitle,
         category: catName,
         selling_price: sellingPriceNum,
@@ -1911,13 +1916,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         slug: cleanedSlug,
         product_link: finalProductLink,
         image_url: editingProduct.image_url || publicImage || '',
+        images: productImages.filter(Boolean),
+        active: editingProduct.active !== undefined ? (editingProduct.active ? 1 : 0) : 1,
+        featured: editingProduct.featured ? 1 : 0,
         og_image: editingProduct.og_image?.trim() || publicImage || '',
         meta_title: editingProduct.meta_title?.trim() || `${trimmedTitle} Price in Bangladesh | Maxora Shop`,
         meta_description: editingProduct.meta_description?.trim() || (editingProduct.description ? editingProduct.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160) : `Buy ${trimmedTitle} at best price in Bangladesh with Cash on Delivery at Maxora Shop.`),
+        created_at: editingProduct.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const effectivePassword = password || (typeof window !== 'undefined' ? (sessionStorage.getItem('maxora_admin_token') || sessionStorage.getItem('maxora_admin_password') || localStorage.getItem('maxora_admin_password')) : null) || undefined;
-      await storeService.saveProduct(productToSave, effectivePassword);
+      
+      if (isEditingExisting) {
+        await storeService.updateProduct(productToSave.id, productToSave, effectivePassword);
+      } else {
+        await storeService.addProduct(productToSave, effectivePassword);
+      }
 
       // Optimistically update products state immediately so admin sees change without flicker
       setProducts((prev) => {

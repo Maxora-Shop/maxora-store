@@ -568,95 +568,8 @@ export function initRealtimeFirestoreListeners() {
     // for data privacy (preventing public download of customer orders) and Firestore read quota conservation.
     // Order creation (createOrder) and on-demand customer order tracking (trackOrder) remain fully functional.
 
-    // 4. Listen for categories changes
-    const unsubCats = onSnapshot(collection(db, 'categories'), (snapshot) => {
-      if (!snapshot.empty) {
-        const cats: Category[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as Category;
-          cats.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        cats.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(CATEGORIES_KEY, cats);
-        notifyCategoriesChanged();
-      }
-    }, (err) => handleStoreFirestoreError('Categories snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubCats);
-
-    // 5. Listen for subcategories changes
-    const unsubSubCats = onSnapshot(collection(db, 'subcategories'), (snapshot) => {
-      if (!snapshot.empty) {
-        const subcats: SubCategory[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as SubCategory;
-          subcats.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        subcats.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(SUBCATEGORIES_KEY, subcats);
-        notifySubCategoriesChanged();
-      }
-    }, (err) => handleStoreFirestoreError('Subcategories snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubSubCats);
-
-    // 6. Listen for product_types changes
-    const unsubTypes = onSnapshot(collection(db, 'product_types'), (snapshot) => {
-      if (!snapshot.empty) {
-        const types: ProductType[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as ProductType;
-          types.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        types.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(PRODUCT_TYPES_KEY, types);
-        notifyProductTypesChanged();
-      }
-    }, (err) => handleStoreFirestoreError('ProductTypes snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubTypes);
-
-    // 7. Listen for child_categories changes
-    const unsubChild = onSnapshot(collection(db, 'child_categories'), (snapshot) => {
-      if (!snapshot.empty) {
-        const children: ChildCategory[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as ChildCategory;
-          children.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        children.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(CHILD_CATEGORIES_KEY, children);
-        notifyChildCategoriesChanged();
-      }
-    }, (err) => handleStoreFirestoreError('ChildCategories snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubChild);
-
-    // 8. Listen for reviews changes
-    const unsubReviews = onSnapshot(collection(db, 'reviews'), (snapshot) => {
-      if (!snapshot.empty) {
-        const revs: Review[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as Review;
-          revs.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        revs.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        setLocal(REVIEWS_KEY, revs);
-        notifyReviewsChanged();
-      }
-    }, (err) => handleStoreFirestoreError('Reviews snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubReviews);
-
-    // 9. Listen for brands changes
-    const unsubBrands = onSnapshot(collection(db, 'brands'), (snapshot) => {
-      if (!snapshot.empty) {
-        const brandsList: Brand[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data() as Brand;
-          brandsList.push({ ...d, id: String(d.id || docSnap.id) });
-        });
-        brandsList.sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-        setLocal(BRANDS_KEY, brandsList);
-        notifyBrandsChanged();
-      }
-    }, (err) => handleStoreFirestoreError('Brands snapshot', err));
-    activeFirestoreUnsubscribers.push(unsubBrands);
+    // Note: Secondary taxonomy and reviews collections are loaded on demand
+    // to preserve Firestore free tier read units and guarantee maximum stability.
   } catch (err) {
     handleStoreFirestoreError('Realtime listener registration', err);
   }
@@ -1450,19 +1363,22 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
+    // 1. Direct Cloud Firestore write
     let firestorePersisted = false;
     try {
-      const firestorePromise = setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
-      await Promise.race([
-        firestorePromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
-      ]);
+      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
       firestorePersisted = true;
       clearFirestoreCooldown();
     } catch (e: any) {
       console.warn('Direct Firestore save product note:', e);
-      handleStoreFirestoreError('Firestore save product', e);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
+        firestorePersisted = true;
+        clearFirestoreCooldown();
+      } catch (retryErr) {
+        console.error('Firestore save product retry error:', retryErr);
+      }
     }
 
     // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
@@ -1543,19 +1459,22 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write (with 3.5s timeout so it never blocks UI or hangs indefinitely)
+    // 1. Direct Cloud Firestore write
     let firestorePersisted = false;
     try {
-      const firestorePromise = setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
-      await Promise.race([
-        firestorePromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 3500))
-      ]);
+      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
       firestorePersisted = true;
       clearFirestoreCooldown();
     } catch (e: any) {
       console.warn('Direct Firestore update product note:', e);
-      handleStoreFirestoreError('Firestore update product', e);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
+        firestorePersisted = true;
+        clearFirestoreCooldown();
+      } catch (retryErr) {
+        console.error('Firestore update product retry error:', retryErr);
+      }
     }
 
     // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
