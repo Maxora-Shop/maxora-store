@@ -2193,24 +2193,24 @@
       "2026-10-03": {
         "date": "2026-10-03",
         "unique_visitors": 2,
-        "page_views": 93,
+        "page_views": 127,
         "visitor_ids": [
           "v_muqy8abs_cezenerl",
           "v_muskrgsu_dcpq3ynb"
         ],
         "referrers": {
-          "Google Search": 89,
+          "Google Search": 123,
           "ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app": 4
         },
         "devices": {
           "mobile": 1,
-          "desktop": 92,
+          "desktop": 126,
           "tablet": 0
         },
         "pages": {
           "/": {
             "title": "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
-            "count": 93
+            "count": 127
           }
         }
       }
