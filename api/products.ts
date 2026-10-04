@@ -115,9 +115,16 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
       }
 
-      // Load seed/fallback products from maxora_db.json or userProducts.json
+      // Load seed/fallback products from /tmp, maxora_db.json or userProducts.json
       const loadFallbackProducts = () => {
         try {
+          const tmpPath = path.join('/tmp', 'maxora_live_products.json');
+          if (fs.existsSync(tmpPath)) {
+            try {
+              const liveData = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+              if (Array.isArray(liveData) && liveData.length > 0) return liveData;
+            } catch {}
+          }
           const dbPath = path.join(process.cwd(), 'maxora_db.json');
           if (fs.existsSync(dbPath)) {
             const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
@@ -292,6 +299,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         console.warn('Firestore setDoc notice in POST:', fsErr);
       }
 
+      // Persist to /tmp on Vercel serverless
+      try {
+        const tmpPath = path.join('/tmp', 'maxora_live_products.json');
+        let liveList: any[] = [];
+        if (fs.existsSync(tmpPath)) {
+          try { liveList = JSON.parse(fs.readFileSync(tmpPath, 'utf8')); } catch {}
+        }
+        if (!Array.isArray(liveList) || liveList.length === 0) {
+          liveList = loadFallbackProducts();
+        }
+        const idx = liveList.findIndex((p: any) => String(p.id) === pId);
+        if (idx >= 0) liveList[idx] = newProd;
+        else liveList.unshift(newProd);
+        fs.writeFileSync(tmpPath, JSON.stringify(liveList), 'utf8');
+      } catch {}
+
       // Update maxora_db.json on disk if writable
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
@@ -349,6 +372,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       } catch (fsErr) {
         console.warn('Firestore setDoc notice in PUT:', fsErr);
       }
+
+      // Persist to /tmp on Vercel serverless
+      try {
+        const tmpPath = path.join('/tmp', 'maxora_live_products.json');
+        let liveList: any[] = [];
+        if (fs.existsSync(tmpPath)) {
+          try { liveList = JSON.parse(fs.readFileSync(tmpPath, 'utf8')); } catch {}
+        }
+        if (!Array.isArray(liveList) || liveList.length === 0) {
+          liveList = loadFallbackProducts();
+        }
+        const idx = liveList.findIndex((p: any) => String(p.id) === pId);
+        if (idx >= 0) liveList[idx] = { ...liveList[idx], ...updatedProd };
+        else liveList.unshift(updatedProd);
+        fs.writeFileSync(tmpPath, JSON.stringify(liveList), 'utf8');
+      } catch {}
 
       // Update maxora_db.json on disk if writable
       try {

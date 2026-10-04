@@ -698,11 +698,18 @@ const isInternalHost = typeof window !== 'undefined' && (
   window.location?.hostname === '127.0.0.1'
 );
 
+const isStandaloneAdminHost = typeof window !== 'undefined' && (
+  (window.location?.hostname || '').includes('maxora-admin') ||
+  ((window.location?.hostname || '').includes('vercel.app') && !(window.location?.hostname || '').includes('maxora-store'))
+);
+
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
   ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
-  : isInternalHost
-    ? '' 
-    : '';
+  : isStandaloneAdminHost
+    ? 'https://www.maxorabd.com'
+    : isInternalHost
+      ? '' 
+      : '';
 
 function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
