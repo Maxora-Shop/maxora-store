@@ -517,12 +517,36 @@ export function initRealtimeFirestoreListeners() {
         const pSlug = String(d.slug || '');
         const pName = String(d.name || '').trim();
         if (!pName) return;
-        if (deletedProductIds.has(pId) || (pSku && deletedProductIds.has(pSku)) || (pSlug && deletedProductIds.has(pSlug))) return;
+        const pIdLower = pId.toLowerCase();
+        const pSkuLower = pSku.toLowerCase();
+        const pSlugLower = pSlug.toLowerCase();
+        if (deletedProductIds.has(pIdLower) || (pSkuLower && deletedProductIds.has(pSkuLower)) || (pSlugLower && deletedProductIds.has(pSlugLower))) return;
         prodMap.set(pId, { ...d, id: pId });
       });
+
+      // Merge any local products (e.g. freshly uploaded products from admin) that are not marked as deleted
+      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+      if (Array.isArray(local) && local.length > 0) {
+        local.forEach((p) => {
+          const pId = String(p.id || '');
+          const pSku = String(p.sku || '');
+          const pSlug = String(p.slug || '');
+          const pIdLower = pId.toLowerCase();
+          const pSkuLower = pSku.toLowerCase();
+          const pSlugLower = pSlug.toLowerCase();
+          if (pId && !deletedProductIds.has(pIdLower) && (!pSkuLower || !deletedProductIds.has(pSkuLower)) && (!pSlugLower || !deletedProductIds.has(pSlugLower))) {
+            if (!prodMap.has(pId)) {
+              prodMap.set(pId, p);
+            }
+          }
+        });
+      }
+
       const prods = Array.from(prodMap.values());
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setLocal(PRODUCTS_KEY, prods);
+      if (prods.length > 0) {
+        setLocal(PRODUCTS_KEY, prods);
+      }
       notifyProductsChanged();
     }, (err) => {
       handleStoreFirestoreError('Products snapshot', err);
@@ -1112,17 +1136,15 @@ export const storeService = {
       }
     }
 
-    // 3. TERTIARY OFFLINE FALLBACK (only if both Firestore and Server returned 0 products):
-    if (prodMap.size === 0) {
-      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-      if (Array.isArray(local) && local.length > 0) {
-        local.forEach((p) => registerProduct(p, undefined, true));
-      }
+    // 3. ALWAYS MERGE LOCAL PRODUCTS (ensures freshly uploaded products from admin or offline items are NEVER dropped):
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    if (firestoreLoaded) {
+    if (prods.length > 0) {
       setLocal(PRODUCTS_KEY, prods);
     }
 
@@ -1282,17 +1304,15 @@ export const storeService = {
       }
     }
 
-    // 3. TERTIARY OFFLINE FALLBACK (only if both Firestore and Server returned 0 products):
-    if (prodMap.size === 0) {
-      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-      if (Array.isArray(local) && local.length > 0) {
-        local.forEach((p) => registerProduct(p, undefined, true));
-      }
+    // 3. ALWAYS MERGE LOCAL PRODUCTS (ensures freshly uploaded products from admin are NEVER dropped):
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
     }
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    if (firestoreLoaded) {
+    if (prods.length > 0) {
       setLocal(PRODUCTS_KEY, prods);
     }
 

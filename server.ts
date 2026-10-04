@@ -451,7 +451,7 @@ function generateOrderNumber() {
 }
 
 function isAdmin(req: express.Request): boolean {
-  const auth = req.headers['x-admin-password'] || req.headers['x-admin-token'] || req.headers['authorization'] || req.query.admin_password || req.query.password;
+  const auth = req.headers['x-admin-password'] || req.headers['x-admin-token'] || req.headers['authorization'] || req.query.admin_password || req.query.password || (req.body && (req.body.admin_password || req.body.adminPassword || req.body.password));
   const currentAdminPass = (db.settings && db.settings.admin_password) || process.env.ADMIN_PASSWORD || "123456";
   const validUsername = process.env.ADMIN_USERNAME || "admin";
   const authorizedEmail = "moonlofiofficial@gmail.com";
@@ -2208,8 +2208,8 @@ app.get('/api/admin/products/:id', requireAdmin, (req, res) => {
   });
 });
 
-// POST /api/admin/products
-app.post('/api/admin/products', requireAdmin, (req, res) => {
+// POST /api/admin/products & /api/products
+app.post(['/api/admin/products', '/api/products'], requireAdmin, (req, res) => {
   const body = req.body;
   if (!body.name) {
     return res.status(400).json({ success: false, error: "Product name is required." });
@@ -2312,8 +2312,8 @@ app.post('/api/admin/products', requireAdmin, (req, res) => {
   });
 });
 
-// PUT /api/admin/products/:id
-app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
+// PUT /api/admin/products/:id & /api/products/:id
+app.put(['/api/admin/products/:id', '/api/products/:id'], requireAdmin, (req, res) => {
   const productId = String(req.params.id);
   let pIndex = db.products.findIndex(p => 
     String(p.id) === productId || 
@@ -2408,8 +2408,8 @@ app.put('/api/admin/products/:id', requireAdmin, (req, res) => {
   });
 });
 
-// DELETE /api/admin/products/:id
-app.delete('/api/admin/products/:id', requireAdmin, (req, res) => {
+// DELETE /api/admin/products/:id & /api/products/:id
+app.delete(['/api/admin/products/:id', '/api/products/:id'], requireAdmin, (req, res) => {
   const productId = String(req.params.id || '').trim();
   db.products = db.products.filter(
     (p) =>

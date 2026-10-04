@@ -315,7 +315,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         fs.writeFileSync(tmpPath, JSON.stringify(liveList), 'utf8');
       } catch {}
 
-      // Update maxora_db.json on disk if writable
+      // Update maxora_db.json & userProducts.json on disk if writable
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
         if (fs.existsSync(dbPath)) {
@@ -325,6 +325,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             if (idx >= 0) dbData.products[idx] = newProd;
             else dbData.products.unshift(newProd);
             fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        }
+      } catch {}
+      try {
+        const uPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+        if (fs.existsSync(uPath)) {
+          const uData = JSON.parse(fs.readFileSync(uPath, 'utf8'));
+          if (Array.isArray(uData)) {
+            const idx = uData.findIndex((p: any) => String(p.id) === pId);
+            if (idx >= 0) uData[idx] = newProd;
+            else uData.unshift(newProd);
+            fs.writeFileSync(uPath, JSON.stringify(uData, null, 2), 'utf8');
           }
         }
       } catch {}
@@ -389,7 +401,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         fs.writeFileSync(tmpPath, JSON.stringify(liveList), 'utf8');
       } catch {}
 
-      // Update maxora_db.json on disk if writable
+      // Update maxora_db.json & userProducts.json on disk if writable
       try {
         const dbPath = path.join(process.cwd(), 'maxora_db.json');
         if (fs.existsSync(dbPath)) {
@@ -399,6 +411,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             if (idx >= 0) dbData.products[idx] = { ...dbData.products[idx], ...updatedProd };
             else dbData.products.unshift(updatedProd);
             fs.writeFileSync(dbPath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        }
+      } catch {}
+      try {
+        const uPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+        if (fs.existsSync(uPath)) {
+          const uData = JSON.parse(fs.readFileSync(uPath, 'utf8'));
+          if (Array.isArray(uData)) {
+            const idx = uData.findIndex((p: any) => String(p.id) === pId);
+            if (idx >= 0) uData[idx] = { ...uData[idx], ...updatedProd };
+            else uData.unshift(updatedProd);
+            fs.writeFileSync(uPath, JSON.stringify(uData, null, 2), 'utf8');
           }
         }
       } catch {}

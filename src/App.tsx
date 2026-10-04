@@ -627,7 +627,21 @@ export default function App() {
       const data = await storeService.getProducts();
       if (productFetchRequestIdRef.current === requestId) {
         if (Array.isArray(data) && data.length > 0) {
-          setProducts(data);
+          setProducts((prev) => {
+            // Guard against stale background downgrade:
+            // If current in-memory products has more items than incoming data (e.g. 30 vs 29),
+            // preserve any valid existing items that are not in the new response.
+            if (prev.length > data.length) {
+              const dataIds = new Set(data.map((p) => String(p.id)));
+              const missing = prev.filter((p) => !dataIds.has(String(p.id)));
+              if (missing.length > 0) {
+                const merged = [...data, ...missing];
+                merged.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+                return merged;
+              }
+            }
+            return data;
+          });
           setProductLoadError(null);
         }
       }
