@@ -1177,7 +1177,42 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
       return res.status(400).json({ success: false, error: 'Invalid image format. Must be a valid data:image URL.' });
     }
 
-    // Step 1: Attempt Cloudinary upload if credentials are provided
+    const isFavicon = String(product_id || '').toLowerCase() === 'favicon' || String(filename || '').toLowerCase().includes('favicon');
+
+    // Step 1: For Favicons, STRICTLY bypass Cloudinary.
+    // Google Search requires the favicon to be hosted locally on the site's own origin/domain.
+    if (isFavicon) {
+      const matches = data_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches[2]) {
+        const mime = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        const isIco = mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon') || String(filename || '').toLowerCase().endsWith('.ico');
+        const ext = isIco ? 'ico' : 'png';
+
+        const publicDir = path.join(process.cwd(), 'public');
+        const uploadDir = path.join(publicDir, 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        // 1. Always update public/favicon.ico directly on the root domain
+        fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
+
+        // 2. Also keep copies in public/uploads/
+        fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
+        fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+
+        const serverUrl = '/favicon.ico';
+        return res.json({
+          success: true,
+          url: serverUrl,
+          id: `favicon.${ext}`,
+          provider: 'local_storage',
+        });
+      }
+    }
+
+    // Step 2: Attempt Cloudinary upload if credentials are provided (for non-favicon images)
     try {
       const cloudResult = await uploadToCloudinary(data_url, product_id);
       if (cloudResult.success && cloudResult.url) {
@@ -1192,8 +1227,7 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
       console.warn('Cloudinary upload attempt note:', e?.message || e);
     }
 
-    // Step 2: High-reliability Server Static Storage fallback (/uploads/<cleanFileName>)
-    // Guarantees image uploads succeed instantly even when Cloudinary is unconfigured
+    // Step 3: High-reliability Server Static Storage fallback (/uploads/<cleanFileName>)
     const matches = data_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     if (matches && matches[2]) {
       const mime = matches[1];
@@ -2671,21 +2705,30 @@ const handleSaveSettingsRoute = async (req: express.Request, res: express.Respon
     });
   }
 
-  // Automatically offload data:image/ favicon to static server storage
+  // Convert any external Cloudinary favicon URL to local relative path
+  if (typeof body.favicon_url === 'string' && body.favicon_url.includes('cloudinary.com')) {
+    body.favicon_url = '/favicon.ico';
+  }
+
+  // Automatically offload data:image/ favicon directly to public/favicon.ico and public/uploads
   if (typeof body.favicon_url === 'string' && body.favicon_url.startsWith('data:image/')) {
     try {
       const matches = body.favicon_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches[2]) {
         const mime = matches[1];
         const buffer = Buffer.from(matches[2], 'base64');
-        const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('svg') ? 'svg' : 'png';
-        const safeName = `favicon-${Date.now()}.${ext}`;
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        const isIco = mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon');
+        const ext = isIco ? 'ico' : 'png';
+        const publicDir = path.join(process.cwd(), 'public');
+        const uploadDir = path.join(publicDir, 'uploads');
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
-        fs.writeFileSync(path.join(uploadDir, safeName), buffer);
-        body.favicon_url = `/uploads/${safeName}`;
+        // Always write root public/favicon.ico
+        fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
+        fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
+        fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+        body.favicon_url = '/favicon.ico';
       }
     } catch (favErr) {
       console.warn('Could not offload favicon data URL to disk:', favErr);
@@ -3203,6 +3246,16 @@ async function getProductByIdOrSlug(idOrSlug: string): Promise<any | null> {
   return null;
 }
 
+// Helper to get local dynamic favicon URL and MIME type, strictly bypassing external Cloudinary URLs
+function getDynamicFaviconUrl(rawUrl?: string): { url: string; type: string } {
+  let fav = rawUrl || '/favicon.ico';
+  if (typeof fav === 'string' && fav.includes('cloudinary.com')) {
+    fav = '/favicon.ico';
+  }
+  const favType = fav.endsWith('.ico') ? 'image/x-icon' : fav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+  return { url: fav, type: favType };
+}
+
 // Helper to render product SSR HTML
 async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; status: number } | null> {
   const baseUrl = 'https://maxorabd.com';
@@ -3233,8 +3286,7 @@ async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; statu
       <a href="${baseUrl}/" style="display:inline-block;background:#18181b;color:#ffffff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Return to Maxora Home</a>
     </main>
     `;
-    const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-    const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+    const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
     const notFoundHtml = templateHtml
       .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
       .replace(/<title>.*?<\/title>/i, '')
@@ -3398,8 +3450,7 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
     </article>
   `;
 
-  const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-  const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+  const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
   let modifiedHtml = templateHtml
     .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
     .replace(/<title>.*?<\/title>/i, '')
@@ -3641,8 +3692,7 @@ ${JSON.stringify(itemListLd, null, 2)}
     </main>
   `;
 
-  const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-  const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+  const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
   let modifiedHtml = templateHtml
     .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
     .replace(/<title>.*?<\/title>/i, '')
@@ -3732,8 +3782,7 @@ async function startServer() {
       if (req.method === 'GET' && (accept.includes('text/html') || url === '/' || !path.extname(url))) {
         try {
           let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-          const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-          const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+          const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
           template = template.replace(
             /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
             `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
@@ -3754,8 +3803,7 @@ async function startServer() {
       const url = req.originalUrl;
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-        const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-        const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+        const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
         template = template.replace(
           /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
           `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
@@ -3775,8 +3823,7 @@ async function startServer() {
         const indexPath = path.join(distPath, 'index.html');
         if (fs.existsSync(indexPath)) {
           let template = fs.readFileSync(indexPath, 'utf-8');
-          const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
-          const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+          const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
           template = template.replace(
             /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
             `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`

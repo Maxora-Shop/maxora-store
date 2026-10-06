@@ -319,7 +319,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           }
         } catch {}
       }
-      const dynamicFav = storeSettings?.favicon_url || storeSettings?.logo_url || '/favicon.ico';
+      let dynamicFav = storeSettings?.favicon_url || storeSettings?.logo_url || '/favicon.ico';
+      if (typeof dynamicFav === 'string' && dynamicFav.includes('cloudinary.com')) {
+        dynamicFav = '/favicon.ico';
+      }
       const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
       templateHtml = templateHtml.replace(
         /<link\s+id=["']dynamic-favicon["'][^>]*>/i,

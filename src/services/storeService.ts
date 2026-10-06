@@ -934,12 +934,21 @@ export const storeService = {
       console.warn('API getSettings fallback error:', apiErr);
     }
 
+    if (typeof current.favicon_url === 'string' && current.favicon_url.includes('cloudinary.com')) {
+      current.favicon_url = '/favicon.ico';
+    }
+
     return current;
   },
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     let updated = { ...current, ...newSettings };
+
+    // Convert any external Cloudinary favicon URL to local relative path
+    if (typeof updated.favicon_url === 'string' && updated.favicon_url.includes('cloudinary.com')) {
+      updated.favicon_url = '/favicon.ico';
+    }
 
     // Offload any heavy base64 images from hero_banners into /api/upload-image on the backend server
     // This strictly prevents the 1MB Firestore document size limit and guarantees clean, fast loading.
@@ -998,6 +1007,11 @@ export const storeService = {
       } catch (err) {
         console.warn('Notice processing banner images:', err);
       }
+    }
+
+    // Convert external Cloudinary favicon URL to local relative path
+    if (typeof updated.favicon_url === 'string' && updated.favicon_url.includes('cloudinary.com')) {
+      updated.favicon_url = '/favicon.ico';
     }
 
     // Offload heavy base64 favicon into /api/upload-image on the backend server

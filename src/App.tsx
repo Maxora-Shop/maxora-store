@@ -488,7 +488,10 @@ export default function App() {
   // Dynamically fetch and update Favicon in <head> from database settings
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const faviconPath = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    let faviconPath = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    if (typeof faviconPath === 'string' && faviconPath.includes('cloudinary.com')) {
+      faviconPath = '/favicon.ico';
+    }
     let link: HTMLLinkElement | null =
       (document.getElementById('dynamic-favicon') as HTMLLinkElement) ||
       (document.querySelector("link[rel*='icon']") as HTMLLinkElement);

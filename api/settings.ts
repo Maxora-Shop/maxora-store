@@ -106,21 +106,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           updates.free_delivery_threshold = Number(updates.free_delivery_threshold);
         }
 
-        // Automatically offload data:image/ favicon to static server storage if present
+        // Convert any external Cloudinary favicon URL to local relative path
+        if (typeof updates.favicon_url === 'string' && updates.favicon_url.includes('cloudinary.com')) {
+          updates.favicon_url = '/favicon.ico';
+        }
+
+        // Automatically offload data:image/ favicon directly to public/favicon.ico and public/uploads
         if (typeof updates.favicon_url === 'string' && updates.favicon_url.startsWith('data:image/')) {
           try {
             const matches = updates.favicon_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
             if (matches && matches[2]) {
               const mime = matches[1];
               const buffer = Buffer.from(matches[2], 'base64');
-              const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('svg') ? 'svg' : 'png';
-              const safeName = `favicon-${Date.now()}.${ext}`;
-              const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+              const isIco = mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon');
+              const ext = isIco ? 'ico' : 'png';
+              const publicDir = path.join(process.cwd(), 'public');
+              const uploadDir = path.join(publicDir, 'uploads');
               if (!fs.existsSync(uploadDir)) {
                 try { fs.mkdirSync(uploadDir, { recursive: true }); } catch {}
               }
-              fs.writeFileSync(path.join(uploadDir, safeName), buffer);
-              updates.favicon_url = `/uploads/${safeName}`;
+              try {
+                fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
+                fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
+                fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+              } catch {}
+              updates.favicon_url = '/favicon.ico';
             }
           } catch (favErr) {
             console.warn('Could not offload favicon data URL in api/settings:', favErr);

@@ -184,7 +184,10 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     canonicalLink.setAttribute('href', canonicalUrl);
 
     // 5b. Dynamic Favicon synchronization in <head>
-    const dynamicIcon = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    let dynamicIcon = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    if (typeof dynamicIcon === 'string' && dynamicIcon.includes('cloudinary.com')) {
+      dynamicIcon = '/favicon.ico';
+    }
     let iconEl = (document.getElementById('dynamic-favicon') as HTMLLinkElement) || (document.querySelector("link[rel*='icon']") as HTMLLinkElement);
     if (!iconEl) {
       iconEl = document.createElement('link');

@@ -299,7 +299,48 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return;
     }
 
-    // Step 1: Attempt Cloudinary Upload if credentials available
+    const isFavicon = String(product_id || '').toLowerCase() === 'favicon' || String(filename || '').toLowerCase().includes('favicon');
+
+    // Step 1: For Favicons, STRICTLY bypass Cloudinary.
+    // Google Search requires the favicon to be hosted locally on the site's own origin/domain.
+    if (isFavicon) {
+      const matches = data_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches[2]) {
+        const mime = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        const isIco = mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon') || String(filename || '').toLowerCase().endsWith('.ico');
+        const ext = isIco ? 'ico' : 'png';
+
+        const publicDir = path.join(process.cwd(), 'public');
+        const uploadDir = path.join(publicDir, 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          try { fs.mkdirSync(uploadDir, { recursive: true }); } catch {}
+        }
+
+        try {
+          // Always write to public/favicon.ico on the root domain
+          fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
+          fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
+          fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+        } catch (fErr) {
+          console.warn('Local favicon write note:', fErr);
+        }
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(
+          JSON.stringify({
+            success: true,
+            url: '/favicon.ico',
+            id: `favicon.${ext}`,
+            provider: 'local_storage',
+          })
+        );
+        return;
+      }
+    }
+
+    // Step 2: Attempt Cloudinary Upload if credentials available (for non-favicon images)
     try {
       const cloudResult = await uploadToCloudinary(data_url, product_id);
       if (cloudResult.success && cloudResult.url) {

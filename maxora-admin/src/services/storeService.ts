@@ -629,18 +629,11 @@ const isInternalHost = typeof window !== 'undefined' && (
   window.location?.hostname === '127.0.0.1'
 );
 
-const isStandaloneAdminHost = typeof window !== 'undefined' && (
-  (window.location?.hostname || '').includes('maxora-admin') ||
-  ((window.location?.hostname || '').includes('vercel.app') && !(window.location?.hostname || '').includes('maxora-store'))
-);
-
 const API_BASE = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) 
   ? String((import.meta as any).env.VITE_API_URL).replace(/\/$/, '') 
-  : isStandaloneAdminHost
-    ? 'https://www.maxorabd.com'
-    : isInternalHost
-      ? '' 
-      : '';
+  : isInternalHost
+    ? '' 
+    : '';
 
 function getAuthHeaders(adminPassword?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -691,7 +684,7 @@ async function tryApi<T>(url: string, options?: RequestInit & { timeoutMs?: numb
 }
 
 // Guaranteed Firestore products query that times out after timeoutMs rather than hanging indefinitely
-async function fetchFirestoreProductsWithTimeout(timeoutMs = 4000): Promise<{ data: any; id: string }[]> {
+async function fetchFirestoreProductsWithTimeout(timeoutMs = 12000): Promise<{ data: any; id: string }[]> {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -941,12 +934,21 @@ export const storeService = {
       console.warn('API getSettings fallback error:', apiErr);
     }
 
+    if (typeof current.favicon_url === 'string' && current.favicon_url.includes('cloudinary.com')) {
+      current.favicon_url = '/favicon.ico';
+    }
+
     return current;
   },
 
   async updateSettings(newSettings: Partial<StoreSettings>, adminPassword?: string): Promise<{ success: boolean; settings: StoreSettings }> {
     const current = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
     let updated = { ...current, ...newSettings };
+
+    // Convert any external Cloudinary favicon URL to local relative path
+    if (typeof updated.favicon_url === 'string' && updated.favicon_url.includes('cloudinary.com')) {
+      updated.favicon_url = '/favicon.ico';
+    }
 
     // Offload any heavy base64 images from hero_banners into /api/upload-image on the backend server
     // This strictly prevents the 1MB Firestore document size limit and guarantees clean, fast loading.
@@ -1005,6 +1007,11 @@ export const storeService = {
       } catch (err) {
         console.warn('Notice processing banner images:', err);
       }
+    }
+
+    // Convert external Cloudinary favicon URL to local relative path
+    if (typeof updated.favicon_url === 'string' && updated.favicon_url.includes('cloudinary.com')) {
+      updated.favicon_url = '/favicon.ico';
     }
 
     // Offload heavy base64 favicon into /api/upload-image on the backend server
@@ -1164,7 +1171,7 @@ export const storeService = {
     let firestoreLoaded = false;
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapDocs = await fetchFirestoreProductsWithTimeout(4000);
+        const snapDocs = await fetchFirestoreProductsWithTimeout(12000);
         if (snapDocs && snapDocs.length > 0) {
           snapDocs.forEach((d) => registerProduct(d.data, d.id));
           firestoreLoaded = true;
