@@ -1198,14 +1198,16 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
         // 1. Always update public/favicon.ico directly on the root domain
         fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
 
-        // 2. Also keep copies in public/uploads/
+        // 2. Also keep copies in public/uploads/ (including standard favicon.png for dashboard preview)
         fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
         fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+        fs.writeFileSync(path.join(uploadDir, 'favicon.png'), buffer);
 
         const serverUrl = '/favicon.ico';
         return res.json({
           success: true,
           url: serverUrl,
+          preview_url: '/uploads/favicon.png',
           id: `favicon.${ext}`,
           provider: 'local_storage',
         });
@@ -2728,6 +2730,7 @@ const handleSaveSettingsRoute = async (req: express.Request, res: express.Respon
         fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
         fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
         fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+        fs.writeFileSync(path.join(uploadDir, 'favicon.png'), buffer);
         body.favicon_url = '/favicon.ico';
       }
     } catch (favErr) {

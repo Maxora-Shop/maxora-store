@@ -129,6 +129,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
                 fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
                 fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+                fs.writeFileSync(path.join(uploadDir, 'favicon.png'), buffer);
               } catch {}
               updates.favicon_url = '/favicon.ico';
             }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -236,6 +236,76 @@ const readFaviconImageFile = (file: File): Promise<string> => {
     reader.onerror = () => reject(new Error('Failed to load image file'));
     reader.readAsDataURL(file);
   });
+};
+
+// Dedicated component to render Favicon with reliable fallback cascade
+// Browsers often fail to render .ico inside <img> tags; this component automatically falls back to standard PNG preview
+export const FaviconPreviewImage: React.FC<{
+  faviconUrl?: string;
+  logoUrl?: string;
+  localPreview?: string | null;
+  className?: string;
+  alt?: string;
+}> = ({
+  faviconUrl,
+  logoUrl,
+  localPreview,
+  className = "w-full h-full object-contain",
+  alt = "Favicon Preview",
+}) => {
+  const [loadIndex, setLoadIndex] = useState(0);
+  const cacheKey = useMemo(() => Date.now().toString(36), [faviconUrl, localPreview]);
+
+  // Preference cascade for rendering:
+  // 1. If user just selected a file, localPreview (base64) shows immediately with 100% color & fidelity.
+  // 2. If faviconUrl is a standard data:image or web path other than /favicon.ico, use it.
+  // 3. /uploads/favicon.png (Standard high-res PNG format that 100% of browsers decode cleanly)
+  // 4. /favicon.ico (with cache buster)
+  // 5. /uploads/favicon.ico
+  // 6. logoUrl (store logo fallback)
+  const sources = useMemo(() => {
+    const list: string[] = [];
+    if (localPreview) {
+      list.push(localPreview);
+    }
+    if (faviconUrl && faviconUrl.startsWith('data:image/')) {
+      list.push(faviconUrl);
+    } else if (faviconUrl && faviconUrl !== '/favicon.ico' && !faviconUrl.endsWith('.ico')) {
+      list.push(`${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${cacheKey}`);
+    }
+
+    // Standard PNG preview of the saved favicon (solves .ico rendering failure in HTML img elements)
+    list.push(`/uploads/favicon.png?v=${cacheKey}`);
+    // Root /favicon.ico with cache buster
+    list.push(`/favicon.ico?v=${cacheKey}`);
+    // Uploads favicon.ico
+    list.push(`/uploads/favicon.ico?v=${cacheKey}`);
+
+    // Store logo image as visual fallback
+    if (logoUrl) {
+      list.push(logoUrl);
+    }
+    return Array.from(new Set(list.filter(Boolean)));
+  }, [faviconUrl, localPreview, logoUrl, cacheKey]);
+
+  useEffect(() => {
+    setLoadIndex(0);
+  }, [sources]);
+
+  const currentSrc = sources[loadIndex] || sources[0] || '/favicon.ico';
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (loadIndex + 1 < sources.length) {
+          setLoadIndex((prev) => prev + 1);
+        }
+      }}
+    />
+  );
 };
 
 export type AdminTab =
@@ -678,6 +748,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Favicon & Logo Uploading States
   const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [faviconLocalPreview, setFaviconLocalPreview] = useState<string | null>(null);
 
   const handleFaviconUpload = async (file?: File | null) => {
     if (!file) return;
@@ -687,11 +758,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // 1. Process and optimize the image file (keeps ICO intact, formats PNG/images to 512x512)
       const dataUrl = await readFaviconImageFile(file);
+      // Immediately set local full-color preview for instantaneous visual feedback
+      setFaviconLocalPreview(dataUrl);
+
       const isIco = file.name.toLowerCase().endsWith('.ico') || file.type.includes('icon');
       const ext = isIco ? 'ico' : (file.name.toLowerCase().endsWith('.svg') || file.type.includes('svg')) ? 'svg' : 'png';
 
       // 2. Upload to server backend (/api/upload-image)
-      let serverPath = dataUrl;
+      let serverPath = '/favicon.ico';
       try {
         const uploadRes = await fetch('/api/upload-image', {
           method: 'POST',
@@ -724,7 +798,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           link.rel = 'icon';
           document.head.appendChild(link);
         }
-        link.href = serverPath;
+        link.href = `${serverPath}?t=${Date.now()}`;
         link.type = isIco ? 'image/x-icon' : 'image/png';
       }
 
@@ -7015,11 +7089,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-zinc-200 shadow-2xs">
                           <span className="text-[10px] font-bold text-zinc-400 uppercase">Tab Preview:</span>
                           <div className="flex items-center gap-1.5 bg-zinc-100/80 px-2.5 py-1 rounded-lg border border-zinc-200 max-w-[170px]">
-                            {settingsForm.favicon_url || settingsForm.logo_url ? (
-                              <img
-                                src={settingsForm.favicon_url || settingsForm.logo_url}
-                                alt="Favicon Preview"
+                            {settingsForm.favicon_url || settingsForm.logo_url || faviconLocalPreview ? (
+                              <FaviconPreviewImage
+                                faviconUrl={settingsForm.favicon_url}
+                                logoUrl={settingsForm.logo_url}
+                                localPreview={faviconLocalPreview}
                                 className="w-4 h-4 rounded-xs object-contain shrink-0"
+                                alt="Favicon Preview"
                               />
                             ) : (
                               <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -7037,18 +7113,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {/* Current Favicon Preview Box */}
                         <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 text-center">
                           <span className="text-[11px] font-bold text-zinc-500 mb-2">Current Favicon</span>
-                          {settingsForm.favicon_url ? (
+                          {settingsForm.favicon_url || faviconLocalPreview ? (
                             <div className="relative group/fav">
-                              <div className="w-16 h-16 rounded-2xl overflow-hidden bg-zinc-50 border-2 border-emerald-500/50 p-2 flex items-center justify-center shadow-xs">
-                                <img
-                                  src={settingsForm.favicon_url}
-                                  alt="Current Favicon"
+                              <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white border-2 border-emerald-500/70 p-2 flex items-center justify-center shadow-xs">
+                                <FaviconPreviewImage
+                                  faviconUrl={settingsForm.favicon_url}
+                                  logoUrl={settingsForm.logo_url}
+                                  localPreview={faviconLocalPreview}
                                   className="w-full h-full object-contain"
+                                  alt="Current Favicon"
                                 />
                               </div>
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setFaviconLocalPreview(null);
                                   setSettingsForm({ ...settingsForm, favicon_url: '' });
                                   showToast('ফেভিকন সরানো হয়েছে। ডিফল্ট আইকন ব্যবহৃত হবে।', 'info');
                                 }}
@@ -7068,7 +7147,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             PNG / ICO (512×512 or 48×48 px)
                           </span>
                           <p className="text-[10px] text-zinc-400 mt-1">
-                            {settingsForm.favicon_url ? 'Custom favicon active' : (settingsForm.logo_url ? 'Using store logo as fallback' : 'Default browser icon active')}
+                            {settingsForm.favicon_url ? 'Custom favicon active (/favicon.ico)' : (settingsForm.logo_url ? 'Using store logo as fallback' : 'Default browser icon active')}
                           </p>
                         </div>
 

@@ -322,6 +322,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           fs.writeFileSync(path.join(publicDir, 'favicon.ico'), buffer);
           fs.writeFileSync(path.join(uploadDir, `favicon.${ext}`), buffer);
           fs.writeFileSync(path.join(uploadDir, 'favicon.ico'), buffer);
+          fs.writeFileSync(path.join(uploadDir, 'favicon.png'), buffer);
         } catch (fErr) {
           console.warn('Local favicon write note:', fErr);
         }
@@ -332,6 +333,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           JSON.stringify({
             success: true,
             url: '/favicon.ico',
+            preview_url: '/uploads/favicon.png',
             id: `favicon.${ext}`,
             provider: 'local_storage',
           })
