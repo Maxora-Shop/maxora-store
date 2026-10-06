@@ -183,6 +183,24 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
     }
     canonicalLink.setAttribute('href', canonicalUrl);
 
+    // 5b. Dynamic Favicon synchronization in <head>
+    const dynamicIcon = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    let iconEl = (document.getElementById('dynamic-favicon') as HTMLLinkElement) || (document.querySelector("link[rel*='icon']") as HTMLLinkElement);
+    if (!iconEl) {
+      iconEl = document.createElement('link');
+      iconEl.id = 'dynamic-favicon';
+      iconEl.rel = 'icon';
+      document.head.appendChild(iconEl);
+    }
+    iconEl.href = dynamicIcon;
+    if (dynamicIcon.endsWith('.ico') || dynamicIcon.includes('image/x-icon') || dynamicIcon.includes('image/vnd.microsoft.icon')) {
+      iconEl.type = 'image/x-icon';
+    } else if (dynamicIcon.endsWith('.svg') || dynamicIcon.includes('image/svg+xml')) {
+      iconEl.type = 'image/svg+xml';
+    } else {
+      iconEl.type = 'image/png';
+    }
+
     // 6. Schema.org JSON-LD Structured Data
     // Remove previous client-side script to guarantee no duplicate JSON-LD
     const SCRIPT_ID = 'maxora-structured-data';

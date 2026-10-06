@@ -296,6 +296,7 @@ export interface StoreSettings {
   youtube?: string;
   tiktok?: string;
   logo_url?: string;
+  favicon_url?: string;
   hero_title: string;
   hero_subtitle: string;
   promo_text: string;

@@ -122,6 +122,8 @@
       "type": "object",
       "properties": {
         "store_name": { "type": "string" },
+        "logo_url": { "type": "string" },
+        "favicon_url": { "type": "string" },
         "delivery_inside_dhaka": { "type": "number" },
         "delivery_outside_dhaka": { "type": "number" }
       },

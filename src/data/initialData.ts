@@ -629,6 +629,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   youtube: "https://youtube.com/@maxorashop",
   tiktok: "https://tiktok.com/@maxorashop",
   logo_url: "",
+  favicon_url: "",
   hero_title: "Discover Products You'll Love",
   hero_subtitle: "Quality lifestyle gadgets & accessories delivered across Bangladesh with 100% Cash on Delivery.",
   promo_text: "Cash on Delivery Available Across Bangladesh (All 64 Districts)",

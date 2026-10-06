@@ -324,7 +324,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (matches && matches[2]) {
       const mime = matches[1];
       const buffer = Buffer.from(matches[2], 'base64');
-      const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
+      const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
       const cleanProdId = (product_id || 'prod').replace(/[^a-z0-9_-]/gi, '-');
       const safeName = `${Date.now()}-${cleanProdId}.${ext}`;
       const uploadDir = path.join(process.cwd(), 'public', 'uploads');

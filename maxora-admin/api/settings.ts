@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
+import path from 'path';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, setLogLevel } from 'firebase/firestore';
 
@@ -103,12 +105,66 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           updates.free_delivery_threshold = Number(updates.free_delivery_threshold);
         }
 
+        // Automatically offload data:image/ favicon to static server storage if present
+        if (typeof updates.favicon_url === 'string' && updates.favicon_url.startsWith('data:image/')) {
+          try {
+            const matches = updates.favicon_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches[2]) {
+              const mime = matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('svg') ? 'svg' : 'png';
+              const safeName = `favicon-${Date.now()}.${ext}`;
+              const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+              if (!fs.existsSync(uploadDir)) {
+                try { fs.mkdirSync(uploadDir, { recursive: true }); } catch {}
+              }
+              fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+              updates.favicon_url = `/uploads/${safeName}`;
+            }
+          } catch (favErr) {
+            console.warn('Could not offload favicon data URL in api/settings:', favErr);
+          }
+        }
+
+        // Automatically offload data:image/ logo to static server storage if present
+        if (typeof updates.logo_url === 'string' && updates.logo_url.startsWith('data:image/')) {
+          try {
+            const matches = updates.logo_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches[2]) {
+              const mime = matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              const ext = mime.includes('svg') ? 'svg' : 'png';
+              const safeName = `logo-${Date.now()}.${ext}`;
+              const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+              if (!fs.existsSync(uploadDir)) {
+                try { fs.mkdirSync(uploadDir, { recursive: true }); } catch {}
+              }
+              fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+              updates.logo_url = `/uploads/${safeName}`;
+            }
+          } catch (logoErr) {
+            console.warn('Could not offload logo data URL in api/settings:', logoErr);
+          }
+        }
+
         // Merge into serverless memory cache immediately
         memorySettingsCache = {
           ...(memorySettingsCache || {}),
           ...updates,
           updated_at: new Date().toISOString(),
         };
+
+        // Mirror to maxora_db.json if running in local environment
+        try {
+          const dbFilePath = path.join(process.cwd(), 'maxora_db.json');
+          if (fs.existsSync(dbFilePath)) {
+            const dbData = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+            dbData.settings = { ...(dbData.settings || {}), ...memorySettingsCache };
+            fs.writeFileSync(dbFilePath, JSON.stringify(dbData, null, 2), 'utf8');
+          }
+        } catch (dbErr) {
+          console.warn('Local db settings sync note:', dbErr);
+        }
 
         // Persist to Firestore
         try {

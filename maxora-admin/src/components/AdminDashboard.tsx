@@ -185,6 +185,59 @@ const compressAndReadImage = (file: File): Promise<string> => {
   });
 };
 
+// Specialized helper to process and read Favicon files (PNG, ICO, SVG, WEBP)
+const readFaviconImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const isIco = file.name.toLowerCase().endsWith('.ico') || file.type.includes('icon');
+    if (isIco) {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = () => reject(new Error('Failed to read ICO file'));
+      reader.readAsDataURL(file);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 512;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          }
+        } else {
+          if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(e.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const dataUrl = canvas.toDataURL('image/png');
+          resolve(dataUrl);
+        } catch {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Failed to load image file'));
+    reader.readAsDataURL(file);
+  });
+};
+
 export type AdminTab =
   | 'overview'
   | 'products'
@@ -621,6 +674,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [imageInputMode, setImageInputMode] = useState<'upload' | 'url'>('upload');
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+
+  // Favicon & Logo Uploading States
+  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  const handleFaviconUpload = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      setIsUploadingFavicon(true);
+      showToast('ফেভিকন প্রসেস ও আপলোড হচ্ছে...', 'info');
+
+      // 1. Process and optimize the image file (keeps ICO intact, formats PNG/images to 512x512)
+      const dataUrl = await readFaviconImageFile(file);
+      const isIco = file.name.toLowerCase().endsWith('.ico') || file.type.includes('icon');
+      const ext = isIco ? 'ico' : (file.name.toLowerCase().endsWith('.svg') || file.type.includes('svg')) ? 'svg' : 'png';
+
+      // 2. Upload to server backend (/api/upload-image)
+      let serverPath = dataUrl;
+      try {
+        const uploadRes = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_url: dataUrl,
+            filename: `favicon-${Date.now()}.${ext}`,
+            product_id: 'favicon',
+          }),
+        });
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (uploadRes.ok && uploadData.success && uploadData.url) {
+          serverPath = uploadData.url;
+        }
+      } catch (uploadErr) {
+        console.warn('Backend upload note, using optimized data URL:', uploadErr);
+      }
+
+      // 3. Update form state
+      setSettingsForm((prev) => ({ ...prev, favicon_url: serverPath }));
+
+      // 4. Immediately update browser tab favicon in <head> for real-time live preview
+      if (typeof document !== 'undefined') {
+        let link: HTMLLinkElement | null =
+          (document.getElementById('dynamic-favicon') as HTMLLinkElement) ||
+          (document.querySelector("link[rel*='icon']") as HTMLLinkElement);
+        if (!link) {
+          link = document.createElement('link');
+          link.id = 'dynamic-favicon';
+          link.rel = 'icon';
+          document.head.appendChild(link);
+        }
+        link.href = serverPath;
+        link.type = isIco ? 'image/x-icon' : 'image/png';
+      }
+
+      showToast('ফেভিকন সফলভাবে আপলোড হয়েছে! পরিবর্তন স্থায়ী করতে নিচে "Save Settings" বাটনে চাপুন।', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'ফেভিকন ফাইল প্রসেস করতে সমস্যা হয়েছে', 'error');
+    } finally {
+      setIsUploadingFavicon(false);
+    }
+  };
+
+  const handleLogoUpload = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      setIsUploadingLogo(true);
+      showToast('লোগো প্রসেস ও আপলোড হচ্ছে...', 'info');
+
+      // 1. Compress image to dataUrl
+      const dataUrl = await compressAndReadImage(file);
+      const isSvg = file.name.toLowerCase().endsWith('.svg') || file.type.includes('svg');
+      const ext = isSvg ? 'svg' : 'png';
+
+      // 2. Upload to server backend (/api/upload-image)
+      let serverPath = dataUrl;
+      try {
+        const uploadRes = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_url: dataUrl,
+            filename: `logo-${Date.now()}.${ext}`,
+            product_id: 'logo',
+          }),
+        });
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (uploadRes.ok && uploadData.success && uploadData.url) {
+          serverPath = uploadData.url;
+        }
+      } catch (uploadErr) {
+        console.warn('Backend logo upload note:', uploadErr);
+      }
+
+      // 3. Update form state
+      setSettingsForm((prev) => ({ ...prev, logo_url: serverPath }));
+
+      // 4. If no favicon is set yet, dynamically update head favicon to use this logo
+      if (!settingsForm.favicon_url && typeof document !== 'undefined') {
+        let link: HTMLLinkElement | null =
+          (document.getElementById('dynamic-favicon') as HTMLLinkElement) ||
+          (document.querySelector("link[rel*='icon']") as HTMLLinkElement);
+        if (link) {
+          link.href = serverPath;
+          link.type = isSvg ? 'image/svg+xml' : 'image/png';
+        }
+      }
+
+      showToast('লোগো সফলভাবে আপলোড হয়েছে! পরিবর্তন স্থায়ী করতে নিচে "Save Settings" বাটনে চাপুন।', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'লোগো ফাইল আপলোড করতে সমস্যা হয়েছে', 'error');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   const handleMainImageFileChange = async (file?: File | null) => {
     if (!file) return;
@@ -6769,28 +6936,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 accept="image/png,image/jpeg,image/webp,image/svg+xml"
                                 id="logo-file-input"
                                 className="hidden"
-                                onChange={async (e) => {
+                                disabled={isUploadingLogo}
+                                onChange={(e) => {
                                   const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  try {
-                                    setLoading(true);
-                                    const dataUrl = await compressAndReadImage(file);
-                                    setSettingsForm(prev => ({ ...prev, logo_url: dataUrl }));
-                                    showToast('লোগো ছবি আপলোড হয়েছে! নিচের "Save Settings" বাটনে চাপুন।', 'success');
-                                  } catch (err: any) {
-                                    showToast(err.message || 'লোগো ফাইল রিড করতে সমস্যা হয়েছে', 'error');
-                                  } finally {
-                                    setLoading(false);
-                                    if (e.target) e.target.value = '';
-                                  }
+                                  if (file) handleLogoUpload(file);
+                                  if (e.target) e.target.value = '';
                                 }}
                               />
                               <label
                                 htmlFor="logo-file-input"
-                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-all shadow-xs"
+                                className={`inline-flex items-center gap-2 px-4 py-2.5 ${isUploadingLogo ? 'bg-zinc-700 opacity-75 cursor-not-allowed' : 'bg-zinc-900 hover:bg-zinc-800 cursor-pointer'} text-white rounded-xl text-xs font-bold transition-all shadow-xs`}
                               >
-                                <Upload className="w-4 h-4 text-emerald-400" />
-                                <span>Choose Image From Device</span>
+                                {isUploadingLogo ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                                    <span>Uploading Logo...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="w-4 h-4 text-emerald-400" />
+                                    <span>Choose Image From Device</span>
+                                  </>
+                                )}
                               </label>
 
                               {settingsForm.logo_url && (
@@ -6823,6 +6990,154 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 placeholder="https://example.com/logo.png"
                                 value={settingsForm.logo_url || ''}
                                 onChange={(e) => setSettingsForm({ ...settingsForm, logo_url: e.target.value })}
+                                className="w-full bg-white text-zinc-900 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Website Favicon / Browser Tab Icon Box */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-zinc-50 to-zinc-100/70 rounded-2xl border border-zinc-200/90 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-200">
+                        <div>
+                          <h4 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-emerald-600" />
+                            <span>Website Favicon (ওয়েবসাইট ফেভিকন ও ব্রাউজার ট্যাব আইকন)</span>
+                          </h4>
+                          <p className="text-xs text-zinc-500">
+                            ব্রাউজারের ট্যাব বার, বুকমার্ক ও শর্টকাটে প্রদর্শিত আইকন (PNG বা ICO ফরম্যাট, প্রস্তাবিত সাইজ: 512x512 বা 48x48 পিক্সেল)
+                          </p>
+                        </div>
+
+                        {/* Live Browser Tab Simulation Preview */}
+                        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-zinc-200 shadow-2xs">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Tab Preview:</span>
+                          <div className="flex items-center gap-1.5 bg-zinc-100/80 px-2.5 py-1 rounded-lg border border-zinc-200 max-w-[170px]">
+                            {settingsForm.favicon_url || settingsForm.logo_url ? (
+                              <img
+                                src={settingsForm.favicon_url || settingsForm.logo_url}
+                                alt="Favicon Preview"
+                                className="w-4 h-4 rounded-xs object-contain shrink-0"
+                              />
+                            ) : (
+                              <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                            )}
+                            <span className="text-[11px] font-bold text-zinc-800 truncate">
+                              {settingsForm.store_name || "Maxora Shop BD"}
+                            </span>
+                            <span className="text-[9px] text-zinc-400 font-bold ml-1">×</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Favicon Controls */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                        {/* Current Favicon Preview Box */}
+                        <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 text-center">
+                          <span className="text-[11px] font-bold text-zinc-500 mb-2">Current Favicon</span>
+                          {settingsForm.favicon_url ? (
+                            <div className="relative group/fav">
+                              <div className="w-16 h-16 rounded-2xl overflow-hidden bg-zinc-50 border-2 border-emerald-500/50 p-2 flex items-center justify-center shadow-xs">
+                                <img
+                                  src={settingsForm.favicon_url}
+                                  alt="Current Favicon"
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSettingsForm({ ...settingsForm, favicon_url: '' });
+                                  showToast('ফেভিকন সরানো হয়েছে। ডিফল্ট আইকন ব্যবহৃত হবে।', 'info');
+                                }}
+                                title="Remove Favicon"
+                                className="absolute -top-2 -right-2 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-md transition-transform hover:scale-110 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-16 h-16 rounded-2xl bg-zinc-100 border border-zinc-200 text-zinc-400 flex flex-col items-center justify-center shadow-xs">
+                              <Globe className="w-7 h-7 text-zinc-400" />
+                              <span className="text-[8px] text-zinc-400 font-bold mt-0.5">Default</span>
+                            </div>
+                          )}
+                          <span className="inline-block mt-2 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-md text-[9px] font-black uppercase">
+                            PNG / ICO (512×512 or 48×48 px)
+                          </span>
+                          <p className="text-[10px] text-zinc-400 mt-1">
+                            {settingsForm.favicon_url ? 'Custom favicon active' : (settingsForm.logo_url ? 'Using store logo as fallback' : 'Default browser icon active')}
+                          </p>
+                        </div>
+
+                        {/* Upload & URL Inputs */}
+                        <div className="md:col-span-8 space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Upload Favicon File (ফেভিকন ফাইল আপলোড করুন)
+                            </label>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <input
+                                type="file"
+                                accept=".png,.ico,image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/webp"
+                                id="favicon-file-input"
+                                className="hidden"
+                                disabled={isUploadingFavicon}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleFaviconUpload(file);
+                                  if (e.target) e.target.value = '';
+                                }}
+                              />
+                              <label
+                                htmlFor="favicon-file-input"
+                                className={`inline-flex items-center gap-2 px-4 py-2.5 ${isUploadingFavicon ? 'bg-zinc-700 opacity-75 cursor-not-allowed' : 'bg-zinc-900 hover:bg-zinc-800 cursor-pointer'} text-white rounded-xl text-xs font-bold transition-all shadow-xs`}
+                              >
+                                {isUploadingFavicon ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                                    <span>Uploading Favicon...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="w-4 h-4 text-emerald-400" />
+                                    <span>Choose Favicon File (PNG / ICO)</span>
+                                  </>
+                                )}
+                              </label>
+
+                              {settingsForm.favicon_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSettingsForm({ ...settingsForm, favicon_url: '' });
+                                    showToast('ফেভিকন সরানো হয়েছে। ডিফল্ট আইকন ব্যবহৃত হবে।', 'info');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Remove Favicon</span>
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-zinc-400 block mt-1">
+                              সমর্থিত ফরম্যাট: PNG, ICO, SVG বা WEBP (প্রস্তাবিত: 512×512 অথবা 48×48 পিক্সেল স্কয়ার সাইজ)
+                            </span>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-700 mb-1">
+                              Or Paste Favicon URL (অথবা অনলাইন ফেভিকন ইমেজ লিংক দিন)
+                            </label>
+                            <div className="relative">
+                              <Link2 className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="url"
+                                placeholder="https://example.com/favicon.png অথবা /uploads/favicon.png"
+                                value={settingsForm.favicon_url || ''}
+                                onChange={(e) => setSettingsForm({ ...settingsForm, favicon_url: e.target.value })}
                                 className="w-full bg-white text-zinc-900 text-xs pl-8 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                               />
                             </div>

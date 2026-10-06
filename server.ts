@@ -1198,7 +1198,7 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
     if (matches && matches[2]) {
       const mime = matches[1];
       const buffer = Buffer.from(matches[2], 'base64');
-      const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
+      const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
       const cleanProdId = (product_id || 'prod').replace(/[^a-z0-9_-]/gi, '-');
       const safeName = `${Date.now()}-${cleanProdId}.${ext}`;
       const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -2671,6 +2671,48 @@ const handleSaveSettingsRoute = async (req: express.Request, res: express.Respon
     });
   }
 
+  // Automatically offload data:image/ favicon to static server storage
+  if (typeof body.favicon_url === 'string' && body.favicon_url.startsWith('data:image/')) {
+    try {
+      const matches = body.favicon_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches[2]) {
+        const mime = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('svg') ? 'svg' : 'png';
+        const safeName = `favicon-${Date.now()}.${ext}`;
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+        body.favicon_url = `/uploads/${safeName}`;
+      }
+    } catch (favErr) {
+      console.warn('Could not offload favicon data URL to disk:', favErr);
+    }
+  }
+
+  // Automatically offload data:image/ logo to static server storage
+  if (typeof body.logo_url === 'string' && body.logo_url.startsWith('data:image/')) {
+    try {
+      const matches = body.logo_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches[2]) {
+        const mime = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        const ext = mime.includes('svg') ? 'svg' : 'png';
+        const safeName = `logo-${Date.now()}.${ext}`;
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+        body.logo_url = `/uploads/${safeName}`;
+      }
+    } catch (logoErr) {
+      console.warn('Could not offload logo data URL to disk:', logoErr);
+    }
+  }
+
   // Enforce explicit booleans for promotions
   if (body.free_delivery_enabled !== undefined) {
     body.free_delivery_enabled = Boolean(body.free_delivery_enabled);
@@ -3191,7 +3233,10 @@ async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; statu
       <a href="${baseUrl}/" style="display:inline-block;background:#18181b;color:#ffffff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Return to Maxora Home</a>
     </main>
     `;
+    const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+    const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
     const notFoundHtml = templateHtml
+      .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
       .replace(/<title>.*?<\/title>/i, '')
       .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
       .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
@@ -3353,7 +3398,10 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
     </article>
   `;
 
+  const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+  const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
   let modifiedHtml = templateHtml
+    .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
     .replace(/<title>.*?<\/title>/i, '')
     .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
     .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
@@ -3593,7 +3641,10 @@ ${JSON.stringify(itemListLd, null, 2)}
     </main>
   `;
 
+  const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+  const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
   let modifiedHtml = templateHtml
+    .replace(/<link\s+id=["']dynamic-favicon["'][^>]*>/i, `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`)
     .replace(/<title>.*?<\/title>/i, '')
     .replace(/<meta\s+name=["']description["'][^>]*>/i, '')
     .replace(/<link\s+rel=["']canonical["'][^>]*>/i, '')
@@ -3675,12 +3726,40 @@ async function startServer() {
       },
       appType: "spa",
     });
+    app.use(async (req, res, next) => {
+      const url = req.originalUrl || req.url;
+      const accept = req.headers.accept || '';
+      if (req.method === 'GET' && (accept.includes('text/html') || url === '/' || !path.extname(url))) {
+        try {
+          let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+          const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+          const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+          template = template.replace(
+            /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
+            `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
+          );
+          template = await vite.transformIndexHtml(url, template);
+          return res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        } catch (e) {
+          vite.ssrFixStacktrace(e as Error);
+          return next(e);
+        }
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
 
     app.use('*', async (req, res, next) => {
       const url = req.originalUrl;
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+        const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+        template = template.replace(
+          /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
+          `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
+        );
         template = await vite.transformIndexHtml(url, template);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (e) {
@@ -3692,6 +3771,19 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
+      try {
+        const indexPath = path.join(distPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          const dynamicFav = db.settings?.favicon_url || db.settings?.logo_url || '/favicon.ico';
+          const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+          template = template.replace(
+            /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
+            `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
+          );
+          return res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
+        }
+      } catch {}
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

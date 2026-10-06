@@ -22,6 +22,29 @@ export default function App() {
     }
   };
 
+  // Dynamically update Favicon in <head> based on database settings
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const faviconPath = settings?.favicon_url || settings?.logo_url || '/favicon.ico';
+    let link: HTMLLinkElement | null =
+      (document.getElementById('dynamic-favicon') as HTMLLinkElement) ||
+      (document.querySelector("link[rel*='icon']") as HTMLLinkElement);
+    if (!link) {
+      link = document.createElement('link');
+      link.id = 'dynamic-favicon';
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = faviconPath;
+    if (faviconPath.endsWith('.ico') || faviconPath.includes('image/x-icon') || faviconPath.includes('image/vnd.microsoft.icon')) {
+      link.type = 'image/x-icon';
+    } else if (faviconPath.endsWith('.svg') || faviconPath.includes('image/svg+xml')) {
+      link.type = 'image/svg+xml';
+    } else {
+      link.type = 'image/png';
+    }
+  }, [settings?.favicon_url, settings?.logo_url]);
+
   const handleBackToStore = () => {
     window.location.href = 'https://maxorabd.com/';
   };

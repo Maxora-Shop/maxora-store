@@ -1000,6 +1000,49 @@ export const storeService = {
       }
     }
 
+    // Offload heavy base64 favicon into /api/upload-image on the backend server
+    if (typeof updated.favicon_url === 'string' && updated.favicon_url.startsWith('data:image/')) {
+      try {
+        const matches = updated.favicon_url.match(/^data:([A-Za-z-+\/]+);base64,/);
+        const mime = matches ? matches[1] : '';
+        const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('svg') ? 'svg' : 'png';
+        const uploadRes = await tryApi<{ success: boolean; url: string; id: string }>('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_url: updated.favicon_url,
+            filename: `favicon.${ext}`,
+            product_id: 'favicon',
+          }),
+        });
+        if (uploadRes.success && uploadRes.data?.url) {
+          updated.favicon_url = uploadRes.data.url;
+        }
+      } catch (favErr) {
+        console.warn('Could not offload favicon image to backend server:', favErr);
+      }
+    }
+
+    // Offload heavy base64 logo into /api/upload-image on the backend server
+    if (typeof updated.logo_url === 'string' && updated.logo_url.startsWith('data:image/')) {
+      try {
+        const uploadRes = await tryApi<{ success: boolean; url: string; id: string }>('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data_url: updated.logo_url,
+            filename: 'store-logo.png',
+            product_id: 'store-logo',
+          }),
+        });
+        if (uploadRes.success && uploadRes.data?.url) {
+          updated.logo_url = uploadRes.data.url;
+        }
+      } catch (logoErr) {
+        console.warn('Could not offload logo image to backend server:', logoErr);
+      }
+    }
+
     // Explicitly enforce boolean types for promotional flags
     if (updated.free_delivery_enabled !== undefined) {
       updated.free_delivery_enabled = Boolean(updated.free_delivery_enabled);

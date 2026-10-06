@@ -306,6 +306,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
       categories = Array.from(catMap.values());
       subcategories = Array.from(subMap.values());
+
+      let storeSettings: any = null;
+      for (const dbPath of candidateDbPaths) {
+        try {
+          if (fs.existsSync(dbPath)) {
+            const dbData = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+            if (dbData.settings) {
+              storeSettings = dbData.settings;
+              break;
+            }
+          }
+        } catch {}
+      }
+      const dynamicFav = storeSettings?.favicon_url || storeSettings?.logo_url || '/favicon.ico';
+      const favType = dynamicFav.endsWith('.ico') ? 'image/x-icon' : dynamicFav.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+      templateHtml = templateHtml.replace(
+        /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
+        `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
+      );
     } catch (err) {
       console.warn('Render load products note:', err);
     }
