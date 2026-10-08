@@ -23,6 +23,7 @@ import {
   Package,
   Copy,
   Check,
+  ShieldCheck,
 } from 'lucide-react';
 import { Customer, Order, Product, StoreSettings } from '../types';
 import { storeService } from '../services/storeService';
@@ -217,36 +218,6 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
     }
   };
 
-  const handleQuickDemoLogin = async () => {
-    setLoginPhoneOrEmail('01711223344');
-    setLoginPassword('123456');
-    setLoginLoading(true);
-    try {
-      const res = await storeService.customerLogin('01711223344', '123456');
-      if (res.success && res.customer) {
-        setCurrentCustomer(res.customer);
-        loadOrders(res.customer);
-      } else {
-        // Create demo customer
-        const regRes = await storeService.customerRegister({
-          name: 'Tanvir Ahmed',
-          phone: '01711223344',
-          email: 'tanvir@example.com',
-          password: '123456',
-          district: 'Dhaka',
-          area: 'Gulshan 2',
-          address: 'House 14, Road 11, Block D',
-        });
-        if (regRes.customer) {
-          setCurrentCustomer(regRes.customer);
-          loadOrders(regRes.customer);
-        }
-      }
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
   const handleLogout = () => {
     storeService.customerLogout();
     setCurrentCustomer(null);
@@ -332,17 +303,22 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
-        <div className="bg-zinc-950 text-white p-3.5 sm:p-5 flex items-center justify-between gap-3 shrink-0 border-b border-zinc-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-500 text-zinc-950 font-black text-sm sm:text-base flex items-center justify-center shadow-xs shrink-0">
-              {currentCustomer ? (currentCustomer.name ? currentCustomer.name.charAt(0).toUpperCase() : 'C') : <User className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-950" />}
+        <div className="bg-white text-zinc-900 p-4 sm:p-5 flex items-center justify-between gap-3 shrink-0 border-b border-zinc-200/90 shadow-2xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 flex items-center justify-center font-black text-sm sm:text-base shadow-2xs shrink-0">
+              {currentCustomer ? (currentCustomer.name ? currentCustomer.name.charAt(0).toUpperCase() : 'C') : <User className="w-5 h-5 text-emerald-600" />}
             </div>
             <div className="min-w-0">
-              <h3 className="font-extrabold text-sm sm:text-base text-white tracking-tight truncate">
-                {currentCustomer ? `Hi, ${currentCustomer.name}` : 'Customer Account'}
+              <h3 className="font-extrabold text-base sm:text-lg text-zinc-900 tracking-tight truncate flex items-center gap-2">
+                <span>{currentCustomer ? `Hi, ${currentCustomer.name}` : 'Customer Portal'}</span>
+                {!currentCustomer && (
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Official
+                  </span>
+                )}
               </h3>
-              <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
-                {currentCustomer ? (currentCustomer.phone || 'Verified Customer') : 'Manage your orders, tracking & saved products'}
+              <p className="text-xs text-zinc-500 truncate">
+                {currentCustomer ? (currentCustomer.phone || 'Verified Customer') : 'Manage your orders, live tracking & wishlist'}
               </p>
             </div>
           </div>
@@ -352,7 +328,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="hidden xs:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-rose-300 text-xs font-semibold border border-zinc-800 transition-colors cursor-pointer"
+                className="hidden xs:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-rose-50 text-zinc-600 hover:text-rose-600 text-xs font-bold border border-zinc-200 transition-colors cursor-pointer"
                 title="Logout from customer account"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -362,7 +338,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-900 flex items-center justify-center transition-colors cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -376,22 +352,23 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
             /* =========================================================================
                AUTH VIEW: LOGIN / REGISTER FOR GUEST USERS
             ========================================================================= */
-            <div className="p-4 sm:p-6 space-y-5">
+            <div className="p-4 sm:p-6 space-y-5 bg-white">
               {/* Segmented Tab Switcher */}
-              <div className="flex rounded-xl bg-zinc-100 p-1 border border-zinc-200">
+              <div className="flex rounded-2xl bg-zinc-100 p-1.5 border border-zinc-200/80">
                 <button
                   type="button"
                   onClick={() => {
                     setAuthMode('login');
                     setLoginError('');
                   }}
-                  className={`flex-1 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all cursor-pointer text-center ${
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                     authMode === 'login'
-                      ? 'bg-white text-zinc-950 shadow-xs'
-                      : 'text-zinc-600 hover:text-zinc-900'
+                      ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200/60 font-extrabold'
+                      : 'text-zinc-500 hover:text-zinc-900 font-semibold'
                   }`}
                 >
-                  Sign In
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Sign In (লগইন)</span>
                 </button>
                 <button
                   type="button"
@@ -399,19 +376,26 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                     setAuthMode('register');
                     setRegError('');
                   }}
-                  className={`flex-1 py-2 rounded-lg font-bold text-xs sm:text-sm transition-all cursor-pointer text-center ${
+                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                     authMode === 'register'
-                      ? 'bg-white text-zinc-950 shadow-xs'
-                      : 'text-zinc-600 hover:text-zinc-900'
+                      ? 'bg-white text-zinc-900 shadow-xs border border-zinc-200/60 font-extrabold'
+                      : 'text-zinc-500 hover:text-zinc-900 font-semibold'
                   }`}
                 >
-                  Create Account
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>Create Account (নতুন একাউন্ট)</span>
                 </button>
               </div>
 
               {/* Login Form */}
               {authMode === 'login' ? (
                 <form onSubmit={handleLogin} className="space-y-4">
+                  {/* Subtle Welcome Badge */}
+                  <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-3 flex items-center gap-2.5 text-xs text-emerald-900 font-medium">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>লগইন করে আপনার পূর্বের সকল অর্ডার ও ডেলিভারি স্ট্যাটাস চেক করুন।</span>
+                  </div>
+
                   {loginError && (
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -421,43 +405,43 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-800 mb-1.5">
-                      Phone Number or Email <span className="text-rose-500">*</span>
+                      Phone Number or Email <span className="text-emerald-600 font-bold">*</span>
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         required
-                        placeholder="e.g. 01711223344 or name@email.com"
+                        placeholder="e.g. 017XXXXXXXX or name@email.com"
                         value={loginPhoneOrEmail}
                         onChange={(e) => setLoginPhoneOrEmail(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none transition-all"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm pl-10 pr-3.5 py-3 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all shadow-2xs"
                       />
-                      <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                      <Phone className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
                     </div>
-                    <span className="text-[10px] text-zinc-500 mt-1 block">
-                      Use the phone number you used during your order checkout
+                    <span className="text-[11px] text-zinc-500 mt-1.5 block">
+                      💡 আপনি অর্ডার করার সময় যে মোবাইল নম্বর দিয়েছেন সেটি ব্যবহার করুন
                     </span>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-bold text-zinc-800">
-                        Password (Optional for phone sign-in)
+                        Password <span className="text-[11px] text-zinc-400 font-normal">(Optional for phone sign-in)</span>
                       </label>
                     </div>
                     <div className="relative">
                       <input
                         type={showLoginPassword ? 'text' : 'password'}
-                        placeholder="Enter account password"
+                        placeholder="পাসওয়ার্ড লিখুন (যদি সেট করা থাকে)"
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm pl-9 pr-9 py-2.5 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none transition-all"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm pl-10 pr-10 py-3 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all shadow-2xs"
                       />
-                      <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                      <Lock className="w-4 h-4 text-zinc-400 absolute left-3.5 top-3.5" />
                       <button
                         type="button"
                         onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                        className="absolute right-3.5 top-3.5 text-zinc-400 hover:text-zinc-600 cursor-pointer"
                       >
                         {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -467,33 +451,38 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   <button
                     type="submit"
                     disabled={loginLoading}
-                    className="w-full py-2.5 sm:py-3 bg-zinc-950 hover:bg-zinc-800 active:scale-98 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition-all cursor-pointer disabled:opacity-50"
                   >
                     {loginLoading ? (
                       <span>Signing in...</span>
                     ) : (
                       <>
-                        <UserCheck className="w-4 h-4 text-emerald-400" />
-                        <span>Sign In to Account</span>
+                        <UserCheck className="w-4 h-4" />
+                        <span>Sign In to Customer Account</span>
                       </>
                     )}
                   </button>
 
-                  {/* One-click demo login for reviewer / testers */}
-                  <div className="pt-2 border-t border-zinc-100">
-                    <button
-                      type="button"
-                      onClick={handleQuickDemoLogin}
-                      className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-emerald-200 transition-colors cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>⚡ 1-Click Demo Login (Tanvir Ahmed)</span>
-                    </button>
+                  {/* Trust & Security Footnote */}
+                  <div className="pt-2 border-t border-zinc-100 flex items-center justify-between text-[11px] text-zinc-500 font-medium">
+                    <span className="flex items-center gap-1.5 text-zinc-600">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      100% সুরক্ষিত ও নিরাপদ
+                    </span>
+                    <span className="flex items-center gap-1.5 text-zinc-600">
+                      <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                      লাইভ অর্ডার ট্র্যাকিং
+                    </span>
                   </div>
                 </form>
               ) : (
                 /* Register Form */
                 <form onSubmit={handleRegister} className="space-y-3.5">
+                  <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-3 flex items-center gap-2.5 text-xs text-emerald-900 font-medium">
+                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>নতুন একাউন্ট তৈরি করে দ্রুত অর্ডার ও ট্র্যাকিং সুবিধা নিন।</span>
+                  </div>
+
                   {regError && (
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -504,29 +493,29 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Full Name <span className="text-rose-500">*</span>
+                        Full Name (পূর্ণ নাম) <span className="text-emerald-600 font-bold">*</span>
                       </label>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Tanvir Ahmed"
+                        placeholder="e.g. Your Full Name"
                         value={regName}
                         onChange={(e) => setRegName(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Mobile Phone Number <span className="text-rose-500">*</span>
+                        Mobile Phone Number <span className="text-emerald-600 font-bold">*</span>
                       </label>
                       <input
                         type="tel"
                         required
-                        placeholder="e.g. 01711223344"
+                        placeholder="e.g. 017XXXXXXXX"
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       />
                     </div>
                   </div>
@@ -534,27 +523,27 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Email Address (Optional)
+                        Email Address <span className="text-[11px] text-zinc-400 font-normal">(Optional)</span>
                       </label>
                       <input
                         type="email"
                         placeholder="e.g. name@domain.com"
                         value={regEmail}
                         onChange={(e) => setRegEmail(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Password (Optional)
+                        Password <span className="text-[11px] text-zinc-400 font-normal">(Optional)</span>
                       </label>
                       <input
                         type="password"
-                        placeholder="Account password"
+                        placeholder="পাসওয়ার্ড সেট করুন"
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       />
                     </div>
                   </div>
@@ -562,12 +551,12 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Delivery District
+                        Delivery District (জেলা)
                       </label>
                       <select
                         value={regDistrict}
                         onChange={(e) => setRegDistrict(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       >
                         {BANGLADESH_DISTRICTS.map((d) => (
                           <option key={d} value={d}>{d}</option>
@@ -577,45 +566,49 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-800 mb-1">
-                        Thana / Area (Optional)
+                        Thana / Area <span className="text-[11px] text-zinc-400 font-normal">(Optional)</span>
                       </label>
                       <input
                         type="text"
                         placeholder="e.g. Mirpur, Dhanmondi"
                         value={regArea}
                         onChange={(e) => setRegArea(e.target.value)}
-                        className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none"
+                        className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none shadow-2xs"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-800 mb-1">
-                      Street Address (Optional)
+                      Street Address <span className="text-[11px] text-zinc-400 font-normal">(Optional)</span>
                     </label>
                     <textarea
                       rows={2}
                       placeholder="e.g. House 12, Road 4, Sector 7"
                       value={regAddress}
                       onChange={(e) => setRegAddress(e.target.value)}
-                      className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm px-3 py-2 rounded-xl border border-zinc-300 focus:border-zinc-950 focus:outline-none resize-none"
+                      className="w-full bg-zinc-50/70 focus:bg-white text-zinc-900 placeholder:text-zinc-400 text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-zinc-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none resize-none shadow-2xs"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={regLoading}
-                    className="w-full py-2.5 sm:py-3 bg-zinc-950 hover:bg-zinc-800 active:scale-98 text-white rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md shadow-emerald-600/25 transition-all cursor-pointer disabled:opacity-50"
                   >
                     {regLoading ? (
                       <span>Creating Account...</span>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Complete Registration</span>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Complete Registration (রেজিস্ট্রেশন সম্পন্ন করুন)</span>
                       </>
                     )}
                   </button>
+
+                  <p className="text-[11px] text-center text-zinc-400 pt-1">
+                    অ্যাকাউন্ট তৈরি করে যেকোনো সময় সহজেই লাইভ ট্র্যাকিং ও পূর্বের অর্ডার দেখা যাবে।
+                  </p>
                 </form>
               )}
             </div>
@@ -656,11 +649,11 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   onClick={() => setActiveTab('orders')}
                   className={`flex items-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === 'orders'
-                      ? 'border-zinc-950 text-zinc-950'
+                      ? 'border-emerald-600 text-emerald-800 font-extrabold'
                       : 'border-transparent text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
-                  <ShoppingBag className="w-4 h-4" />
+                  <ShoppingBag className="w-4 h-4 text-emerald-600" />
                   <span>My Orders ({orders.length})</span>
                 </button>
 
@@ -669,11 +662,11 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   onClick={() => setActiveTab('tracking')}
                   className={`flex items-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === 'tracking'
-                      ? 'border-zinc-950 text-zinc-950'
+                      ? 'border-emerald-600 text-emerald-800 font-extrabold'
                       : 'border-transparent text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
-                  <Truck className="w-4 h-4" />
+                  <Truck className="w-4 h-4 text-emerald-600" />
                   <span>Track Order</span>
                 </button>
 
@@ -682,11 +675,11 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   onClick={() => setActiveTab('saved')}
                   className={`flex items-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === 'saved'
-                      ? 'border-zinc-950 text-zinc-950'
+                      ? 'border-emerald-600 text-emerald-800 font-extrabold'
                       : 'border-transparent text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
-                  <Heart className="w-4 h-4" />
+                  <Heart className="w-4 h-4 text-emerald-600" />
                   <span>Saved Items ({wishlistProducts.length})</span>
                 </button>
 
@@ -695,11 +688,11 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                   onClick={() => setActiveTab('profile')}
                   className={`flex items-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === 'profile'
-                      ? 'border-zinc-950 text-zinc-950'
+                      ? 'border-emerald-600 text-emerald-800 font-extrabold'
                       : 'border-transparent text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
-                  <User className="w-4 h-4" />
+                  <User className="w-4 h-4 text-emerald-600" />
                   <span>Profile & Address</span>
                 </button>
               </div>
@@ -709,7 +702,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                 <div className="p-3.5 sm:p-5 space-y-3.5">
                   {ordersLoading ? (
                     <div className="py-8 text-center text-zinc-500 text-xs">
-                      <div className="animate-spin w-6 h-6 border-2 border-zinc-900 border-t-transparent rounded-full mx-auto mb-2" />
+                      <div className="animate-spin w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full mx-auto mb-2" />
                       Loading your order history...
                     </div>
                   ) : orders.length === 0 ? (
@@ -722,7 +715,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                       <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                       >
                         <span>Start Shopping</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -853,9 +846,9 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                                 setTrackedOrder(order);
                                 setActiveTab('tracking');
                               }}
-                              className="px-2.5 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                              <Truck className="w-3.5 h-3.5 text-white" />
                               <span>Track</span>
                             </button>
                           </div>
@@ -883,7 +876,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                     <button
                       type="submit"
                       disabled={trackLoading}
-                      className="px-4 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                     >
                       {trackLoading ? 'Searching...' : 'Track'}
                     </button>
@@ -999,7 +992,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                       <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                       >
                         <span>Browse Store</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1040,9 +1033,9 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                             <button
                               type="button"
                               onClick={() => onAddToCart(p)}
-                              className="px-3 py-1.5 bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+                              <ShoppingBag className="w-3.5 h-3.5 text-white" />
                               <span className="hidden xs:inline">Add</span>
                             </button>
                           )}
@@ -1191,7 +1184,7 @@ export const CustomerAccountModal: React.FC<CustomerAccountModalProps> = ({
                     <button
                       type="submit"
                       disabled={profileLoading}
-                      className="px-5 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                     >
                       {profileLoading ? 'Saving...' : 'Save Changes'}
                     </button>
