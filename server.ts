@@ -3779,27 +3779,6 @@ async function startServer() {
       },
       appType: "spa",
     });
-    app.use(async (req, res, next) => {
-      const url = req.originalUrl || req.url;
-      const accept = req.headers.accept || '';
-      if (req.method === 'GET' && (accept.includes('text/html') || url === '/' || !path.extname(url))) {
-        try {
-          let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-          const { url: dynamicFav, type: favType } = getDynamicFaviconUrl(db.settings?.favicon_url || db.settings?.logo_url);
-          template = template.replace(
-            /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
-            `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
-          );
-          template = await vite.transformIndexHtml(url, template);
-          return res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-        } catch (e) {
-          vite.ssrFixStacktrace(e as Error);
-          return next(e);
-        }
-      }
-      next();
-    });
-
     app.use(vite.middlewares);
 
     app.use('*', async (req, res, next) => {

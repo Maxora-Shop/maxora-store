@@ -36,6 +36,7 @@ import {
   Printer,
   Calendar,
   Layers,
+  LayoutGrid,
   ArrowUpRight,
   ShieldCheck,
   Percent,
@@ -239,7 +240,7 @@ const readFaviconImageFile = (file: File): Promise<string> => {
 };
 
 // Dedicated component to render Favicon with reliable fallback cascade
-// Browsers often fail to render .ico inside <img> tags; this component automatically falls back to standard PNG preview
+// Browsers often fail to render .ico inside <img> tags; this component automatically prioritizes standard PNG preview
 export const FaviconPreviewImage: React.FC<{
   faviconUrl?: string;
   logoUrl?: string;
@@ -258,28 +259,32 @@ export const FaviconPreviewImage: React.FC<{
 
   // Preference cascade for rendering:
   // 1. If user just selected a file, localPreview (base64) shows immediately with 100% color & fidelity.
-  // 2. If faviconUrl is a standard data:image or web path other than /favicon.ico, use it.
-  // 3. /uploads/favicon.png (Standard high-res PNG format that 100% of browsers decode cleanly)
+  // 2. /uploads/favicon.png (Standard high-res PNG format of the saved logo that 100% of browsers decode cleanly)
+  // 3. Directly specified faviconUrl (if data:image or web path)
   // 4. /favicon.ico (with cache buster)
-  // 5. /uploads/favicon.ico
+  // 5. /uploads/logo-source.webp
   // 6. logoUrl (store logo fallback)
   const sources = useMemo(() => {
     const list: string[] = [];
     if (localPreview) {
       list.push(localPreview);
     }
+    // Standard high-res PNG preview of the saved favicon logo (renders cleanly on all browsers)
+    list.push(`/uploads/favicon.png?v=${cacheKey}`);
+
     if (faviconUrl && faviconUrl.startsWith('data:image/')) {
       list.push(faviconUrl);
-    } else if (faviconUrl && faviconUrl !== '/favicon.ico' && !faviconUrl.endsWith('.ico')) {
+    }
+
+    // Direct /favicon.ico file
+    list.push(`/favicon.ico?v=${cacheKey}`);
+    list.push(`/uploads/favicon.ico?v=${cacheKey}`);
+
+    if (faviconUrl && !faviconUrl.startsWith('data:image/')) {
       list.push(`${faviconUrl}${faviconUrl.includes('?') ? '&' : '?'}v=${cacheKey}`);
     }
 
-    // Standard PNG preview of the saved favicon (solves .ico rendering failure in HTML img elements)
-    list.push(`/uploads/favicon.png?v=${cacheKey}`);
-    // Root /favicon.ico with cache buster
-    list.push(`/favicon.ico?v=${cacheKey}`);
-    // Uploads favicon.ico
-    list.push(`/uploads/favicon.ico?v=${cacheKey}`);
+    list.push(`/uploads/logo-source.webp?v=${cacheKey}`);
 
     // Store logo image as visual fallback
     if (logoUrl) {
@@ -292,7 +297,7 @@ export const FaviconPreviewImage: React.FC<{
     setLoadIndex(0);
   }, [sources]);
 
-  const currentSrc = sources[loadIndex] || sources[0] || '/favicon.ico';
+  const currentSrc = sources[loadIndex] || sources[0] || '/uploads/favicon.png';
 
   return (
     <img
@@ -7113,11 +7118,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {/* Current Favicon Preview Box */}
                         <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-zinc-200 text-center">
                           <span className="text-[11px] font-bold text-zinc-500 mb-2">Current Favicon</span>
-                          {settingsForm.favicon_url || faviconLocalPreview ? (
+                          {settingsForm.favicon_url || faviconLocalPreview || true ? (
                             <div className="relative group/fav">
                               <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white border-2 border-emerald-500/70 p-2 flex items-center justify-center shadow-xs">
                                 <FaviconPreviewImage
-                                  faviconUrl={settingsForm.favicon_url}
+                                  faviconUrl={settingsForm.favicon_url || '/favicon.ico'}
                                   logoUrl={settingsForm.logo_url}
                                   localPreview={faviconLocalPreview}
                                   className="w-full h-full object-contain"
@@ -7872,17 +7877,254 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Footer Copyright Text */}
-                  <div className="pt-4 border-t border-zinc-200">
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Footer Copyright Text
-                    </label>
-                    <input
-                      type="text"
-                      value={settingsForm.footer_text || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, footer_text: e.target.value })}
-                      className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
-                    />
+                  {/* Website Footer & Bottom System Customization */}
+                  <div className="pt-6 border-t border-zinc-200 space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-zinc-200">
+                      <div>
+                        <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                          <LayoutGrid className="w-4 h-4 text-emerald-600" />
+                          <span>Website Footer & Bottom System (কাস্টমার সাইটের ফুটার ও নিচের সিস্টেম)</span>
+                        </h3>
+                        <p className="text-xs text-zinc-500">
+                          কাস্টমার সাইটের একদম নিচের About Text, সাপোর্ট সময়সূচী, পলিসি ও FAQ টেক্সট, কপিরাইট ও পেমেন্ট ব্যাজসমূহ এখান থেকে সরাসরি এডিট করুন।
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 1. About Store & Highlights */}
+                    <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/90 space-y-3">
+                      <span className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                        About Store & Delivery Badges (ফুটারের পরিচিতি ও ফিচার ব্যাজ)
+                      </span>
+                      <div>
+                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                          Footer About Store Text (স্টোরের পরিচিতি / About Us)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={settingsForm.footer_about || ''}
+                          placeholder="e.g. Maxora Shop BD is your trusted online shopping partner in Bangladesh for premium lifestyle gadgets, audio, and electronics. Cash on delivery available across all 64 districts."
+                          onChange={(e) => setSettingsForm({ ...settingsForm, footer_about: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs p-3 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 leading-relaxed"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            Delivery Highlight Badge 1
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 🇧🇩 64 Districts Delivery"
+                            value={settingsForm.footer_badge_1 || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, footer_badge_1: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            Delivery Highlight Badge 2
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 💵 100% Cash on Delivery"
+                            value={settingsForm.footer_badge_2 || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, footer_badge_2: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Support Hours & Contact in Footer */}
+                    <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/90 space-y-3">
+                      <span className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                        Support Hours & Store Address (সাপোর্ট সময়সূচী ও ঠিকানা)
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            Support Hours (কাস্টমার সাপোর্ট সময়সূচী)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 10:00 AM – 10:00 PM (Daily)"
+                            value={settingsForm.support_hours || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, support_hours: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            Office / Shop Address (ফুটারের ঠিকানা)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Dhaka, Bangladesh"
+                            value={settingsForm.address || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Customer Care & Policies Modals Content */}
+                    <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/90 space-y-4">
+                      <span className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Customer Care & Policy Modals (FAQ ও পলিসি সংক্রান্ত টেক্সট)
+                      </span>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* FAQ Modal */}
+                        <div className="bg-white p-3.5 rounded-xl border border-zinc-200 space-y-1.5">
+                          <label className="block text-xs font-bold text-zinc-800 flex items-center justify-between">
+                            <span>Frequently Asked Questions (FAQ)</span>
+                            <span className="text-[10px] text-zinc-400 font-normal">Markdown সমর্থিত</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={settingsForm.faq_content || ''}
+                            placeholder="**Q: How do I place an order?**&#10;A: Select any product..."
+                            onChange={(e) => setSettingsForm({ ...settingsForm, faq_content: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:border-zinc-900 font-mono leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Return Policy Modal */}
+                        <div className="bg-white p-3.5 rounded-xl border border-zinc-200 space-y-1.5">
+                          <label className="block text-xs font-bold text-zinc-800 flex items-center justify-between">
+                            <span>Return & Exchange Policy</span>
+                            <span className="text-[10px] text-zinc-400 font-normal">রিটার্ন ও এক্সচেঞ্জ পলিসি</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={settingsForm.return_policy_content || ''}
+                            placeholder="1. Delivery Inspection & Return: Please check the product thoroughly..."
+                            onChange={(e) => setSettingsForm({ ...settingsForm, return_policy_content: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:border-zinc-900 font-mono leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Privacy Policy Modal */}
+                        <div className="bg-white p-3.5 rounded-xl border border-zinc-200 space-y-1.5">
+                          <label className="block text-xs font-bold text-zinc-800 flex items-center justify-between">
+                            <span>Privacy Policy</span>
+                            <span className="text-[10px] text-zinc-400 font-normal">প্রাইভেসি পলিসি</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={settingsForm.privacy_policy_content || ''}
+                            placeholder="Maxora Shop BD respects your personal privacy..."
+                            onChange={(e) => setSettingsForm({ ...settingsForm, privacy_policy_content: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:border-zinc-900 font-mono leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Terms of Service Modal */}
+                        <div className="bg-white p-3.5 rounded-xl border border-zinc-200 space-y-1.5">
+                          <label className="block text-xs font-bold text-zinc-800 flex items-center justify-between">
+                            <span>Terms of Service</span>
+                            <span className="text-[10px] text-zinc-400 font-normal">শর্তাবলী ও নিয়ম</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            value={settingsForm.terms_policy_content || ''}
+                            placeholder="1. All prices displayed on Maxora Shop BD are in Bangladeshi Taka..."
+                            onChange={(e) => setSettingsForm({ ...settingsForm, terms_policy_content: e.target.value })}
+                            className="w-full bg-zinc-50 text-zinc-900 text-xs p-2.5 rounded-lg border border-zinc-200 focus:outline-none focus:border-zinc-900 font-mono leading-relaxed"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 4. Bottom Copyright & Trust Badges */}
+                    <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200/90 space-y-3">
+                      <span className="text-xs font-black text-zinc-800 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Bottom Bar, Payment & Security Badges (একদম নিচের কপিরাইট ও ব্যাজ)
+                      </span>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                          Footer Copyright Text (কপিরাইট টেক্সট)
+                        </label>
+                        <input
+                          type="text"
+                          value={settingsForm.footer_text || ''}
+                          placeholder="e.g. © 2026 Maxora Shop BD. All Rights Reserved."
+                          onChange={(e) => setSettingsForm({ ...settingsForm, footer_text: e.target.value })}
+                          className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-medium"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            We Accept Label
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. We Accept"
+                            value={settingsForm.footer_we_accept_text || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, footer_we_accept_text: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            SSL Security Badge Text
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. SSL Encrypted Checkout"
+                            value={settingsForm.footer_ssl_text || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, footer_ssl_text: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                            Cash on Delivery Badge Text
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Cash on Delivery"
+                            value={settingsForm.footer_cod_text || ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, footer_cod_text: e.target.value })}
+                            className="w-full bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-200 focus:outline-none focus:border-zinc-900 font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6 pt-2">
+                        <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-800">
+                          <input
+                            type="checkbox"
+                            checked={settingsForm.show_nagad_badge !== false}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, show_nagad_badge: e.target.checked })}
+                            className="w-4 h-4 rounded text-emerald-600 border-zinc-300 focus:ring-emerald-500"
+                          />
+                          <span>Show Nagad (নগদ) Logo Badge</span>
+                        </label>
+
+                        <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-zinc-800">
+                          <input
+                            type="checkbox"
+                            checked={settingsForm.show_bkash_badge !== false}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, show_bkash_badge: e.target.checked })}
+                            className="w-4 h-4 rounded text-emerald-600 border-zinc-300 focus:ring-emerald-500"
+                          />
+                          <span>Show bKash (বিকাশ) Logo Badge</span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Store Categories in General Settings with Edit Buttons */}

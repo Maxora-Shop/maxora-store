@@ -23,6 +23,9 @@ const OrderTrackerModal = React.lazy(() =>
 const AiShoppingAssistant = React.lazy(() =>
   import('./components/AiShoppingAssistant').then((m) => ({ default: m.AiShoppingAssistant }))
 );
+const AdminDashboard = React.lazy(() =>
+  import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
 
 import { BrandSidebarFilter } from './components/BrandSidebarFilter';
 import { ProductFilterSidebar } from './components/ProductFilterSidebar';
@@ -66,17 +69,15 @@ import {
 } from './utils/taxonomy';
 
 export default function App() {
-  // Clear any residual admin session flags on customer storefront
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.removeItem('maxora_admin_view_active');
-        if (window.location.hash === '#admin') {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-      } catch {}
-    }
-  }, []);
+  // Admin View State: toggled via #admin or /admin or footer link
+  const [isAdminView, setIsAdminView] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.location.pathname.startsWith('/admin') ||
+      window.location.hash === '#admin' ||
+      sessionStorage.getItem('maxora_admin_view_active') === 'true'
+    );
+  });
 
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(() => {
@@ -221,12 +222,12 @@ export default function App() {
       const hash = window.location.hash;
       const search = window.location.search;
 
-      // Clean up any stray admin hash or path on customer site
+      // Route check: admin dashboard mode
       if (path.startsWith('/admin') || hash === '#admin') {
-        try {
-          sessionStorage.removeItem('maxora_admin_view_active');
-          window.history.replaceState(null, '', '/');
-        } catch {}
+        setIsAdminView(true);
+        return;
+      } else {
+        setIsAdminView(false);
       }
 
       // Product check: /product/:slug or legacy #product-:slug
@@ -1434,6 +1435,29 @@ export default function App() {
       productSectionRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  if (isAdminView) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
+        <React.Suspense fallback={<div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white text-sm font-bold">লোড হচ্ছে...</div>}>
+          <AdminDashboard
+            globalSettings={settings}
+            onSettingsUpdated={async () => {
+              try {
+                const fresh = await storeService.getSettings();
+                if (fresh) setSettings(fresh);
+              } catch {}
+            }}
+            onBackToStore={() => {
+              setIsAdminView(false);
+              sessionStorage.removeItem('maxora_admin_view_active');
+              window.history.pushState(null, '', '/');
+            }}
+          />
+        </React.Suspense>
+      </div>
+    );
+  }
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 

@@ -348,6 +348,20 @@ export interface StoreSettings {
   hero_promo_card_3_title?: string;
   hero_promo_card_3_subtitle?: string;
   deleted_product_ids?: string[];
+  // Customer Storefront Footer & Bottom System Customization
+  footer_about?: string;
+  support_hours?: string;
+  footer_badge_1?: string;
+  footer_badge_2?: string;
+  faq_content?: string;
+  return_policy_content?: string;
+  privacy_policy_content?: string;
+  terms_policy_content?: string;
+  footer_we_accept_text?: string;
+  footer_ssl_text?: string;
+  footer_cod_text?: string;
+  show_nagad_badge?: boolean;
+  show_bkash_badge?: boolean;
   updated_at?: string;
 }
 

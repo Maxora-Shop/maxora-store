@@ -58,7 +58,7 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
     if (type === 'faq') {
       setModalContent({
         title: 'Frequently Asked Questions (FAQ)',
-        content: `
+        content: settings.faq_content || `
 **Q: How do I place an order?**
 A: Select any product, click "Add to Cart" or "Buy Now", fill in your name, phone number, and delivery address. Your order will be confirmed immediately!
 
@@ -75,7 +75,7 @@ A: Yes! You can inspect the package in front of the courier delivery agent befor
     } else if (type === 'return') {
       setModalContent({
         title: 'Return & Exchange Policy',
-        content: `
+        content: settings.return_policy_content || `
 At Maxora Shop BD, customer satisfaction is our top priority:
 
 1. **Delivery Inspection & Return**: Please check the product thoroughly in front of the courier delivery agent. If any defect or issue is noticed upon delivery, you can return it directly with the delivery agent or contact our hotline immediately.
@@ -86,7 +86,7 @@ At Maxora Shop BD, customer satisfaction is our top priority:
     } else if (type === 'privacy') {
       setModalContent({
         title: 'Privacy Policy',
-        content: `
+        content: settings.privacy_policy_content || `
 Maxora Shop BD respects your personal privacy:
 - Your name, phone number, and delivery address are strictly used to fulfill and deliver your orders safely.
 - We do not sell, rent, or share your private customer data with any third-party advertisers.
@@ -96,9 +96,9 @@ Maxora Shop BD respects your personal privacy:
     } else if (type === 'terms') {
       setModalContent({
         title: 'Terms of Service',
-        content: `
+        content: settings.terms_policy_content || `
 1. All prices displayed on Maxora Shop BD are in Bangladeshi Taka (BDT) and include all applicable taxes.
-2. Delivery charges: ৳70 within Dhaka City, ৳130 outside Dhaka.
+2. Delivery charges: ৳70 within Dhaka City, ৳100 Dhaka sub-areas, ৳130 outside Dhaka.
 3. Orders are verified by phone call or SMS before dispatch to ensure genuine delivery details.
 4. Maxora Shop BD reserves the right to cancel orders with unverified or unreachable contact details.
         `,
@@ -135,16 +135,17 @@ Maxora Shop BD respects your personal privacy:
               </div>
 
               <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed pr-2">
-                {settings.footer_text ||
+                {settings.footer_about ||
+                  settings.footer_text ||
                   'Maxora Shop BD is your trusted online shopping partner in Bangladesh for premium lifestyle gadgets, audio, and electronics. Cash on delivery available across all 64 districts.'}
               </p>
 
               <div className="pt-2 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-900 rounded-full border border-zinc-800 text-[11px] font-semibold text-emerald-400">
-                  🇧🇩 64 Districts Delivery
+                  {settings.footer_badge_1 || '🇧🇩 64 Districts Delivery'}
                 </span>
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-zinc-900 rounded-full border border-zinc-800 text-[11px] font-semibold text-zinc-300">
-                  💵 100% Cash on Delivery
+                  {settings.footer_badge_2 || '💵 100% Cash on Delivery'}
                 </span>
               </div>
             </div>
@@ -295,7 +296,7 @@ Maxora Shop BD respects your personal privacy:
                   <Clock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="block text-[11px] text-zinc-500 uppercase font-bold">Support Hours</span>
-                    <span className="text-zinc-300 text-xs">10:00 AM – 10:00 PM (Daily)</span>
+                    <span className="text-zinc-300 text-xs">{settings.support_hours || '10:00 AM – 10:00 PM (Daily)'}</span>
                   </div>
                 </div>
 
@@ -360,51 +361,66 @@ Maxora Shop BD respects your personal privacy:
 
           {/* Bottom Copyright & Security */}
           <div className="pt-8 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
-            <p className="font-medium text-center lg:text-left order-2 lg:order-1">
-              {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
-            </p>
+            <div className="flex items-center gap-2 order-2 lg:order-1">
+              <p className="font-medium text-center lg:text-left">
+                {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
+              </p>
+              <a
+                href="#admin"
+                title="Admin Control Panel"
+                className="opacity-40 hover:opacity-100 transition-opacity text-[10px] text-zinc-500 hover:text-emerald-400"
+              >
+                • Admin
+              </a>
+            </div>
             <div className="order-1 lg:order-2 flex items-center flex-wrap justify-center lg:justify-end gap-x-2.5 sm:gap-x-3 gap-y-2 text-xs">
               {/* We Accept label */}
               <span className="text-zinc-400 font-semibold text-xs tracking-tight">
-                We Accept
+                {settings.footer_we_accept_text || "We Accept"}
               </span>
 
               {/* Nagad Official Logo Badge */}
-              <div
-                className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#EC1C24]/60 transition-colors select-none"
-                title="Nagad (নগদ)"
-                aria-label="Nagad"
-              >
-                <img
-                  src="/images/payments/nagad.svg"
-                  alt="Nagad"
-                  className="h-5 sm:h-5.5 w-auto object-contain max-w-[68px]"
-                  loading="lazy"
-                />
-              </div>
-
-              <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+              {settings.show_nagad_badge !== false && (
+                <>
+                  <div
+                    className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#EC1C24]/60 transition-colors select-none"
+                    title="Nagad (নগদ)"
+                    aria-label="Nagad"
+                  >
+                    <img
+                      src="/images/payments/nagad.svg"
+                      alt="Nagad"
+                      className="h-5 sm:h-5.5 w-auto object-contain max-w-[68px]"
+                      loading="lazy"
+                    />
+                  </div>
+                  <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+                </>
+              )}
 
               {/* bKash Official Logo Badge */}
-              <div
-                className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#E2136E]/60 transition-colors select-none"
-                title="bKash"
-                aria-label="bKash"
-              >
-                <img
-                  src="/images/payments/bkash.svg"
-                  alt="bKash"
-                  className="h-5 sm:h-5.5 w-auto object-contain max-w-[72px]"
-                  loading="lazy"
-                />
-              </div>
-
-              <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+              {settings.show_bkash_badge !== false && (
+                <>
+                  <div
+                    className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#E2136E]/60 transition-colors select-none"
+                    title="bKash"
+                    aria-label="bKash"
+                  >
+                    <img
+                      src="/images/payments/bkash.svg"
+                      alt="bKash"
+                      className="h-5 sm:h-5.5 w-auto object-contain max-w-[72px]"
+                      loading="lazy"
+                    />
+                  </div>
+                  <span className="text-zinc-700 select-none hidden sm:inline">|</span>
+                </>
+              )}
 
               {/* SSL Encrypted Checkout */}
               <span className="flex items-center gap-1.5 text-zinc-400 font-semibold whitespace-nowrap">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>SSL Encrypted Checkout</span>
+                <span>{settings.footer_ssl_text || "SSL Encrypted Checkout"}</span>
               </span>
 
               <span className="text-zinc-700 select-none hidden sm:inline">|</span>
@@ -412,7 +428,7 @@ Maxora Shop BD respects your personal privacy:
               {/* Cash on Delivery */}
               <span className="flex items-center gap-1.5 text-zinc-400 font-semibold whitespace-nowrap">
                 <CreditCard className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Cash on Delivery</span>
+                <span>{settings.footer_cod_text || "Cash on Delivery"}</span>
               </span>
             </div>
           </div>
