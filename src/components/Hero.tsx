@@ -11,6 +11,7 @@ import {
   Sparkles,
   Zap,
   Tag,
+  Star,
 } from 'lucide-react';
 import { Product, StoreSettings, HeroBanner } from '../types';
 import { DEFAULT_HERO_BANNERS } from '../data/initialData';

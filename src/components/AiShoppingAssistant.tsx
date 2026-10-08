@@ -214,7 +214,7 @@ export const AiShoppingAssistant: React.FC<AiShoppingAssistantProps> = ({
       {/* Floating Launcher Button */}
       <div
         id="floating-ai-assistant-container"
-        className="fixed bottom-[74px] sm:bottom-6 right-3 sm:right-6 z-40 flex flex-col items-end pointer-events-auto"
+        className="fixed bottom-28 sm:bottom-24 md:bottom-28 right-3.5 sm:right-6 z-40 flex flex-col items-end pointer-events-auto"
       >
         {!isOpen && (
           <button
@@ -254,9 +254,9 @@ export const AiShoppingAssistant: React.FC<AiShoppingAssistantProps> = ({
       {isOpen && (
         <div
           id="ai-assistant-modal"
-          className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 z-50 flex items-end justify-center sm:block p-2 sm:p-0 bg-black/40 sm:bg-transparent backdrop-blur-xs sm:backdrop-blur-none animate-in fade-in-50 duration-200"
+          className="fixed inset-0 sm:inset-auto sm:bottom-24 md:bottom-28 sm:right-6 z-50 flex items-end justify-center sm:block p-2 sm:p-0 bg-black/40 sm:bg-transparent backdrop-blur-xs sm:backdrop-blur-none animate-in fade-in-50 duration-200"
         >
-          <div className="w-full sm:w-[380px] max-w-[400px] h-[82vh] sm:h-[600px] max-h-[660px] bg-white rounded-3xl shadow-2xl border border-zinc-200/90 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="w-full sm:w-[380px] max-w-[400px] h-[82vh] sm:h-[560px] max-h-[calc(100vh-140px)] bg-white rounded-3xl shadow-2xl border border-zinc-200/90 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="bg-zinc-950 text-white p-3.5 sm:p-4 flex items-center justify-between gap-3 border-b border-zinc-800">
               <div className="flex items-center gap-2.5 min-w-0">
