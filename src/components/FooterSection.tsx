@@ -300,123 +300,53 @@ Maxora Shop BD respects your personal privacy:
                   </div>
                 </div>
 
-                {/* Social Media Links (Facebook, Instagram, YouTube, TikTok) */}
-                <div className="pt-2 space-y-2">
-                  <span className="block text-[11px] text-zinc-400 uppercase font-bold tracking-wider">
-                    Follow Us
-                  </span>
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    {/* Facebook */}
-                    <a
-                      href={settings.facebook || 'https://facebook.com'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Follow us on Facebook"
-                      aria-label="Facebook"
-                      className="w-9 h-9 rounded-xl bg-[#1877F2]/15 hover:bg-[#1877F2] text-[#1877F2] hover:text-white border border-[#1877F2]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
-                    >
-                      <Facebook className="w-4 h-4" />
-                    </a>
-
-                    {/* Instagram */}
-                    <a
-                      href={settings.instagram || 'https://instagram.com'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Follow us on Instagram"
-                      aria-label="Instagram"
-                      className="w-9 h-9 rounded-xl bg-[#E4405F]/15 hover:bg-[#E4405F] text-[#E4405F] hover:text-white border border-[#E4405F]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
-                    >
-                      <Instagram className="w-4 h-4" />
-                    </a>
-
-                    {/* YouTube */}
-                    <a
-                      href={settings.youtube || 'https://youtube.com'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Subscribe on YouTube"
-                      aria-label="YouTube"
-                      className="w-9 h-9 rounded-xl bg-[#FF0000]/15 hover:bg-[#FF0000] text-[#FF0000] hover:text-white border border-[#FF0000]/30 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
-                    >
-                      <Youtube className="w-4 h-4" />
-                    </a>
-
-                    {/* TikTok */}
-                    <a
-                      href={settings.tiktok || 'https://tiktok.com'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Follow us on TikTok"
-                      aria-label="TikTok"
-                      className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-black text-zinc-300 hover:text-pink-400 border border-zinc-700/80 hover:border-pink-500/40 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-2xs cursor-pointer"
-                    >
-                      <Music2 className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* Bottom Copyright & Security */}
-          <div className="pt-8 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
-            <div className="flex items-center gap-2 order-2 lg:order-1">
-              <p className="font-medium text-center lg:text-left">
-                {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
-              </p>
-              <a
-                href="#admin"
-                title="Admin Control Panel"
-                className="opacity-40 hover:opacity-100 transition-opacity text-[10px] text-zinc-500 hover:text-emerald-400"
-              >
-                • Admin
-              </a>
-            </div>
-            <div className="order-1 lg:order-2 flex items-center flex-wrap justify-center lg:justify-end gap-x-2.5 sm:gap-x-3 gap-y-2 text-xs">
-              {/* We Accept label */}
+          {/* Middle Row: Payment Methods & Security Guarantees */}
+          <div className="py-6 border-b border-zinc-800/80 flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Left: We Accept + Payment Badges */}
+            <div className="flex items-center flex-wrap justify-center md:justify-start gap-x-3 gap-y-2">
               <span className="text-zinc-400 font-semibold text-xs tracking-tight">
                 {settings.footer_we_accept_text || "We Accept"}
               </span>
 
               {/* Nagad Official Logo Badge */}
               {settings.show_nagad_badge !== false && (
-                <>
-                  <div
-                    className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#EC1C24]/60 transition-colors select-none"
-                    title="Nagad (নগদ)"
-                    aria-label="Nagad"
-                  >
-                    <img
-                      src="/images/payments/nagad.svg"
-                      alt="Nagad"
-                      className="h-5 sm:h-5.5 w-auto object-contain max-w-[68px]"
-                      loading="lazy"
-                    />
-                  </div>
-                  <span className="text-zinc-700 select-none hidden sm:inline">|</span>
-                </>
+                <div
+                  className="inline-flex items-center px-2 py-1 bg-white rounded-lg border border-zinc-200/90 shadow-2xs hover:border-[#EC1C24]/60 transition-colors select-none"
+                  title="Nagad (নগদ)"
+                  aria-label="Nagad"
+                >
+                  <img
+                    src="/images/payments/nagad.svg"
+                    alt="Nagad"
+                    className="h-5 sm:h-5.5 w-auto object-contain max-w-[68px]"
+                    loading="lazy"
+                  />
+                </div>
               )}
 
               {/* bKash Official Logo Badge */}
               {settings.show_bkash_badge !== false && (
-                <>
-                  <div
-                    className="inline-flex items-center px-2 py-1 bg-white rounded-md border border-zinc-200/90 shadow-2xs hover:border-[#E2136E]/60 transition-colors select-none"
-                    title="bKash"
-                    aria-label="bKash"
-                  >
-                    <img
-                      src="/images/payments/bkash.svg"
-                      alt="bKash"
-                      className="h-5 sm:h-5.5 w-auto object-contain max-w-[72px]"
-                      loading="lazy"
-                    />
-                  </div>
-                  <span className="text-zinc-700 select-none hidden sm:inline">|</span>
-                </>
+                <div
+                  className="inline-flex items-center px-2 py-1 bg-white rounded-lg border border-zinc-200/90 shadow-2xs hover:border-[#E2136E]/60 transition-colors select-none"
+                  title="bKash"
+                  aria-label="bKash"
+                >
+                  <img
+                    src="/images/payments/bkash.svg"
+                    alt="bKash"
+                    className="h-5 sm:h-5.5 w-auto object-contain max-w-[72px]"
+                    loading="lazy"
+                  />
+                </div>
               )}
+            </div>
 
+            {/* Right: Security & Delivery Guarantees */}
+            <div className="flex items-center flex-wrap justify-center md:justify-end gap-x-4 gap-y-2 text-xs">
               {/* SSL Encrypted Checkout */}
               <span className="flex items-center gap-1.5 text-zinc-400 font-semibold whitespace-nowrap">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -430,6 +360,93 @@ Maxora Shop BD respects your personal privacy:
                 <CreditCard className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>{settings.footer_cod_text || "Cash on Delivery"}</span>
               </span>
+            </div>
+          </div>
+
+          {/* Bottom Bar: Copyright on Left & Social Media Icons on Bottom Right */}
+          <div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+            {/* Left: Copyright & Admin link */}
+            <div className="flex items-center gap-2 order-2 md:order-1 text-center md:text-left">
+              <p className="font-medium text-zinc-400">
+                {settings.footer_text || "© 2026 Maxora Shop BD. All Rights Reserved."}
+              </p>
+              <a
+                href="#admin"
+                title="Admin Control Panel"
+                className="opacity-40 hover:opacity-100 transition-opacity text-[10px] text-zinc-500 hover:text-emerald-400 select-none"
+              >
+                • Admin
+              </a>
+            </div>
+
+            {/* Right: Social Media Icons (দান পাশের নিচে) */}
+            <div className="order-1 md:order-2 flex items-center gap-3 flex-wrap justify-center md:justify-end">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">
+                Follow Us:
+              </span>
+              <div className="flex items-center gap-2">
+                {/* Facebook */}
+                <a
+                  href={settings.facebook || 'https://facebook.com'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Follow us on Facebook"
+                  aria-label="Facebook"
+                  className="w-8 h-8 rounded-xl bg-zinc-900 hover:bg-[#1877F2] text-zinc-400 hover:text-white border border-zinc-800 hover:border-[#1877F2]/50 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-2xs cursor-pointer"
+                >
+                  <Facebook className="w-4 h-4" />
+                </a>
+
+                {/* Instagram */}
+                <a
+                  href={settings.instagram || 'https://instagram.com'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Follow us on Instagram"
+                  aria-label="Instagram"
+                  className="w-8 h-8 rounded-xl bg-zinc-900 hover:bg-[#E4405F] text-zinc-400 hover:text-white border border-zinc-800 hover:border-[#E4405F]/50 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-2xs cursor-pointer"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+
+                {/* YouTube */}
+                <a
+                  href={settings.youtube || 'https://youtube.com'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Subscribe on YouTube"
+                  aria-label="YouTube"
+                  className="w-8 h-8 rounded-xl bg-zinc-900 hover:bg-[#FF0000] text-zinc-400 hover:text-white border border-zinc-800 hover:border-[#FF0000]/50 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-2xs cursor-pointer"
+                >
+                  <Youtube className="w-4 h-4" />
+                </a>
+
+                {/* TikTok */}
+                <a
+                  href={settings.tiktok || 'https://tiktok.com'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Follow us on TikTok"
+                  aria-label="TikTok"
+                  className="w-8 h-8 rounded-xl bg-zinc-900 hover:bg-black text-zinc-400 hover:text-pink-400 border border-zinc-800 hover:border-pink-500/40 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-2xs cursor-pointer"
+                >
+                  <Music2 className="w-4 h-4" />
+                </a>
+
+                {/* WhatsApp */}
+                {settings.whatsapp && (
+                  <a
+                    href={`https://wa.me/${settings.whatsapp.replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Chat on WhatsApp"
+                    aria-label="WhatsApp"
+                    className="w-8 h-8 rounded-xl bg-zinc-900 hover:bg-[#25D366] text-zinc-400 hover:text-white border border-zinc-800 hover:border-[#25D366]/50 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-2xs cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
