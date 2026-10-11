@@ -132,6 +132,69 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// ==========================================
+// REAL-TIME SERVER SYNC ENGINE
+// Instantly broadcasts separate admin panel updates to connected customer storefront clients
+// ==========================================
+const syncVersions = {
+  products: Date.now(),
+  settings: Date.now(),
+  categories: Date.now(),
+  orders: Date.now(),
+  reviews: Date.now(),
+};
+
+const sseClients = new Set<express.Response>();
+
+function broadcastSync(type: 'products' | 'settings' | 'categories' | 'orders' | 'reviews', extraData?: any) {
+  syncVersions[type] = Date.now();
+  const payload = JSON.stringify({ type, timestamp: syncVersions[type], data: extraData });
+  sseClients.forEach((client) => {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      sseClients.delete(client);
+    }
+  });
+}
+
+// SSE live sync endpoint for customer storefront
+app.get('/api/live-sync', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  sseClients.add(res);
+  res.write(`data: ${JSON.stringify({ type: 'connected', versions: syncVersions })}\n\n`);
+
+  // Heartbeat ping every 25s to keep connection alive
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(res);
+  });
+});
+
+// Lightweight version polling endpoint
+app.get('/api/sync-version', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.json({
+    success: true,
+    versions: syncVersions
+  });
+});
+
 // In-memory + file persistence DB
 const DB_FILE = path.join(process.cwd(), 'maxora_db.json');
 
@@ -693,8 +756,12 @@ app.get('/api/settings', async (req, res) => {
         if (fresh.live_sales_popup_enabled !== undefined) {
           fresh.live_sales_popup_enabled = Boolean(fresh.live_sales_popup_enabled);
         }
-        db.settings = { ...db.settings, ...fresh };
-        saveDB();
+        const fsTime = new Date(fresh.updated_at || 0).getTime();
+        const serverTime = new Date(db.settings.updated_at || 0).getTime();
+        if (fsTime >= serverTime) {
+          db.settings = { ...db.settings, ...fresh };
+          saveDB();
+        }
       }
     } catch (e) {
       handleFirestoreError('GET /api/settings sync', e);
@@ -725,8 +792,12 @@ app.get('/api/admin/settings', async (req, res) => {
         if (fresh.live_sales_popup_enabled !== undefined) {
           fresh.live_sales_popup_enabled = Boolean(fresh.live_sales_popup_enabled);
         }
-        db.settings = { ...db.settings, ...fresh };
-        saveDB();
+        const fsTime = new Date(fresh.updated_at || 0).getTime();
+        const serverTime = new Date(db.settings.updated_at || 0).getTime();
+        if (fsTime >= serverTime) {
+          db.settings = { ...db.settings, ...fresh };
+          saveDB();
+        }
       }
     } catch (e) {
       handleFirestoreError('GET /api/admin/settings sync', e);
@@ -750,12 +821,13 @@ app.get('/api/products', async (req, res) => {
       const firestoreDb = getFirestoreInstance();
       const snap = await getDocs(collection(firestoreDb, 'products'));
       if (!snap.empty) {
-        const fsList: any[] = [];
+        const fsMap = new Map<string, any>();
         snap.forEach((d) => {
           const raw = d.data() || {};
-          fsList.push({
+          const id = String(raw.id || d.id);
+          fsMap.set(id, {
             ...raw,
-            id: String(raw.id || d.id),
+            id,
             selling_price: Number(raw.selling_price || 0),
             discount: Number(raw.discount || 0),
             final_price: Math.max(0, Number(raw.selling_price || 0) - Number(raw.discount || 0)),
@@ -764,8 +836,30 @@ app.get('/api/products', async (req, res) => {
             images: Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : (raw.image_url ? [raw.image_url] : [])
           });
         });
-        db.products = fsList;
-        saveDB();
+
+        let hasChanges = false;
+        db.products = db.products.map((p) => {
+          const fsProd = fsMap.get(String(p.id));
+          if (!fsProd) return p;
+          const fsTime = new Date(fsProd.updated_at || fsProd.created_at || 0).getTime();
+          const serverTime = new Date(p.updated_at || p.created_at || 0).getTime();
+          if (fsTime > serverTime) {
+            hasChanges = true;
+            return fsProd;
+          }
+          return p;
+        });
+
+        fsMap.forEach((fsProd, id) => {
+          if (!db.products.some((p) => String(p.id) === id)) {
+            db.products.push(fsProd);
+            hasChanges = true;
+          }
+        });
+
+        if (hasChanges) {
+          saveDB();
+        }
       }
     } catch (e) {
       handleFirestoreError('GET /api/products sync', e);
@@ -2323,6 +2417,7 @@ app.post(['/api/admin/products', '/api/products'], requireAdmin, (req, res) => {
   }
   saveDB();
   invalidateSitemapCache();
+  broadcastSync('products');
 
   // Mirror to Cloud Firestore if quota is available
   if (!isFirestoreQuotaCooldownActive()) {
@@ -2421,6 +2516,7 @@ app.put(['/api/admin/products/:id', '/api/products/:id'], requireAdmin, (req, re
 
   saveDB();
   invalidateSitemapCache();
+  broadcastSync('products');
 
   // Mirror update to Cloud Firestore if quota is available
   if (!isFirestoreQuotaCooldownActive()) {
@@ -2455,6 +2551,7 @@ app.delete(['/api/admin/products/:id', '/api/products/:id'], requireAdmin, (req,
   );
   saveDB();
   invalidateSitemapCache();
+  broadcastSync('products');
 
   res.json({
     success: true,
@@ -2638,6 +2735,7 @@ app.put('/api/admin/orders/:id', requireAdmin, (req, res) => {
   }
 
   saveDB();
+  broadcastSync('orders');
   res.json({
     success: true,
     message: "Order updated successfully."
@@ -2654,10 +2752,392 @@ app.delete('/api/admin/orders/:id', requireAdmin, (req, res) => {
   db.orders = db.orders.filter(o => String(o.id) !== orderId && String(o.order_number) !== orderId);
   db.order_items = db.order_items.filter(i => !matchedIds.has(String(i.order_id)));
   saveDB();
+  broadcastSync('orders');
   res.json({
     success: true,
     message: "Order deleted successfully."
   });
+});
+
+// ==========================================
+// COURIER DELIVERY & AUTO-BOOKING ENGINE
+// Supports Steadfast (Auto API), Pathao (Auto API), and Manual/Custom couriers
+// ==========================================
+
+// POST /api/admin/courier/assign - Universal manual or custom courier assignment
+app.post('/api/admin/courier/assign', requireAdmin, (req, res) => {
+  const { orderId, courier_name, tracking_code, tracking_url, note, mark_shipped } = req.body || {};
+  const oId = String(orderId || '').trim();
+  const oIndex = db.orders.findIndex(o => String(o.id) === oId || String(o.order_number) === oId);
+  if (oIndex === -1) {
+    return res.status(404).json({ success: false, error: "Order not found." });
+  }
+
+  const existing = db.orders[oIndex];
+  const cName = String(courier_name || 'Courier').trim();
+  const trkCode = String(tracking_code || '').trim();
+  let trkUrl = String(tracking_url || '').trim();
+
+  // Auto-generate standard tracking URLs if not provided
+  if (!trkUrl && trkCode) {
+    const cLower = cName.toLowerCase();
+    if (cLower.includes('steadfast')) {
+      trkUrl = `https://steadfast.com.bd/t/${trkCode}`;
+    } else if (cLower.includes('pathao')) {
+      trkUrl = `https://pathao.com/courier/tracking/?consignment_id=${trkCode}`;
+    } else if (cLower.includes('redx')) {
+      trkUrl = `https://redx.com.bd/track/${trkCode}`;
+    } else if (cLower.includes('paperfly')) {
+      trkUrl = `https://paperfly.com.bd/tracking?tracking_id=${trkCode}`;
+    } else if (cLower.includes('ecourier')) {
+      trkUrl = `https://ecourier.com.bd/track/?ecr_tracking=${trkCode}`;
+    }
+  }
+
+  const newStatus = mark_shipped !== false ? 'Shipped' : existing.status;
+  const timestamp = new Date().toISOString();
+
+  const timelineNote = note || `Order dispatched via ${cName}${trkCode ? ` (Tracking: ${trkCode})` : ''}`;
+  const timelineEvent = {
+    status: newStatus,
+    timestamp,
+    note: timelineNote,
+    by: 'Admin / Courier System'
+  };
+
+  const updatedTimeline = Array.isArray(existing.timeline)
+    ? [...existing.timeline, timelineEvent]
+    : [timelineEvent];
+
+  db.orders[oIndex] = {
+    ...existing,
+    status: newStatus,
+    courier_name: cName,
+    courier_tracking_code: trkCode,
+    courier_tracking_url: trkUrl,
+    courier_assigned_at: timestamp,
+    timeline: updatedTimeline,
+    updated_at: timestamp
+  };
+
+  saveDB();
+  broadcastSync('orders');
+
+  // Mirror update to Firestore
+  if (!isFirestoreQuotaCooldownActive()) {
+    try {
+      const fDb = getFirestoreInstance();
+      setDoc(doc(fDb, 'orders', String(db.orders[oIndex].id)), cleanForFirestore(db.orders[oIndex]), { merge: true }).catch(() => {});
+    } catch {}
+  }
+
+  res.json({
+    success: true,
+    message: `Order successfully assigned to ${cName}.`,
+    order: db.orders[oIndex]
+  });
+});
+
+// POST /api/admin/courier/steadfast/book - 1-Click Auto Booking with Steadfast Courier API
+app.post('/api/admin/courier/steadfast/book', requireAdmin, async (req, res) => {
+  try {
+    const { orderId, apiKey, secretKey, codAmount, note } = req.body || {};
+    const oId = String(orderId || '').trim();
+    const oIndex = db.orders.findIndex(o => String(o.id) === oId || String(o.order_number) === oId);
+    if (oIndex === -1) {
+      return res.status(404).json({ success: false, error: "Order not found." });
+    }
+
+    const order = db.orders[oIndex];
+    const key = (apiKey || db.settings.steadfast_api_key || '').trim();
+    const secret = (secretKey || db.settings.steadfast_secret_key || '').trim();
+
+    if (!key || !secret) {
+      return res.status(400).json({
+        success: false,
+        error: "Steadfast API Key অথবা Secret Key সেট করা নেই। অ্যাডমিন সেটিংস থেকে দিন।"
+      });
+    }
+
+    const customerPhone = String(order.phone || order.customer_phone || '').replace(/[^0-9]/g, '');
+    if (!customerPhone || customerPhone.length < 10) {
+      return res.status(400).json({ success: false, error: "Valid recipient phone number is required for Steadfast booking." });
+    }
+
+    const recipientAddress = [
+      order.address,
+      order.area,
+      order.thana,
+      order.district
+    ].filter(Boolean).join(', ').trim() || 'Address not provided';
+
+    const invoiceNumber = String(order.order_number || order.id);
+    const amountToCollect = codAmount !== undefined ? Number(codAmount) : Number(order.total || order.total_amount || 0);
+
+    const steadfastPayload = {
+      invoice: invoiceNumber,
+      recipient_name: order.customer_name || 'Customer',
+      recipient_phone: customerPhone,
+      recipient_address: recipientAddress,
+      cod_amount: amountToCollect,
+      note: note || order.note || `Maxora Shop Order #${invoiceNumber}`
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const sfRes = await fetch('https://portal.steadfast.courier/api/v1/create_order', {
+      method: 'POST',
+      headers: {
+        'Api-Key': key,
+        'Secret-Key': secret,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(steadfastPayload),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timeout));
+
+    const sfData: any = await sfRes.json().catch(() => null);
+
+    if (!sfRes.ok || !sfData || (sfData.status !== 200 && sfData.status !== 201)) {
+      const errDetail = sfData?.message || sfData?.errors ? JSON.stringify(sfData.errors || sfData.message) : `HTTP ${sfRes.status}`;
+      return res.status(400).json({
+        success: false,
+        error: `Steadfast Booking Failed: ${errDetail}`,
+        response: sfData
+      });
+    }
+
+    const consignment = sfData.consignment || {};
+    const trkCode = String(consignment.tracking_code || consignment.consignment_id || '');
+    const consignmentId = consignment.consignment_id || trkCode;
+    const trkUrl = trkCode ? `https://steadfast.com.bd/t/${trkCode}` : `https://steadfast.com.bd/t/${consignmentId}`;
+
+    const timestamp = new Date().toISOString();
+    const timelineEvent = {
+      status: 'Shipped',
+      timestamp,
+      note: `Parcel booked with Steadfast Courier (Consignment: #${consignmentId}, Tracking: ${trkCode})`,
+      by: 'Steadfast Auto-API'
+    };
+
+    const updatedTimeline = Array.isArray(order.timeline)
+      ? [...order.timeline, timelineEvent]
+      : [timelineEvent];
+
+    db.orders[oIndex] = {
+      ...order,
+      status: 'Shipped',
+      courier_name: 'Steadfast',
+      courier_tracking_code: trkCode,
+      courier_consignment_id: consignmentId,
+      courier_tracking_url: trkUrl,
+      courier_status: consignment.status || 'in_review',
+      courier_assigned_at: timestamp,
+      courier_response: sfData,
+      timeline: updatedTimeline,
+      updated_at: timestamp
+    };
+
+    saveDB();
+    broadcastSync('orders');
+
+    // Mirror to Firestore
+    if (!isFirestoreQuotaCooldownActive()) {
+      try {
+        const fDb = getFirestoreInstance();
+        setDoc(doc(fDb, 'orders', String(db.orders[oIndex].id)), cleanForFirestore(db.orders[oIndex]), { merge: true }).catch(() => {});
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      message: `Steadfast-এ পার্সেল সফলভাবে বুক হয়েছে! ট্র্যাকিং কোড: ${trkCode}`,
+      consignment_id: consignmentId,
+      tracking_code: trkCode,
+      tracking_url: trkUrl,
+      order: db.orders[oIndex]
+    });
+  } catch (err: any) {
+    console.error('Steadfast booking error:', err);
+    return res.status(500).json({
+      success: false,
+      error: `Steadfast connection error: ${err.message || 'Network timeout'}`
+    });
+  }
+});
+
+// GET /api/admin/courier/steadfast/balance - Check Steadfast Merchant Balance
+app.get('/api/admin/courier/steadfast/balance', requireAdmin, async (req, res) => {
+  try {
+    const key = (req.query.apiKey as string || db.settings.steadfast_api_key || '').trim();
+    const secret = (req.query.secretKey as string || db.settings.steadfast_secret_key || '').trim();
+
+    if (!key || !secret) {
+      return res.status(400).json({ success: false, error: "Steadfast API Key & Secret Key are required." });
+    }
+
+    const sfRes = await fetch('https://portal.steadfast.courier/api/v1/get_balance', {
+      headers: {
+        'Api-Key': key,
+        'Secret-Key': secret
+      }
+    });
+
+    const data: any = await sfRes.json().catch(() => null);
+    if (!sfRes.ok || !data) {
+      return res.status(400).json({ success: false, error: data?.message || "Failed to fetch Steadfast balance." });
+    }
+
+    return res.json({
+      success: true,
+      current_balance: data.current_balance ?? data.balance ?? 0
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/courier/pathao/book - 1-Click Auto Booking with Pathao Courier API
+app.post('/api/admin/courier/pathao/book', requireAdmin, async (req, res) => {
+  try {
+    const { orderId, clientId, clientSecret, username, password, storeId, codAmount, note } = req.body || {};
+    const oId = String(orderId || '').trim();
+    const oIndex = db.orders.findIndex(o => String(o.id) === oId || String(o.order_number) === oId);
+    if (oIndex === -1) {
+      return res.status(404).json({ success: false, error: "Order not found." });
+    }
+
+    const order = db.orders[oIndex];
+    const cId = (clientId || db.settings.pathao_client_id || '').trim();
+    const cSecret = (clientSecret || db.settings.pathao_client_secret || '').trim();
+    const uName = (username || db.settings.pathao_username || '').trim();
+    const uPass = (password || db.settings.pathao_password || '').trim();
+    const sId = Number(storeId || db.settings.pathao_store_id || 1);
+
+    if (!cId || !cSecret || !uName || !uPass) {
+      return res.status(400).json({
+        success: false,
+        error: "Pathao Client ID, Client Secret, Username এবং Password প্রদান করুন।"
+      });
+    }
+
+    // Step 1: Issue Pathao Token
+    const authRes = await fetch('https://api-hermes.pathao.com/aladdin/api/v1/issue-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: cId,
+        client_secret: cSecret,
+        username: uName,
+        password: uPass,
+        grant_type: 'password'
+      })
+    });
+
+    const authData: any = await authRes.json().catch(() => null);
+    if (!authRes.ok || !authData?.access_token) {
+      return res.status(400).json({
+        success: false,
+        error: `Pathao Authentication Failed: ${authData?.message || authData?.error || 'Invalid credentials'}`
+      });
+    }
+
+    const accessToken = authData.access_token;
+
+    // Step 2: Create Pathao Order
+    const recipientPhone = String(order.phone || order.customer_phone || '').replace(/[^0-9]/g, '');
+    const amountToCollect = codAmount !== undefined ? Number(codAmount) : Number(order.total || order.total_amount || 0);
+
+    const pathaoOrderPayload = {
+      store_id: sId,
+      merchant_order_id: String(order.order_number || order.id),
+      recipient_name: order.customer_name || 'Customer',
+      recipient_phone: recipientPhone,
+      recipient_address: [order.address, order.area, order.thana, order.district].filter(Boolean).join(', '),
+      recipient_city: 1, // Default Dhaka
+      recipient_zone: 1,
+      delivery_type: 48,
+      item_type: 2,
+      special_instruction: note || order.note || 'Handle with care',
+      item_quantity: (order.items && order.items.length) || 1,
+      item_weight: 0.5,
+      amount_to_collect: amountToCollect
+    };
+
+    const orderRes = await fetch('https://api-hermes.pathao.com/aladdin/api/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(pathaoOrderPayload)
+    });
+
+    const orderData: any = await orderRes.json().catch(() => null);
+
+    if (!orderRes.ok || !orderData?.data?.consignment_id) {
+      return res.status(400).json({
+        success: false,
+        error: `Pathao Order Creation Failed: ${orderData?.message || JSON.stringify(orderData?.errors || orderData)}`
+      });
+    }
+
+    const consignmentId = String(orderData.data.consignment_id);
+    const trkUrl = `https://pathao.com/courier/tracking/?consignment_id=${consignmentId}`;
+    const timestamp = new Date().toISOString();
+
+    const timelineEvent = {
+      status: 'Shipped',
+      timestamp,
+      note: `Parcel booked with Pathao Courier (Consignment: #${consignmentId})`,
+      by: 'Pathao Auto-API'
+    };
+
+    const updatedTimeline = Array.isArray(order.timeline)
+      ? [...order.timeline, timelineEvent]
+      : [timelineEvent];
+
+    db.orders[oIndex] = {
+      ...order,
+      status: 'Shipped',
+      courier_name: 'Pathao',
+      courier_tracking_code: consignmentId,
+      courier_consignment_id: consignmentId,
+      courier_tracking_url: trkUrl,
+      courier_status: orderData.data.order_status || 'Pending',
+      courier_assigned_at: timestamp,
+      courier_response: orderData,
+      timeline: updatedTimeline,
+      updated_at: timestamp
+    };
+
+    saveDB();
+    broadcastSync('orders');
+
+    // Mirror to Firestore
+    if (!isFirestoreQuotaCooldownActive()) {
+      try {
+        const fDb = getFirestoreInstance();
+        setDoc(doc(fDb, 'orders', String(db.orders[oIndex].id)), cleanForFirestore(db.orders[oIndex]), { merge: true }).catch(() => {});
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      message: `Pathao-তে পার্সেল সফলভাবে বুক হয়েছে! কনসাইনমেন্ট আইডি: ${consignmentId}`,
+      consignment_id: consignmentId,
+      tracking_code: consignmentId,
+      tracking_url: trkUrl,
+      order: db.orders[oIndex]
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET /api/admin/customers
@@ -2778,6 +3258,7 @@ const handleSaveSettingsRoute = async (req: express.Request, res: express.Respon
     updated_at: new Date().toISOString()
   };
   saveDB();
+  broadcastSync('settings', db.settings);
 
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -2837,6 +3318,7 @@ const handleSaveCategoryEndpoint = (req: express.Request, res: express.Response)
     db.categories.push(formattedCat);
   }
   saveDB();
+  broadcastSync('categories');
   res.json({ success: true, category: formattedCat });
 };
 
@@ -2852,6 +3334,7 @@ const handleDeleteCategoryEndpoint = (req: express.Request, res: express.Respons
   if (!db.categories) db.categories = [...defaultCategories];
   db.categories = db.categories.filter(c => String(c.id) !== catId && c.slug !== catId);
   saveDB();
+  broadcastSync('categories');
   res.json({ success: true, message: "Category deleted" });
 };
 
@@ -2899,6 +3382,7 @@ const handleSaveSubCategoryEndpoint = (req: express.Request, res: express.Respon
     db.subcategories.push(formattedSub);
   }
   saveDB();
+  broadcastSync('categories');
   res.json({ success: true, subcategory: formattedSub });
 };
 
@@ -2914,6 +3398,7 @@ const handleDeleteSubCategoryEndpoint = (req: express.Request, res: express.Resp
   if (!db.subcategories) db.subcategories = [...defaultSubCategories];
   db.subcategories = db.subcategories.filter(s => String(s.id) !== subId && s.slug !== subId);
   saveDB();
+  broadcastSync('categories');
   res.json({ success: true, message: "Subcategory deleted" });
 };
 

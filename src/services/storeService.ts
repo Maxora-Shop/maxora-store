@@ -684,7 +684,7 @@ async function tryApi<T>(url: string, options?: RequestInit & { timeoutMs?: numb
 }
 
 // Guaranteed Firestore products query that times out after timeoutMs rather than hanging indefinitely
-async function fetchFirestoreProductsWithTimeout(timeoutMs = 12000): Promise<{ data: any; id: string }[]> {
+async function fetchFirestoreProductsWithTimeout(timeoutMs = 2000): Promise<{ data: any; id: string }[]> {
   let timer: any;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -1066,41 +1066,29 @@ export const storeService = {
     }
     updated.updated_at = new Date().toISOString();
 
-    // 1. PRIMARY & AUTHORITATIVE WRITE: Cloud Firestore FIRST (Awaited with verification)
-    try {
-      await setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true });
-      clearFirestoreCooldown();
-    } catch (fsErr: any) {
-      console.error('CRITICAL: Firestore settings write failed:', fsErr);
-      throw new Error(`Failed to save settings to Firestore: ${fsErr?.message || 'Database write error'}`);
-    }
-
-    // 2. Read-back verification from Firestore
-    try {
-      const verifySnap = await getDoc(doc(db, 'settings', 'store_settings'));
-      if (verifySnap.exists()) {
-        const verified = verifySnap.data() as StoreSettings;
-        if (updated.free_delivery_enabled !== undefined && verified.free_delivery_enabled !== updated.free_delivery_enabled) {
-          console.warn('Firestore read-back mismatch for free_delivery_enabled');
-        }
-      }
-    } catch (e) {}
-
-    // 3. Update local cache
+    // 1. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
     setLocal(SETTINGS_KEY, updated);
-
-    // 4. Secondary mirror: Persist to Server REST API
-    try {
-      await tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
-        method: 'PUT',
-        headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify(updated),
-      });
-    } catch (e) {
-      console.warn('Server settings mirror note:', e);
-    }
-
     notifySettingsChanged(updated);
+
+    // 2. Persist to Server REST API
+    tryApi<{ success: boolean; settings?: StoreSettings }>('/api/admin/settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(updated),
+    }).catch(() => {});
+    tryApi<{ success: boolean; settings?: StoreSettings }>('/api/settings', {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(updated),
+    }).catch(() => {});
+
+    // 3. Mirror to Cloud Firestore safely in background without blocking or throwing on quota limits
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'settings', 'store_settings'), cleanForFirestore(updated), { merge: true }),
+      2500,
+      'updateSettings'
+    );
+
     return { success: true, settings: updated };
   },
 
@@ -1161,17 +1149,25 @@ export const storeService = {
         prodMap.set(mapped.id, mapped);
       } else {
         const existing = prodMap.get(mapped.id)!;
-        if (isLocal || new Date(mapped.updated_at || 0).getTime() > new Date(existing.updated_at || 0).getTime()) {
+        const incomingTime = new Date(mapped.updated_at || mapped.created_at || 0).getTime();
+        const existingTime = new Date(existing.updated_at || existing.created_at || 0).getTime();
+        if (isLocal || incomingTime > existingTime) {
           prodMap.set(mapped.id, mapped);
         }
       }
     };
 
-    // 1. PRIMARY & AUTHORITATIVE: Fetch directly from Cloud Firestore
+    // 1. OPTIMISTIC & ZERO-LATENCY: Populate local storage products first
+    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (Array.isArray(local) && local.length > 0) {
+      local.forEach((p) => registerProduct(p, undefined, true));
+    }
+
+    // 2. PRIMARY CLOUD: Fetch directly from Cloud Firestore if available (short 2000ms timeout)
     let firestoreLoaded = false;
     if (!isClientQuotaCooldownActive()) {
       try {
-        const snapDocs = await fetchFirestoreProductsWithTimeout(12000);
+        const snapDocs = await fetchFirestoreProductsWithTimeout(2000);
         if (snapDocs && snapDocs.length > 0) {
           snapDocs.forEach((d) => registerProduct(d.data, d.id));
           firestoreLoaded = true;
@@ -1181,22 +1177,16 @@ export const storeService = {
       }
     }
 
-    // 2. SECONDARY (only if Firestore query returned 0 products or was unreachable):
+    // 3. SECONDARY: Fall back to Server REST API
     if (!firestoreLoaded || prodMap.size === 0) {
       try {
-        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 3500 });
+        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 2500 });
         if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
           apiRes.data.products.forEach((item) => registerProduct(item));
         }
       } catch (e) {
         console.warn('API getProducts fallback notice:', e);
       }
-    }
-
-    // 3. ALWAYS MERGE LOCAL PRODUCTS (ensures freshly uploaded products from admin or offline items are NEVER dropped):
-    const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-    if (Array.isArray(local) && local.length > 0) {
-      local.forEach((p) => registerProduct(p, undefined, true));
     }
 
     const prods = Array.from(prodMap.values());
@@ -1433,57 +1423,11 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write
-    let firestorePersisted = false;
-    try {
-      await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
-      firestorePersisted = true;
-      clearFirestoreCooldown();
-    } catch (e: any) {
-      console.warn('Direct Firestore save product note:', e);
-      try {
-        await new Promise((r) => setTimeout(r, 600));
-        await setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true });
-        firestorePersisted = true;
-        clearFirestoreCooldown();
-      } catch (retryErr) {
-        console.error('Firestore save product retry error:', retryErr);
-      }
-    }
-
-    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
-    let apiPersisted = false;
-    try {
-      const apiRes = await tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
-        method: 'POST',
-        headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify(newProd),
-      });
-      if (apiRes.success) {
-        apiPersisted = true;
-      }
-    } catch (e) {
-      console.warn('Backend API addProduct notice:', e);
-    }
-
-    if (!apiPersisted) {
-      try {
-        const fallbackRes = await tryApi<{ success: boolean; product?: Product }>('/api/products', {
-          method: 'POST',
-          headers: getAuthHeaders(adminPassword),
-          body: JSON.stringify(newProd),
-        });
-        if (fallbackRes.success) {
-          apiPersisted = true;
-        }
-      } catch {}
-    }
-
-    // 3. Unmark from deleted products registry so newly added product is never filtered out
+    // 1. Unmark from deleted products registry so newly added product is active
     unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
 
-    // 4. Update local cache
-    const existingIdx = local.findIndex(p => String(p.id) === String(newProd.id));
+    // 2. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
+    const existingIdx = local.findIndex((p) => String(p.id) === String(newProd.id));
     if (existingIdx >= 0) {
       local[existingIdx] = newProd;
     } else {
@@ -1492,9 +1436,24 @@ export const storeService = {
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
 
-    if (!firestorePersisted && !apiPersisted) {
-      console.warn('[StoreService] Product saved locally, but database sync encountered a network issue. Retrying in background...');
-    }
+    // 3. Authoritative Backend Server API persistence
+    tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newProd),
+    }).catch(() => {});
+    tryApi<{ success: boolean; product?: Product }>('/api/products', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(newProd),
+    }).catch(() => {});
+
+    // 4. Mirror to Cloud Firestore safely in background without blocking
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true }),
+      2500,
+      'addProduct'
+    );
 
     return { success: true, product: newProd };
   },
@@ -1529,56 +1488,10 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore write
-    let firestorePersisted = false;
-    try {
-      await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
-      firestorePersisted = true;
-      clearFirestoreCooldown();
-    } catch (e: any) {
-      console.warn('Direct Firestore update product note:', e);
-      try {
-        await new Promise((r) => setTimeout(r, 600));
-        await setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true });
-        firestorePersisted = true;
-        clearFirestoreCooldown();
-      } catch (retryErr) {
-        console.error('Firestore update product retry error:', retryErr);
-      }
-    }
-
-    // 2. Authoritative Backend Server API persistence (Serverless Vercel Edge / Node backend)
-    let apiPersisted = false;
-    try {
-      const apiRes = await tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${idStr}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(adminPassword),
-        body: JSON.stringify(updated),
-      });
-      if (apiRes.success) {
-        apiPersisted = true;
-      }
-    } catch (e) {
-      console.warn('Backend API updateProduct notice:', e);
-    }
-
-    if (!apiPersisted) {
-      try {
-        const fallbackRes = await tryApi<{ success: boolean; product?: Product }>(`/api/products?id=${encodeURIComponent(idStr)}`, {
-          method: 'PUT',
-          headers: getAuthHeaders(adminPassword),
-          body: JSON.stringify(updated),
-        });
-        if (fallbackRes.success) {
-          apiPersisted = true;
-        }
-      } catch {}
-    }
-
-    // 3. Unmark from deleted products registry so updated product is never filtered out
+    // 1. Unmark from deleted products registry so updated product is active
     unmarkProductDeleted(updated.id, updated.sku, updated.slug);
 
-    // 4. Update local cache
+    // 2. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
     if (index !== -1) {
       local[index] = updated;
     } else {
@@ -1587,9 +1500,24 @@ export const storeService = {
     setLocal(PRODUCTS_KEY, local);
     notifyProductsChanged();
 
-    if (!firestorePersisted && !apiPersisted) {
-      console.warn('[StoreService] Product updated locally, but database sync encountered a network issue. Retrying in background...');
-    }
+    // 3. Authoritative Backend Server API persistence
+    tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${encodeURIComponent(idStr)}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(updated),
+    }).catch(() => {});
+    tryApi<{ success: boolean; product?: Product }>(`/api/products?id=${encodeURIComponent(idStr)}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(updated),
+    }).catch(() => {});
+
+    // 4. Mirror to Cloud Firestore safely in background without blocking
+    safeFirestoreWrite(
+      () => setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true }),
+      2500,
+      'updateProduct'
+    );
 
     return { success: true, product: updated };
   },
@@ -1608,58 +1536,13 @@ export const storeService = {
     const target = local.find((p) => String(p.id) === idStr || p.sku === idStr || p.slug === idStr);
     const targetDocId = target?.id ? String(target.id) : idStr;
 
-    // 1. Direct Cloud Firestore delete (PRIMARY & AUTHORITATIVE - must succeed)
-    try {
-      await deleteDoc(doc(db, 'products', targetDocId));
-      if (idStr !== targetDocId) {
-        await deleteDoc(doc(db, 'products', idStr)).catch(() => {});
-      }
-      clearFirestoreCooldown();
-    } catch (e: any) {
-      console.error('Direct Firestore delete product error:', e);
-      throw new Error(`Firestore delete failed: ${e?.message || 'Database write error'}`);
+    // 1. Mark as deleted in registry so all views/queries exclude it immediately
+    markProductDeleted(idStr, target?.sku, target?.slug);
+    if (targetDocId && targetDocId !== idStr) {
+      markProductDeleted(targetDocId);
     }
 
-    // 2. Read-back verification: verify doc is removed from Firestore
-    try {
-      const verifySnap = await getDoc(doc(db, 'products', targetDocId));
-      if (verifySnap.exists()) {
-        throw new Error('Product still exists in Firestore after delete operation');
-      }
-    } catch (verErr: any) {
-      if (verErr.message?.includes('still exists')) throw verErr;
-    }
-
-    // 3. Create tombstone record in Firestore deleted_products so all clients ignore it
-    try {
-      await setDoc(doc(db, 'deleted_products', targetDocId), {
-        id: targetDocId,
-        sku: target?.sku || '',
-        slug: target?.slug || '',
-        deleted: true,
-        deleted_at: new Date().toISOString(),
-      }, { merge: true });
-    } catch (e) {
-      console.warn('Tombstone deleted_products note:', e);
-    }
-
-    // 4. Authoritative Backend Server API delete
-    try {
-      await tryApi(`/api/admin/products/${targetDocId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(adminPassword),
-      });
-      if (idStr !== targetDocId) {
-        await tryApi(`/api/admin/products/${idStr}`, {
-          method: 'DELETE',
-          headers: getAuthHeaders(adminPassword),
-        }).catch(() => {});
-      }
-    } catch (e) {
-      console.warn('Backend API deleteProduct notice:', e);
-    }
-
-    // 5. Update local cache
+    // 2. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
     const filtered = local.filter((p) => {
       const pId = String(p.id || '').trim();
       const pSku = String(p.sku || '').trim();
@@ -1668,6 +1551,33 @@ export const storeService = {
     });
     setLocal(PRODUCTS_KEY, filtered);
     notifyProductsChanged();
+
+    // 3. Authoritative Backend Server API delete
+    tryApi(`/api/admin/products/${encodeURIComponent(targetDocId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(adminPassword),
+    }).catch(() => {});
+    if (idStr !== targetDocId) {
+      tryApi(`/api/admin/products/${encodeURIComponent(idStr)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(adminPassword),
+      }).catch(() => {});
+    }
+
+    // 4. Safe Cloud Firestore delete in background without blocking
+    safeFirestoreWrite(async () => {
+      await deleteDoc(doc(db, 'products', targetDocId));
+      if (idStr !== targetDocId) {
+        await deleteDoc(doc(db, 'products', idStr)).catch(() => {});
+      }
+      await setDoc(doc(db, 'deleted_products', targetDocId), {
+        id: targetDocId,
+        sku: target?.sku || '',
+        slug: target?.slug || '',
+        deleted: true,
+        deleted_at: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+    }, 2500, 'deleteProduct');
 
     return { success: true };
   },
@@ -2320,6 +2230,151 @@ export const storeService = {
 
   async updateOrderDetails(orderData: Partial<Order> & { id: string | number }, adminPassword?: string): Promise<{ success: boolean }> {
     return this.updateOrder(orderData, adminPassword);
+  },
+
+  async assignOrderCourier(
+    payload: {
+      orderId: string | number;
+      courier_name: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      note?: string;
+      mark_shipped?: boolean;
+    },
+    adminPassword?: string
+  ): Promise<{ success: boolean; order?: Order; message?: string }> {
+    const res = await tryApi<{ success: boolean; order?: Order; message?: string }>('/api/admin/courier/assign', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(payload),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === String(payload.orderId) || String(o.order_number) === String(payload.orderId));
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return { success: true, order: res.data.order, message: res.data.message };
+    }
+
+    // Fallback: local update if server call failed
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const idx = orders.findIndex(o => String(o.id) === String(payload.orderId) || String(o.order_number) === String(payload.orderId));
+    if (idx !== -1) {
+      orders[idx] = {
+        ...orders[idx],
+        status: payload.mark_shipped !== false ? 'Shipped' : orders[idx].status,
+        courier_name: payload.courier_name,
+        courier_tracking_code: payload.tracking_code,
+        courier_tracking_url: payload.tracking_url,
+        updated_at: new Date().toISOString()
+      };
+      setLocal(ORDERS_KEY, orders);
+      notifyOrdersChanged();
+      return { success: true, order: orders[idx] };
+    }
+
+    return { success: false, message: res.error || 'Failed to assign courier' };
+  },
+
+  async bookSteadfastCourier(
+    orderId: string | number,
+    options?: { apiKey?: string; secretKey?: string; codAmount?: number; note?: string },
+    adminPassword?: string
+  ): Promise<{ success: boolean; message?: string; tracking_code?: string; tracking_url?: string; consignment_id?: any; order?: Order }> {
+    const res = await tryApi<{
+      success: boolean;
+      message?: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      consignment_id?: any;
+      order?: Order;
+      error?: string;
+    }>('/api/admin/courier/steadfast/book', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify({ orderId, ...options }),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return {
+        success: true,
+        message: res.data.message,
+        tracking_code: res.data.tracking_code,
+        tracking_url: res.data.tracking_url,
+        consignment_id: res.data.consignment_id,
+        order: res.data.order,
+      };
+    }
+
+    return {
+      success: false,
+      message: res.error || (res.data as any)?.error || 'Steadfast booking failed',
+    };
+  },
+
+  async getSteadfastBalance(apiKey?: string, secretKey?: string, adminPassword?: string): Promise<{ success: boolean; current_balance?: number; error?: string }> {
+    const q = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}&secretKey=${encodeURIComponent(secretKey || '')}` : '';
+    const res = await tryApi<{ success: boolean; current_balance: number; error?: string }>(`/api/admin/courier/steadfast/balance${q}`, {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (res.success && res.data) {
+      return { success: true, current_balance: res.data.current_balance };
+    }
+    return { success: false, error: res.error || 'Failed to fetch balance' };
+  },
+
+  async bookPathaoCourier(
+    orderId: string | number,
+    options?: { clientId?: string; clientSecret?: string; username?: string; password?: string; storeId?: string | number; codAmount?: number; note?: string },
+    adminPassword?: string
+  ): Promise<{ success: boolean; message?: string; tracking_code?: string; tracking_url?: string; consignment_id?: any; order?: Order }> {
+    const res = await tryApi<{
+      success: boolean;
+      message?: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      consignment_id?: any;
+      order?: Order;
+      error?: string;
+    }>('/api/admin/courier/pathao/book', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify({ orderId, ...options }),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return {
+        success: true,
+        message: res.data.message,
+        tracking_code: res.data.tracking_code,
+        tracking_url: res.data.tracking_url,
+        consignment_id: res.data.consignment_id,
+        order: res.data.order,
+      };
+    }
+
+    return {
+      success: false,
+      message: res.error || (res.data as any)?.error || 'Pathao booking failed',
+    };
   },
 
   async deleteOrder(orderId: string | number, adminPassword?: string): Promise<{ success: boolean }> {

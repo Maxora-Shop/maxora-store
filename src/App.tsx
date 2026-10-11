@@ -66,18 +66,6 @@ import {
 } from './utils/taxonomy';
 
 export default function App() {
-  // Clear any residual admin session flags on customer storefront
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.removeItem('maxora_admin_view_active');
-        if (window.location.hash === '#admin') {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-      } catch {}
-    }
-  }, []);
-
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(() => {
     return typeof window !== 'undefined' ? storeService.getCachedSettings() : INITIAL_SETTINGS;
@@ -220,14 +208,6 @@ export default function App() {
       const path = window.location.pathname;
       const hash = window.location.hash;
       const search = window.location.search;
-
-      // Clean up any stray admin hash or path on customer site
-      if (path.startsWith('/admin') || hash === '#admin') {
-        try {
-          sessionStorage.removeItem('maxora_admin_view_active');
-          window.history.replaceState(null, '', '/');
-        } catch {}
-      }
 
       // Product check: /product/:slug or legacy #product-:slug
       let productSlug: string | null = null;
@@ -389,6 +369,7 @@ export default function App() {
         // Prevent full browser document reload
         e.preventDefault();
 
+
         // If clicking product link directly, open product in SPA
         if (internalPath.startsWith('/product/')) {
           const rawSlug = internalPath.replace('/product/', '').replace(/\/$/, '').trim();
@@ -546,6 +527,8 @@ export default function App() {
       if (e?.detail) {
         setSettings(e.detail);
       } else {
+        const cached = storeService.getCachedSettings();
+        if (cached) setSettings(cached);
         fetchSettings();
       }
     };
@@ -652,22 +635,8 @@ export default function App() {
     try {
       const data = await storeService.getProducts();
       if (productFetchRequestIdRef.current === requestId) {
-        if (Array.isArray(data) && data.length > 0) {
-          setProducts((prev) => {
-            // Guard against stale background downgrade:
-            // If current in-memory products has more items than incoming data (e.g. 30 vs 29),
-            // preserve any valid existing items that are not in the new response.
-            if (prev.length > data.length) {
-              const dataIds = new Set(data.map((p) => String(p.id)));
-              const missing = prev.filter((p) => !dataIds.has(String(p.id)));
-              if (missing.length > 0) {
-                const merged = [...data, ...missing];
-                merged.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-                return merged;
-              }
-            }
-            return data;
-          });
+        if (Array.isArray(data)) {
+          setProducts(data);
           setProductLoadError(null);
         }
       }
@@ -1436,6 +1405,7 @@ export default function App() {
   };
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col selection:bg-zinc-900 selection:text-white pb-20 sm:pb-0">
