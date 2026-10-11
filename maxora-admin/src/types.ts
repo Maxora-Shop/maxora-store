@@ -220,6 +220,14 @@ export interface Order {
   updated_at?: string;
   items?: OrderItem[];
   timeline?: OrderTimelineEvent[];
+  // Courier Delivery & Auto-Booking Integration
+  courier_name?: string;
+  courier_tracking_code?: string;
+  courier_tracking_url?: string;
+  courier_consignment_id?: string | number;
+  courier_status?: string;
+  courier_assigned_at?: string;
+  courier_response?: any;
 }
 
 export interface HeroBanner {
@@ -362,6 +370,19 @@ export interface StoreSettings {
   footer_cod_text?: string;
   show_nagad_badge?: boolean;
   show_bkash_badge?: boolean;
+  // Courier API & Delivery Configuration
+  courier_default?: string;
+  courier_custom_list?: string[];
+  steadfast_enabled?: boolean;
+  steadfast_api_key?: string;
+  steadfast_secret_key?: string;
+  pathao_enabled?: boolean;
+  pathao_client_id?: string;
+  pathao_client_secret?: string;
+  pathao_username?: string;
+  pathao_password?: string;
+  pathao_store_id?: string;
+  redx_enabled?: boolean;
   updated_at?: string;
 }
 

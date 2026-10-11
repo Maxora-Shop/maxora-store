@@ -214,7 +214,7 @@ export const AssignCourierModal: React.FC<AssignCourierModalProps> = ({
   const hasAssignedCourier = Boolean(order.courier_name || order.courier_tracking_code);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-3xl shadow-2xl border border-zinc-200 max-w-2xl w-full overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-5 text-white flex items-start justify-between">

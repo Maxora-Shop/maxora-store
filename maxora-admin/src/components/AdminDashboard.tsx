@@ -119,6 +119,7 @@ import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminOrderAnalytics } from './AdminOrderAnalytics';
 import { OrderJourneyModal } from './OrderJourneyModal';
+import { AssignCourierModal } from './AssignCourierModal';
 import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
 import { AdminBanners } from './AdminBanners';
@@ -1266,7 +1267,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing' | 'security'>('general');
+  const [settingsSubTab, setSettingsSubTab] = useState<'general' | 'categories' | 'marketing' | 'security' | 'courier'>('general');
   const [isCategoryEditModalOpen, setIsCategoryEditModalOpen] = useState(false);
   const [categoryToEdit, setCategoryToEdit] = useState<Partial<Category> | null>(null);
   const [isSavingCategory, setIsSavingCategory] = useState(false);
@@ -1279,6 +1280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
+  const [selectedOrderForCourier, setSelectedOrderForCourier] = useState<Order | null>(null);
 
   // Check auth on load: tab-scoped session persistence + Firebase onAuthStateChanged
   useEffect(() => {
@@ -2313,6 +2315,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast(`Order status changed to ${newStatus}`, 'success');
       loadOrders();
       if (currentTab === 'overview') loadOverview();
+
+      // If changed to Shipped or Processing and courier is not assigned yet, open Courier dispatch modal immediately
+      if (newStatus === 'Shipped' || newStatus === 'Processing') {
+        const targetOrder = orders.find((o) => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+        if (targetOrder && !targetOrder.courier_name && !targetOrder.courier_tracking_code) {
+          setSelectedOrderForCourier({ ...targetOrder, status: newStatus });
+        }
+      }
     } catch (err: any) {
       showToast('Failed to update status: ' + err.message, 'error');
     }
@@ -4653,6 +4663,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="py-3 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button
+                                onClick={() => setSelectedOrderForCourier(ord)}
+                                title="কুরিয়ার বুকিং বা অ্যাসাইন করুন"
+                                className="text-[11px] font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 px-2 py-1 rounded-md cursor-pointer flex items-center gap-1 shadow-2xs"
+                              >
+                                <Truck className="w-3 h-3" />
+                                <span>কুরিয়ার</span>
+                              </button>
+                              <button
                                 onClick={() => handleOpenEditOrderModal(ord)}
                                 className="text-xs font-bold text-zinc-700 hover:text-zinc-950 px-2 py-1 hover:bg-zinc-100 rounded-md cursor-pointer"
                               >
@@ -5982,6 +6000,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span>Clear Filters</span>
                         </button>
                       )}
+
+                      {/* Refresh Orders Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          loadOrders();
+                          showToast('নতুন অর্ডার তালিকা রিলোড করা হয়েছে!', 'success');
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
+                        title="রিয়েল-টাইম ডাটাবেজ থেকে নতুন অর্ডার রিলোড করুন"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                        <span>🔄 Refresh Orders</span>
+                      </button>
                     </div>
                   </div>
 
@@ -5997,6 +6029,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <th className="p-4">Ordered Products</th>
                             <th className="p-4">Total Amount</th>
                             <th className="p-4">Status & Order Journey</th>
+                            <th className="p-4 text-center">🚚 Courier (কুরিয়ার)</th>
                             <th className="p-4 text-right">Actions</th>
                           </tr>
                         </thead>
@@ -6231,9 +6264,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </div>
                                 </td>
 
+                                {/* 6.5 Dedicated Courier Column */}
+                                <td className="p-4 text-center">
+                                  {ord.courier_name || ord.courier_tracking_code ? (
+                                    <div className="inline-flex flex-col items-center gap-1">
+                                      <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 font-extrabold text-xs border border-emerald-200 flex items-center gap-1 shadow-2xs">
+                                        <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>{ord.courier_name || 'Assigned'}</span>
+                                      </span>
+                                      {ord.courier_tracking_code && (
+                                        <span className="text-[10px] font-mono font-bold text-zinc-600 block">
+                                          #{ord.courier_tracking_code}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedOrderForCourier(ord)}
+                                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-950 underline cursor-pointer"
+                                      >
+                                        পরিবর্তন
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForCourier(ord)}
+                                      title="Steadfast / Pathao / ম্যানুয়াল কুরিয়ারে বুক করুন"
+                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 mx-auto ring-2 ring-emerald-500/20"
+                                    >
+                                      <Truck className="w-3.5 h-3.5 text-emerald-100" />
+                                      <span>🚀 কুরিয়ারে পাঠান</span>
+                                    </button>
+                                  )}
+                                </td>
+
                                 {/* 7. Actions */}
                                 <td className="p-4 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForCourier(ord)}
+                                      title="Assign Courier or 1-Click Auto Booking (Steadfast / Pathao / Other)"
+                                      className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+                                    >
+                                      <Truck className="w-3.5 h-3.5 text-emerald-100" />
+                                      <span>{ord.courier_name ? `🚚 ${ord.courier_name}` : '🚚 কুরিয়ার'}</span>
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => setSelectedOrderForJourney(ord)}
@@ -6273,7 +6349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           })}
                           {filteredOrders.length === 0 && (
                             <tr>
-                              <td colSpan={7} className="p-12 text-center text-zinc-400">
+                              <td colSpan={8} className="p-12 text-center text-zinc-400">
                                 <ShoppingBag className="w-10 h-10 mx-auto text-zinc-300 mb-2" />
                                 <div className="font-bold text-zinc-600 text-sm">No orders found</div>
                                 <p className="text-xs text-zinc-400 mt-1">
@@ -6538,6 +6614,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 >
                   <Megaphone className="w-3.5 h-3.5 text-blue-600" />
                   Marketing & Pixels
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsSubTab('courier')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    settingsSubTab === 'courier'
+                      ? 'bg-white text-zinc-950 shadow-xs font-black'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                  🚚 Courier APIs
                 </button>
                 <button
                   type="button"
@@ -6920,6 +7008,189 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   )}
                 </form>
               </div>
+            ) : settingsSubTab === 'courier' ? (
+              <form onSubmit={handleSaveSettings} className="bg-white p-6 sm:p-8 rounded-3xl border border-zinc-200 shadow-xs space-y-6 animate-fade-in">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-black text-zinc-900 flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shadow-xs">
+                        <Truck className="w-4 h-4" />
+                      </div>
+                      <span>কুরিয়ার অটো বুকিং ও API সেটিংস (Courier API Suite)</span>
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Steadfast এবং Pathao-র API ক্রেডেনশিয়ালস এখানে একবার সংরক্ষণ করুন। অর্ডার আসার পর ১-ক্লিকেই পার্সেল অটো বুক হয়ে যাবে।
+                    </p>
+                  </div>
+                </div>
+
+                {/* 1. Steadfast Courier API Card */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50/60 to-white border border-emerald-200 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                        SF
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-zinc-900 flex items-center gap-2">
+                          <span>Steadfast Courier API (স্টেডফাস্ট)</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                            1-Click Auto Booking
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-zinc-500">
+                          Steadfast Merchant Portal থেকে API Key ও Secret Key কপি করে নিচে বসান।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Steadfast API Key:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. your-steadfast-api-key"
+                        value={settingsForm.steadfast_api_key || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, steadfast_api_key: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-emerald-600 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Steadfast Secret Key:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. your-steadfast-secret-key"
+                        value={settingsForm.steadfast_secret_key || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, steadfast_secret_key: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-emerald-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-emerald-700 flex items-center gap-1.5 pt-1">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>অর্ডারের "🚚 কুরিয়ার" বাটনে ক্লিক করলেই আপনার বর্তমান একাউন্ট ব্যালেন্স এবং পার্সেল বুকিং দেখা যাবে।</span>
+                  </div>
+                </div>
+
+                {/* 2. Pathao Courier API Card */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-50/60 to-white border border-rose-200 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                        PT
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-sm text-zinc-900 flex items-center gap-2">
+                          <span>Pathao Courier API (পাঠাও)</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold">
+                            Merchant Portal API
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-zinc-500">
+                          পাঠাও মার্চেন্ট ডেভেলপার পোর্টাল থেকে полученные ক্লায়েন্ট আইডি ও সিক্রেট দিন।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Pathao Client ID:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 123"
+                        value={settingsForm.pathao_client_id || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, pathao_client_id: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-600 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Pathao Client Secret:
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••••••••••"
+                        value={settingsForm.pathao_client_secret || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, pathao_client_secret: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-600 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Pathao Username (Email / Mobile):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="merchant@example.com"
+                        value={settingsForm.pathao_username || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, pathao_username: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-600 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-700 mb-1">
+                        Pathao Password:
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••••••••••"
+                        value={settingsForm.pathao_password || ''}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, pathao_password: e.target.value })}
+                        className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 mb-1">
+                      Pathao Store ID:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1"
+                      value={settingsForm.pathao_store_id || '1'}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, pathao_store_id: e.target.value })}
+                      className="w-full sm:w-1/2 bg-white text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-rose-600 font-mono"
+                    />
+                    <span className="text-[10px] text-zinc-400 mt-1 block">
+                      ডিফল্ট স্টোর আইডি সাধারণত 1 হয়ে থাকে। আপনার একাধিক পিকআপ পয়েন্ট থাকলে সঠিক আইডি দিন।
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Supported Offline / Other Couriers Info Card */}
+                <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200">
+                  <h4 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5 mb-1">
+                    <Truck className="w-4 h-4 text-indigo-700" />
+                    <span>অন্যান্য সকল কুরিয়ার (সুন্দরবন, এস এ পরিবহন, রেডএক্স ইত্যাদি):</span>
+                  </h4>
+                  <p className="text-[11px] text-indigo-800 leading-relaxed">
+                    অফলাইন বা অন্যান্য কুরিয়ারের জন্য কোনো API Key প্রয়োজন নেই। অর্ডার আসলে সরাসরি "কুরিয়ার" বাটনে ক্লিক করে ড্রপডাউন থেকে কুরিয়ারের নাম সিলেক্ট করবেন এবং মেমো/রশিদ নম্বর দিলেই অর্ডার Shipped হয়ে যাবে!
+                  </p>
+                </div>
+
+                {/* Save Button */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-extrabold text-sm transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4 text-emerald-400" />
+                    <span>Save Courier Settings (সংরক্ষণ করুন)</span>
+                  </button>
+                </div>
+              </form>
             ) : (
               <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
               {settingsSubTab === 'general' ? (
@@ -10344,6 +10615,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleSaveOrder} className="p-6 overflow-y-auto space-y-4">
+              {/* Courier Delivery Section (Top Banner) */}
+              <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Truck className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 flex-wrap">
+                      <span>কুরিয়ার ডেলিভারি:</span>
+                      <span className="font-extrabold text-emerald-800">
+                        {editingOrder.courier_name || 'এখনও বুক করা হয়নি'}
+                      </span>
+                    </div>
+                    {editingOrder.courier_tracking_code ? (
+                      <span className="text-[11px] font-mono text-emerald-700 block truncate">
+                        ট্র্যাকিং কোড: {editingOrder.courier_tracking_code}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-500 block truncate">
+                        Steadfast, Pathao অথবা ম্যানুয়াল কুরিয়ারে পাঠাতে ডানের বাটনে চাপুন
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrderForCourier(editingOrder);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{editingOrder.courier_name ? 'কুরিয়ার পরিবর্তন' : '🚀 কুরিয়ারে পাঠান'}</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">
@@ -10636,6 +10943,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <option value="Cancelled">Cancelled</option>
                   <option value="Returned">Returned</option>
                 </select>
+              </div>
+
+              {/* Courier Delivery Section */}
+              <div className="p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <Truck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                      <span>কুরিয়ার ডেলিভারি:</span>
+                      <span className="font-extrabold text-emerald-800">
+                        {editingOrder.courier_name || 'এখনও বুক করা হয়নি'}
+                      </span>
+                    </div>
+                    {editingOrder.courier_tracking_code && (
+                      <span className="text-[11px] font-mono text-emerald-700 block">
+                        ট্র্যাকিং কোড: {editingOrder.courier_tracking_code}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrderForCourier(editingOrder);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{editingOrder.courier_name ? 'কুরিয়ার পরিবর্তন' : 'কুরিয়ারে বুক করুন'}</span>
+                </button>
               </div>
 
               <div>
@@ -11150,6 +11489,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           const slug = getProductSlug(p);
           if (slug && typeof window !== 'undefined') {
             window.open(`/product/${slug}`, '_blank', 'noopener,noreferrer');
+          }
+        }}
+      />
+
+      {/* Courier Assignment & 1-Click Parcel Booking Modal */}
+      <AssignCourierModal
+        order={selectedOrderForCourier}
+        settings={settingsForm}
+        adminPassword={password}
+        showToast={showToast}
+        onClose={() => setSelectedOrderForCourier(null)}
+        onOrderUpdated={(updatedOrder) => {
+          // Update order in state immediately
+          setOrders((prev) =>
+            prev.map((o) => (String(o.id) === String(updatedOrder.id) ? updatedOrder : o))
+          );
+          setSelectedOrderForCourier(null);
+          if (editingOrder && String(editingOrder.id) === String(updatedOrder.id)) {
+            setEditingOrder(updatedOrder);
+          }
+          if (selectedOrderForJourney && String(selectedOrderForJourney.id) === String(updatedOrder.id)) {
+            setSelectedOrderForJourney(updatedOrder);
           }
         }}
       />

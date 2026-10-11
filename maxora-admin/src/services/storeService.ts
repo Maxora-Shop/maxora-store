@@ -2322,6 +2322,175 @@ export const storeService = {
     return this.updateOrder(orderData, adminPassword);
   },
 
+  async assignOrderCourier(
+    payload: {
+      orderId: string | number;
+      courier_name: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      note?: string;
+      mark_shipped?: boolean;
+    },
+    adminPassword?: string
+  ): Promise<{ success: boolean; order?: Order; message?: string }> {
+    const idStr = String(payload.orderId);
+    const newStatus = payload.mark_shipped !== false ? 'Shipped' : undefined;
+
+    // 1. Direct Firestore update
+    try {
+      const orderRef = doc(db, 'orders', idStr);
+      const updateData: any = {
+        courier_name: payload.courier_name,
+        courier_tracking_code: payload.tracking_code || '',
+        courier_tracking_url: payload.tracking_url || '',
+        courier_status: 'Assigned',
+        courier_assigned_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      if (newStatus) {
+        updateData.status = newStatus;
+        updateData.order_status = newStatus;
+      }
+      await setDoc(orderRef, updateData, { merge: true });
+    } catch (e) {
+      console.warn('Firestore assign courier notice:', e);
+    }
+
+    // 2. Call API route for backend processing/audit
+    const res = await tryApi<{ success: boolean; order?: Order; message?: string }>('/api/admin/courier/assign', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify(payload),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === idStr || String(o.order_number) === idStr);
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return { success: true, order: res.data.order, message: res.data.message };
+    }
+
+    // 3. Fallback: update local cache
+    const orders = getLocal<Order[]>(ORDERS_KEY, []);
+    const idx = orders.findIndex(o => String(o.id) === idStr || String(o.order_number) === idStr);
+    if (idx !== -1) {
+      orders[idx] = {
+        ...orders[idx],
+        status: newStatus || orders[idx].status,
+        courier_name: payload.courier_name,
+        courier_tracking_code: payload.tracking_code,
+        courier_tracking_url: payload.tracking_url,
+        updated_at: new Date().toISOString(),
+      };
+      setLocal(ORDERS_KEY, orders);
+      notifyOrdersChanged();
+      return { success: true, order: orders[idx] };
+    }
+
+    return { success: true, message: 'Courier assigned successfully' };
+  },
+
+  async bookSteadfastCourier(
+    orderId: string | number,
+    options?: { apiKey?: string; secretKey?: string; codAmount?: number; note?: string },
+    adminPassword?: string
+  ): Promise<{ success: boolean; message?: string; tracking_code?: string; tracking_url?: string; consignment_id?: any; order?: Order }> {
+    const res = await tryApi<{
+      success: boolean;
+      message?: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      consignment_id?: any;
+      order?: Order;
+      error?: string;
+    }>('/api/admin/courier/steadfast/book', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify({ orderId, ...options }),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return {
+        success: true,
+        message: res.data.message,
+        tracking_code: res.data.tracking_code,
+        tracking_url: res.data.tracking_url,
+        consignment_id: res.data.consignment_id,
+        order: res.data.order,
+      };
+    }
+
+    return {
+      success: false,
+      message: res.error || (res.data as any)?.error || 'Steadfast booking failed',
+    };
+  },
+
+  async getSteadfastBalance(apiKey?: string, secretKey?: string, adminPassword?: string): Promise<{ success: boolean; current_balance?: number; error?: string }> {
+    const q = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}&secretKey=${encodeURIComponent(secretKey || '')}` : '';
+    const res = await tryApi<{ success: boolean; current_balance: number; error?: string }>(`/api/admin/courier/steadfast/balance${q}`, {
+      headers: getAuthHeaders(adminPassword),
+    });
+    if (res.success && res.data) {
+      return { success: true, current_balance: res.data.current_balance };
+    }
+    return { success: false, error: res.error || 'Failed to fetch balance' };
+  },
+
+  async bookPathaoCourier(
+    orderId: string | number,
+    options?: { clientId?: string; clientSecret?: string; username?: string; password?: string; storeId?: string | number; codAmount?: number; note?: string },
+    adminPassword?: string
+  ): Promise<{ success: boolean; message?: string; tracking_code?: string; tracking_url?: string; consignment_id?: any; order?: Order }> {
+    const res = await tryApi<{
+      success: boolean;
+      message?: string;
+      tracking_code?: string;
+      tracking_url?: string;
+      consignment_id?: any;
+      order?: Order;
+      error?: string;
+    }>('/api/admin/courier/pathao/book', {
+      method: 'POST',
+      headers: getAuthHeaders(adminPassword),
+      body: JSON.stringify({ orderId, ...options }),
+    });
+
+    if (res.success && res.data?.order) {
+      const orders = getLocal<Order[]>(ORDERS_KEY, []);
+      const idx = orders.findIndex(o => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+      if (idx !== -1) {
+        orders[idx] = res.data.order;
+        setLocal(ORDERS_KEY, orders);
+      }
+      notifyOrdersChanged();
+      return {
+        success: true,
+        message: res.data.message,
+        tracking_code: res.data.tracking_code,
+        tracking_url: res.data.tracking_url,
+        consignment_id: res.data.consignment_id,
+        order: res.data.order,
+      };
+    }
+
+    return {
+      success: false,
+      message: res.error || (res.data as any)?.error || 'Pathao booking failed',
+    };
+  },
+
   async deleteOrder(orderId: string | number, adminPassword?: string): Promise<{ success: boolean }> {
     const idStr = String(orderId);
 

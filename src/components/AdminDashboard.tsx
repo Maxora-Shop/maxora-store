@@ -2315,6 +2315,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       showToast(`Order status changed to ${newStatus}`, 'success');
       loadOrders();
       if (currentTab === 'overview') loadOverview();
+
+      // If changed to Shipped or Processing and courier is not assigned yet, open Courier dispatch modal immediately
+      if (newStatus === 'Shipped' || newStatus === 'Processing') {
+        const targetOrder = orders.find((o) => String(o.id) === String(orderId) || String(o.order_number) === String(orderId));
+        if (targetOrder && !targetOrder.courier_name && !targetOrder.courier_tracking_code) {
+          setSelectedOrderForCourier({ ...targetOrder, status: newStatus });
+        }
+      }
     } catch (err: any) {
       showToast('Failed to update status: ' + err.message, 'error');
     }
@@ -5992,6 +6000,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span>Clear Filters</span>
                         </button>
                       )}
+
+                      {/* Refresh Orders Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          loadOrders();
+                          showToast('নতুন অর্ডার তালিকা রিলোড করা হয়েছে!', 'success');
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs shrink-0"
+                        title="রিয়েল-টাইম ডাটাবেজ থেকে নতুন অর্ডার রিলোড করুন"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                        <span>🔄 Refresh Orders</span>
+                      </button>
                     </div>
                   </div>
 
@@ -6007,6 +6029,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <th className="p-4">Ordered Products</th>
                             <th className="p-4">Total Amount</th>
                             <th className="p-4">Status & Order Journey</th>
+                            <th className="p-4 text-center">🚚 Courier (কুরিয়ার)</th>
                             <th className="p-4 text-right">Actions</th>
                           </tr>
                         </thead>
@@ -6241,6 +6264,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   </div>
                                 </td>
 
+                                {/* 6.5 Dedicated Courier Column */}
+                                <td className="p-4 text-center">
+                                  {ord.courier_name || ord.courier_tracking_code ? (
+                                    <div className="inline-flex flex-col items-center gap-1">
+                                      <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 font-extrabold text-xs border border-emerald-200 flex items-center gap-1 shadow-2xs">
+                                        <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>{ord.courier_name || 'Assigned'}</span>
+                                      </span>
+                                      {ord.courier_tracking_code && (
+                                        <span className="text-[10px] font-mono font-bold text-zinc-600 block">
+                                          #{ord.courier_tracking_code}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedOrderForCourier(ord)}
+                                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-950 underline cursor-pointer"
+                                      >
+                                        পরিবর্তন
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedOrderForCourier(ord)}
+                                      title="Steadfast / Pathao / ম্যানুয়াল কুরিয়ারে বুক করুন"
+                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 mx-auto ring-2 ring-emerald-500/20"
+                                    >
+                                      <Truck className="w-3.5 h-3.5 text-emerald-100" />
+                                      <span>🚀 কুরিয়ারে পাঠান</span>
+                                    </button>
+                                  )}
+                                </td>
+
                                 {/* 7. Actions */}
                                 <td className="p-4 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
@@ -6292,7 +6349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           })}
                           {filteredOrders.length === 0 && (
                             <tr>
-                              <td colSpan={7} className="p-12 text-center text-zinc-400">
+                              <td colSpan={8} className="p-12 text-center text-zinc-400">
                                 <ShoppingBag className="w-10 h-10 mx-auto text-zinc-300 mb-2" />
                                 <div className="font-bold text-zinc-600 text-sm">No orders found</div>
                                 <p className="text-xs text-zinc-400 mt-1">
@@ -10558,6 +10615,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <form onSubmit={handleSaveOrder} className="p-6 overflow-y-auto space-y-4">
+              {/* Courier Delivery Section (Top Banner) */}
+              <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Truck className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 flex-wrap">
+                      <span>কুরিয়ার ডেলিভারি:</span>
+                      <span className="font-extrabold text-emerald-800">
+                        {editingOrder.courier_name || 'এখনও বুক করা হয়নি'}
+                      </span>
+                    </div>
+                    {editingOrder.courier_tracking_code ? (
+                      <span className="text-[11px] font-mono text-emerald-700 block truncate">
+                        ট্র্যাকিং কোড: {editingOrder.courier_tracking_code}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-500 block truncate">
+                        Steadfast, Pathao অথবা ম্যানুয়াল কুরিয়ারে পাঠাতে ডানের বাটনে চাপুন
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOrderForCourier(editingOrder);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{editingOrder.courier_name ? 'কুরিয়ার পরিবর্তন' : '🚀 কুরিয়ারে পাঠান'}</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">

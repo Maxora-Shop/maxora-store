@@ -251,6 +251,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <ShieldCheck className="w-4 h-4 shrink-0" />
                   <span>Payment Method: Cash on Delivery (Pay upon arrival)</span>
                 </div>
+
+                {/* Admin Courier Guidance Banner */}
+                <div className="bg-white border border-emerald-200 rounded-xl p-3 text-left text-xs text-emerald-950 space-y-1 shadow-2xs">
+                  <div className="font-extrabold flex items-center gap-1.5 text-emerald-800 text-[11px]">
+                    <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>এডমিন কুরিয়ার বুকিং:</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 leading-relaxed">
+                    অর্ডারটি এডমিন প্যানেলে জমা হয়েছে। এডমিন প্যানেলের <strong>Orders</strong> পেজে গিয়ে অর্ডারের পাশে <strong>"🚚 কুরিয়ার"</strong> বাটনে ক্লিক করে Steadfast, Pathao বা যেকোনো কুরিয়ারে পার্সেল বুক করতে পারবেন।
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center justify-center gap-3 pt-2">
