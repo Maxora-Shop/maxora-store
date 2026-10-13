@@ -40,10 +40,11 @@ interface ParsedImportProduct {
   sub_category?: string;
   product_type?: string;
   child_category?: string;
-  selling_price: number;
-  regular_price?: number;
-  buying_price?: number;
-  discount?: number;
+  selling_price: number; // Regular / Base price (1850)
+  regular_price?: number; // 1850
+  final_price: number;   // Selling price customer pays (1350)
+  buying_price?: number; // Exact cost price (950)
+  discount?: number;     // Discount amount (500)
   stock: number;
   sku?: string;
   image_url: string;
@@ -59,6 +60,105 @@ interface ParsedImportProduct {
   isValid: boolean;
   validationError?: string;
   isAutoSeoGenerated?: boolean;
+}
+
+/**
+ * Advanced Google Rank SEO Keyword Generator for Bangladesh Market.
+ * Automatically derives high-intent commercial keywords that real Bangladeshi users search on Google.
+ */
+export function generateGoogleRankKeywords(
+  title: string,
+  category: string,
+  subCategory?: string,
+  childCategory?: string,
+  productType?: string,
+  brand?: string,
+  customKeywordsRaw?: string
+): string {
+  const cleanTitle = (title || '').trim();
+  if (!cleanTitle) return 'online shopping bangladesh, cash on delivery bd';
+
+  // 1. If user provided keywords in Excel, clean and preserve them!
+  const userKeywords = (customKeywordsRaw || '')
+    .split(/[,;\n|]/)
+    .map((k) => k.trim())
+    .filter(Boolean);
+
+  // 2. Extract core short name / model from title
+  // Strip out promotional marketing buzzwords
+  const stripped = cleanTitle
+    .replace(/\b(high quality|premium quality|best quality|top quality|100% original|original|genuine|authentic|new arrival|hot deal|best seller|exclusive|official)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const words = stripped.split(' ').filter(Boolean);
+  // Core title is first 2-4 keywords (e.g. "T900 Ultra 2 Smartwatch" -> "T900 Ultra 2")
+  const coreShortTitle = words.slice(0, Math.min(words.length, 3)).join(' ');
+
+  // Extract model/series token if present (e.g. T900, M10, SK-03067, Ultra 2, Pro)
+  const modelMatch = stripped.match(/([a-zA-Z]{1,4}[-_\s]?[0-9]{2,5}|ultra\s*[0-9]?|pro\s*[0-9]?|series\s*[0-9]?)/i);
+  const modelToken = modelMatch ? modelMatch[0].trim() : '';
+
+  const cat = (category || '').trim();
+  const subCat = (subCategory || '').trim();
+  const childCat = (childCategory || '').trim();
+  const pType = (productType || '').trim();
+  const brandName = (brand || 'Maxora').trim();
+
+  // 3. Bangla Search Terms (গুগল বাংলাদেশে সবচেয়ে বেশি সার্চ হওয়া বাংলা কি-ওয়ার্ড)
+  const banglaKeywords: string[] = [];
+  const lowerTitle = cleanTitle.toLowerCase();
+
+  if (lowerTitle.includes('watch') || lowerTitle.includes('smartwatch')) {
+    banglaKeywords.push('স্মার্টওয়াচ এর দাম', 'স্মার্ট ওয়াচ প্রাইস ইন বাংলাদেশ', 'স্মার্টওয়াচ বিডি');
+  } else if (lowerTitle.includes('earbud') || lowerTitle.includes('tws') || lowerTitle.includes('airpod') || lowerTitle.includes('headphone')) {
+    banglaKeywords.push('ইয়ারবাডস এর দাম', 'ব্লুটুথ হেডফোন প্রাইস ইন বিডি', 'টিডব্লিউএস ইয়ারবাডস');
+  } else if (lowerTitle.includes('fan')) {
+    banglaKeywords.push('রিচার্জেবল ফ্যান এর দাম', 'টেবিল ফ্যান প্রাইস ইন বাংলাদেশ', 'মিনি ফ্যান');
+  } else if (lowerTitle.includes('speaker')) {
+    banglaKeywords.push('ব্লুটুথ স্পিকার এর দাম', 'সাউন্ড বক্স বাংলাদেশ');
+  } else if (lowerTitle.includes('power bank') || lowerTitle.includes('powerbank')) {
+    banglaKeywords.push('পাওয়ার ব্যাংক এর দাম', 'পাওয়ার ব্যাংক প্রাইস ইন বিডি');
+  } else if (lowerTitle.includes('blender') || lowerTitle.includes('grinder')) {
+    banglaKeywords.push('ব্লেন্ডার মেশিন এর দাম', 'গ্রাইন্ডার প্রাইস');
+  }
+
+  // Bangla commercial queries
+  if (coreShortTitle) {
+    banglaKeywords.push(`${coreShortTitle} এর দাম`, `অরিজিনাল ${coreShortTitle}`);
+  }
+  banglaKeywords.push('অনলাইন শপিং বাংলাদেশ', 'ক্যাশ অন ডেলিভারি বাংলাদেশ');
+
+  // 4. Commercial Search Phrases for Google BD (High CTR & Purchase Intent)
+  const commercialKeywords: string[] = [
+    cleanTitle.toLowerCase(),
+    coreShortTitle.toLowerCase(),
+    modelToken ? modelToken.toLowerCase() : '',
+    `${coreShortTitle.toLowerCase()} price in bd`,
+    `${coreShortTitle.toLowerCase()} price in bangladesh`,
+    modelToken ? `${modelToken.toLowerCase()} price in bd` : '',
+    subCat ? `${subCat.toLowerCase()} price in bd` : '',
+    subCat ? `${subCat.toLowerCase()} price in bangladesh` : '',
+    childCat ? childCat.toLowerCase() : '',
+    pType ? pType.toLowerCase() : '',
+    `buy ${coreShortTitle.toLowerCase()} online`,
+    `authentic ${coreShortTitle.toLowerCase()}`,
+    `${coreShortTitle.toLowerCase()} review bd`,
+    `${brandName.toLowerCase()} ${coreShortTitle.toLowerCase()}`,
+    'cash on delivery bd',
+    'maxora shop bd',
+  ];
+
+  // 5. Merge user-provided keywords first, followed by commercial and Bengali queries
+  const merged = Array.from(
+    new Set([
+      ...userKeywords.map((k) => k.toLowerCase()),
+      ...commercialKeywords.filter(Boolean),
+      ...banglaKeywords.filter(Boolean),
+    ])
+  );
+
+  return merged.slice(0, 16).join(', ');
 }
 
 export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = ({
@@ -259,31 +359,49 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
             getVal('brand', 'brand_name', 'ব্র্যান্ড') || 'Maxora'
           ).trim();
 
-          // 4. Prices & Discounts
-          // discount_price = selling_price (the final discounted price customer pays)
-          const discountPriceRaw = getVal('discount_price', 'discount price', 'discountprice', 'selling_price', 'selling price', 'sale_price', 'offer_price', 'price', 'বিক্রয় মূল্য', 'ডিসকাউন্ট মূল্য', 'অফার মূল্য');
-          const regularPriceRaw = getVal('regular_price', 'regular price', 'regularprice', 'mrp', 'original_price', 'old_price', 'নিয়মিত মূল্য', 'পূর্বের মূল্য');
+          // 4. Exact Prices & Discounts (Never alter, fake markup, or corrupt user prices!)
+          // Column 'cost_price' -> exact buying price
+          // Column 'regular_price' -> base / regular price (e.g. 1850)
+          // Column 'discount_price' -> final selling price customer pays (e.g. 1350)
           const costPriceRaw = getVal('cost_price', 'cost price', 'costprice', 'cost', 'buying_price', 'buying price', 'purchase_price', 'ক্রয়মূল্য', 'কেনা দাম', 'কেনা মূল্য');
+          const regularPriceRaw = getVal('regular_price', 'regular price', 'regularprice', 'mrp', 'original_price', 'original price', 'old_price', 'নিয়মিত মূল্য', 'পূর্বের মূল্য', 'আসল মূল্য');
+          const discountPriceRaw = getVal('discount_price', 'discount price', 'discountprice', 'selling_price', 'selling price', 'sale_price', 'offer_price', 'offer price', 'price', 'বিক্রয় মূল্য', 'ডিসকাউন্ট মূল্য', 'অফার মূল্য', 'কাস্টমার মূল্য');
 
-          let sellingPrice = Math.max(0, Number(String(discountPriceRaw).replace(/[^0-9.]/g, '') || 0));
-          let regularPrice = Math.max(0, Number(String(regularPriceRaw).replace(/[^0-9.]/g, '') || 0));
-          let buyingPrice = Math.max(0, Number(String(costPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          const inputCost = Math.max(0, Number(String(costPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          const inputRegular = Math.max(0, Number(String(regularPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          const inputDiscount = Math.max(0, Number(String(discountPriceRaw).replace(/[^0-9.]/g, '') || 0));
 
-          // Smart Price Balancing:
-          if (sellingPrice === 0 && regularPrice > 0) {
-            sellingPrice = regularPrice;
-          } else if (regularPrice === 0 && sellingPrice > 0) {
-            // If user only gave selling/discount price, estimate standard 20% strike-through MRP
-            regularPrice = Math.round(sellingPrice * 1.25);
-          } else if (regularPrice < sellingPrice) {
-            regularPrice = sellingPrice;
-          }
+          let basePrice = 0;   // The regular / base price stored in database selling_price
+          let finalPrice = 0;  // The actual selling price customer pays
+          let discount = 0;    // Discount amount in ৳ stored in database discount
+          const buyingPrice = inputCost; // Exact cost price (never fake 70%!)
 
-          const discount = regularPrice > sellingPrice ? regularPrice - sellingPrice : 0;
-
-          // If cost price was not given, estimate 70% of selling price
-          if (buyingPrice === 0 && sellingPrice > 0) {
-            buyingPrice = Math.round(sellingPrice * 0.7);
+          if (inputRegular > 0 && inputDiscount > 0) {
+            if (inputRegular >= inputDiscount) {
+              // Standard: Regular 1850, Discount price 1350 -> customer pays 1350, save 500
+              basePrice = inputRegular;
+              finalPrice = inputDiscount;
+              discount = inputRegular - inputDiscount;
+            } else {
+              // User put smaller in regular, larger in discount price -> normalize
+              basePrice = inputDiscount;
+              finalPrice = inputRegular;
+              discount = inputDiscount - inputRegular;
+            }
+          } else if (inputRegular > 0 && inputDiscount === 0) {
+            // Only regular price provided: no discount
+            basePrice = inputRegular;
+            finalPrice = inputRegular;
+            discount = 0;
+          } else if (inputDiscount > 0 && inputRegular === 0) {
+            // Only discount/selling price provided: keep exact price (never fake 1.25 multiplier!)
+            basePrice = inputDiscount;
+            finalPrice = inputDiscount;
+            discount = 0;
+          } else {
+            basePrice = 0;
+            finalPrice = 0;
+            discount = 0;
           }
 
           // 5. Stock & Inventory
@@ -334,46 +452,60 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           const cleanTitle = title || `Item-${index + 1}`;
 
           // A. Clean SEO URL Slug
-          const customSlug = String(getVal('slug', 'url_slug', 'url') || '').trim();
+          const customSlug = String(getVal('slug', 'url_slug', 'url slug', 'url', 'স্লাগ') || '').trim();
           const cleanSlug = customSlug ? generateSlug(customSlug) : generateSlug(cleanTitle);
 
           // B. High-CTR Google Search Meta Title (Optimized for Bangladesh Market)
-          // Format: "[Title] Price in BD ৳[Price] | Maxora BD" (Matches top Google BD search queries)
-          const customMetaTitle = String(getVal('meta_title', 'seo_title', 'meta title') || '').trim();
-          const autoMetaTitle = sellingPrice > 0
-            ? `${cleanTitle} Price in BD ৳${sellingPrice.toLocaleString('en-BD')} | Maxora BD`
+          // Format: "[Title] Price in BD ৳[FinalPrice] | Maxora BD" (Matches top Google BD search queries)
+          const customMetaTitle = String(getVal('meta_title', 'seo_title', 'meta title', 'meta titel', 'মেটা টাইটেল') || '').trim();
+          const autoMetaTitle = finalPrice > 0
+            ? `${cleanTitle} Price in BD ৳${finalPrice.toLocaleString('en-BD')} | Maxora BD`
             : `${cleanTitle} Price in Bangladesh | 100% Original | Maxora BD`;
           const metaTitle = customMetaTitle || autoMetaTitle;
 
           // C. Google SERP Snippet Meta Description (150-160 characters action-oriented)
-          const customMetaDesc = String(getVal('meta_description', 'seo_description', 'meta description') || '').trim();
+          const customMetaDesc = String(getVal('meta_description', 'seo_description', 'meta description', 'মেটা ডেসক্রিপশন') || '').trim();
           let autoMetaDescription = '';
           if (description) {
             const cleanDesc = description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
             const descIntro = cleanDesc.slice(0, 85);
-            autoMetaDescription = `${descIntro}... Buy ${cleanTitle} at best price in BD (৳${sellingPrice.toLocaleString('en-BD')}) with Cash on Delivery at Maxora.`;
+            autoMetaDescription = `${descIntro}... Buy ${cleanTitle} at best price in BD (৳${finalPrice.toLocaleString('en-BD')}) with Cash on Delivery at Maxora.`;
           } else {
-            autoMetaDescription = `Buy original ${cleanTitle} at best price in Bangladesh (৳${sellingPrice.toLocaleString('en-BD')}). 100% genuine quality, Cash on Delivery across 64 districts & express delivery at Maxora.`;
+            autoMetaDescription = `Buy original ${cleanTitle} at best price in Bangladesh (৳${finalPrice.toLocaleString('en-BD')}). 100% genuine quality, Cash on Delivery across 64 districts & express delivery at Maxora.`;
           }
           const metaDescription = customMetaDesc || autoMetaDescription;
 
           // D. Google High-Search-Intent Keywords (LSI & Target Search Phrases)
-          const customKeywords = String(getVal('meta_keywords', 'keywords', 'tags') || '').trim();
-          const autoKeywords = Array.from(new Set([
-            cleanTitle.toLowerCase(),
-            `${cleanTitle.toLowerCase()} price in bd`,
-            `${cleanTitle.toLowerCase()} price in bangladesh`,
-            `buy ${cleanTitle.toLowerCase()} online`,
-            `${category.toLowerCase()} in bd`,
-            subCategory ? subCategory.toLowerCase() : '',
-            productType ? productType.toLowerCase() : '',
-            childCategory ? childCategory.toLowerCase() : '',
-            'online shopping bangladesh',
-            'cash on delivery bd',
-            `authentic ${cleanTitle.toLowerCase()}`,
-            'maxora shop bd',
-          ])).filter(Boolean).join(', ');
-          const metaKeywords = customKeywords || autoKeywords;
+          const customKeywords = String(
+            getVal(
+              'product keyword',
+              'product keywords',
+              'product_keyword',
+              'product_keywords',
+              'product key word',
+              'product key words',
+              'keyword',
+              'keywords',
+              'key words',
+              'key word',
+              'meta_keywords',
+              'meta keywords',
+              'tags',
+              'কিওয়ার্ড',
+              'কি-ওয়ার্ড',
+              'গুগল কিওয়ার্ড'
+            ) || ''
+          ).trim();
+
+          const metaKeywords = generateGoogleRankKeywords(
+            cleanTitle,
+            category,
+            subCategory,
+            childCategory,
+            productType,
+            brand,
+            customKeywords
+          );
 
           const isAutoSeoGenerated = !customMetaTitle || !customMetaDesc || !customKeywords || !customSlug;
 
@@ -384,9 +516,9 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           if (!title) {
             isValid = false;
             validationError = 'পণ্যের নাম নেই (Product title is required)';
-          } else if (sellingPrice <= 0) {
+          } else if (finalPrice <= 0) {
             isValid = false;
-            validationError = 'সঠিক বিক্রয় মূল্য দিন (Invalid selling price)';
+            validationError = 'সঠিক বিক্রয় মূল্য দিন (Invalid price)';
           }
 
           return {
@@ -395,10 +527,11 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
             sub_category: subCategory,
             product_type: productType,
             child_category: childCategory,
-            selling_price: sellingPrice,
-            regular_price: regularPrice,
-            buying_price: buyingPrice,
-            discount,
+            selling_price: basePrice, // Regular / Base price (1850)
+            regular_price: basePrice, // 1850
+            final_price: finalPrice,  // Customer price (1350)
+            buying_price: buyingPrice, // Cost price (950)
+            discount,                  // Discount amount (500)
             stock,
             sku,
             image_url: imageUrl,
@@ -521,6 +654,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           selling_price: p.selling_price,
           regular_price: p.regular_price || p.selling_price,
           discount: p.discount || 0,
+          final_price: p.final_price,
           buying_price: p.buying_price || 0,
           stock: p.stock,
           sku: p.sku,
@@ -669,11 +803,19 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                   <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">9. child_category</span>
                   <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">10. product_type</span>
                 </div>
-                <div className="text-[11px] text-zinc-600 pt-1 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>
-                    <strong>সিস্টেম অটো করবে:</strong> SEO URL Slug, Google Meta Title (Price in BD), 150-char Google Snippet Description, LSI Keywords, SKU এবং ৪-স্তর ক্যাটাগরি ডাটাবেজে লিংকিং!
-                  </span>
+                <div className="text-[11px] text-zinc-600 pt-1 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      <strong>সিস্টেম অটো করবে:</strong> SEO URL Slug, হাই-র‍্যাঙ্কিং Google Keywords (মডেল + Price in BD + বাংলা সার্চ কি-ওয়ার্ড), Google SERP Snippet এবং ক্যাটাগরি লিঙ্কিং।
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-100/60 p-2 rounded-xl">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span>
+                      <strong>দামের সঠিক নিয়ম:</strong> <code>regular_price</code> হলো মূল দাম (যেমন: ১৮৫০) এবং <code>discount_price</code> হলো কাস্টমার বিক্রয় মূল্য (যেমন: ১৩৫০)। কোনো ছাড় না থাকলে শুধু <code>regular_price</code> লিখুন। সিস্টেম আপনার দেওয়া দামের কোনো পরিবর্তন করবে না!
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -840,9 +982,10 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                           <th className="p-3 w-12 text-center">#</th>
                           <th className="p-3">প্রোডাক্ট ও ছবি</th>
                           <th className="p-3">ক্যাটাগরি হায়ারার্কি</th>
-                          <th className="p-3 text-right">ডিসকাউন্ট মূল্য</th>
-                          <th className="p-3 text-right">আসল মূল্য</th>
-                          <th className="p-3 text-right">ক্রয়মূল্য</th>
+                          <th className="p-3 text-right">বিক্রয় মূল্য (Customer Price)</th>
+                          <th className="p-3 text-right">রেগুলার মূল্য (MRP)</th>
+                          <th className="p-3 text-right">ছাড় (Discount)</th>
+                          <th className="p-3 text-right">ক্রয়মূল্য (Cost)</th>
                           <th className="p-3 text-center">স্টক</th>
                           <th className="p-3">SKU</th>
                           <th className="p-3 text-center">স্ট্যাটাস</th>
@@ -898,18 +1041,26 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                               )}
                             </td>
 
-                            <td className="p-3 text-right font-black text-emerald-700 whitespace-nowrap">
+                            <td className="p-3 text-right font-black text-emerald-700 whitespace-nowrap text-sm">
+                              ৳{item.final_price.toLocaleString('en-BD')}
+                            </td>
+
+                            <td className="p-3 text-right text-zinc-500 font-semibold whitespace-nowrap">
                               ৳{item.selling_price.toLocaleString('en-BD')}
                             </td>
 
-                            <td className="p-3 text-right text-zinc-400 line-through whitespace-nowrap">
-                              {item.regular_price && item.regular_price > item.selling_price
-                                ? `৳${item.regular_price.toLocaleString('en-BD')}`
-                                : '—'}
+                            <td className="p-3 text-right whitespace-nowrap">
+                              {item.discount && item.discount > 0 ? (
+                                <span className="inline-block bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                  -৳{item.discount.toLocaleString('en-BD')}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-400 text-xs">—</span>
+                              )}
                             </td>
 
-                            <td className="p-3 text-right text-zinc-600 whitespace-nowrap">
-                              ৳{item.buying_price?.toLocaleString('en-BD') || '—'}
+                            <td className="p-3 text-right text-zinc-600 whitespace-nowrap font-medium">
+                              {item.buying_price && item.buying_price > 0 ? `৳${item.buying_price.toLocaleString('en-BD')}` : '—'}
                             </td>
 
                             <td className="p-3 text-center whitespace-nowrap">
