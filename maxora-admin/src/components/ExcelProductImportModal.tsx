@@ -17,6 +17,8 @@ import {
   Info,
   Package,
   Eye,
+  ExternalLink,
+  Zap,
 } from 'lucide-react';
 import { Product, Category } from '../types';
 import { generateSlug } from '../utils/seo';
@@ -48,6 +50,7 @@ interface ParsedImportProduct {
   gallery_images?: string[];
   colors?: string[];
   description?: string;
+  // Automated Google SEO fields
   meta_title: string;
   meta_description: string;
   meta_keywords: string;
@@ -55,6 +58,7 @@ interface ParsedImportProduct {
   brand?: string;
   isValid: boolean;
   validationError?: string;
+  isAutoSeoGenerated?: boolean;
 }
 
 export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = ({
@@ -77,69 +81,45 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
 
   if (!isOpen) return null;
 
-  // 1. Download Sample Excel Template
-  const handleDownloadSampleTemplate = () => {
+  // 1. Download Simplified 10-Column Smart Excel Template (Recommended)
+  const handleDownloadSimpleTemplate = () => {
     try {
       const sampleData = [
         {
-          name: 'T900 Ultra 2 Smartwatch With Bluetooth Calling',
+          title: 'T900 Ultra 2 Smartwatch With Bluetooth Calling',
+          description: 'High quality HD full touch display smartwatch with bluetooth calling, sports tracking, heart rate monitor, long battery life and waterproof build.',
+          cost_price: 950,
+          regular_price: 1850,
+          discount_price: 1350,
+          image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80',
           category: 'Smart Gadgets',
           sub_category: 'Smart Watch',
-          product_type: 'T900 Ultra Series',
-          selling_price: 1350,
-          regular_price: 1850,
-          buying_price: 950,
-          stock: 45,
-          sku: 'MX-SW-T900U',
-          image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80',
-          gallery_images: 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80, https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=800&auto=format&fit=crop&q=80',
-          colors: 'Black, Orange, Silver',
-          description: 'High quality HD display smartwatch with bluetooth calling, fitness tracking, long battery life and waterproof build.',
-          meta_title: 'T900 Ultra 2 Smartwatch Price in Bangladesh | Maxora Shop',
-          meta_description: 'Buy original T900 Ultra 2 Smartwatch at best price in BD with fast cash on delivery all over Bangladesh.',
-          meta_keywords: 't900 ultra, smartwatch bd, bluetooth calling watch, smart gadgets',
-          slug: 't900-ultra-2-smartwatch-with-bluetooth-calling',
-          brand: 'Maxora',
+          child_category: 'Calling Watch',
+          product_type: 'T900 Series',
         },
         {
-          name: 'M10 TWS Wireless Gaming Earbuds With Powerbank Case',
+          title: 'M10 TWS Wireless Gaming Earbuds With Powerbank Case',
+          description: 'Stereo Hi-Fi 9D sound quality TWS with digital LED display, touch controls, low latency gaming, waterproof and emergency phone charging case.',
+          cost_price: 320,
+          regular_price: 950,
+          discount_price: 590,
+          image: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80',
           category: 'Audio',
           sub_category: 'Wireless Earbuds',
-          product_type: 'TWS Gaming Series',
-          selling_price: 590,
-          regular_price: 950,
-          buying_price: 320,
-          stock: 80,
-          sku: 'MX-TWS-M10',
-          image_url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&auto=format&fit=crop&q=80',
-          gallery_images: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80',
-          colors: 'Black',
-          description: 'Stereo Hi-Fi sound quality TWS with digital LED display, touch controls, low latency gaming and emergency charging case.',
-          meta_title: 'M10 TWS Wireless Earbuds Price in BD | Maxora Shop',
-          meta_description: 'Order M10 TWS Wireless Gaming Earbuds with 2000mAh battery case. 100% authentic with cash on delivery.',
-          meta_keywords: 'm10 tws, earbuds bangladesh, wireless headphones, gaming earbuds',
-          slug: 'm10-tws-wireless-gaming-earbuds',
-          brand: 'Maxora',
+          child_category: 'Noise Cancelling',
+          product_type: 'TWS Gaming',
         },
         {
-          name: 'Portable Mini High Speed USB Rechargeable Desk Fan',
+          title: 'Portable Mini High Speed USB Rechargeable Table Fan',
+          description: 'Silent motor USB rechargeable desk fan with 3 adjustable speed levels and 2000mAh lithium battery for home, kitchen and travel use.',
+          cost_price: 450,
+          regular_price: 1200,
+          discount_price: 750,
+          image: 'https://images.unsplash.com/photo-1618941716939-553df3c6c278?w=800&auto=format&fit=crop&q=80',
           category: 'Home & Living',
-          sub_category: 'Mini Gadgets',
-          product_type: 'Rechargeable Fans',
-          selling_price: 750,
-          regular_price: 1100,
-          buying_price: 450,
-          stock: 60,
-          sku: 'MX-FAN-001',
-          image_url: 'https://images.unsplash.com/photo-1618941716939-553df3c6c278?w=800&auto=format&fit=crop&q=80',
-          gallery_images: '',
-          colors: 'White, Pink, Sky Blue',
-          description: 'Silent motor USB rechargeable table fan with 3 speed levels and 2000mAh lithium battery for indoor and travel use.',
-          meta_title: '',
-          meta_description: '',
-          meta_keywords: '',
-          slug: '',
-          brand: 'Maxora',
+          sub_category: 'Home Appliances',
+          child_category: 'Desk Fan',
+          product_type: 'Portable Fans',
         },
       ];
 
@@ -147,38 +127,66 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
 
       // Set optimal column widths
       ws['!cols'] = [
-        { wch: 45 }, // name
-        { wch: 18 }, // category
-        { wch: 20 }, // sub_category
-        { wch: 22 }, // product_type
-        { wch: 14 }, // selling_price
+        { wch: 45 }, // title
+        { wch: 55 }, // description
+        { wch: 14 }, // cost_price
         { wch: 14 }, // regular_price
-        { wch: 14 }, // buying_price
-        { wch: 10 }, // stock
-        { wch: 16 }, // sku
-        { wch: 45 }, // image_url
-        { wch: 45 }, // gallery_images
-        { wch: 22 }, // colors
-        { wch: 50 }, // description
-        { wch: 35 }, // meta_title
-        { wch: 45 }, // meta_description
-        { wch: 30 }, // meta_keywords
-        { wch: 35 }, // slug
-        { wch: 15 }, // brand
+        { wch: 14 }, // discount_price
+        { wch: 45 }, // image
+        { wch: 20 }, // category
+        { wch: 20 }, // sub_category
+        { wch: 20 }, // child_category
+        { wch: 20 }, // product_type
       ];
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Products_Template');
+      XLSX.utils.book_append_sheet(wb, ws, 'Products');
 
-      XLSX.writeFile(wb, 'Maxora_Products_Import_Template.xlsx');
-      showToast('নমুনা এক্সেল ফাইল ডাউনলোড সফল হয়েছে!', 'success');
+      XLSX.writeFile(wb, 'Maxora_Simple_Products_Template.xlsx');
+      showToast('⭐ সহজ ১০-কলামের এক্সেল টেমপ্লেট ডাউনলোড সফল হয়েছে!', 'success');
     } catch (e: any) {
       console.error(e);
       showToast('টেমপ্লেট ডাউনলোড ব্যর্থ হয়েছে', 'error');
     }
   };
 
-  // 2. Parse Excel/CSV File
+  // 1b. Download Full Advanced Template (with manual SEO override columns)
+  const handleDownloadAdvancedTemplate = () => {
+    try {
+      const advancedData = [
+        {
+          title: 'T900 Ultra 2 Smartwatch With Bluetooth Calling',
+          description: 'HD display smartwatch with bluetooth calling, sports tracking, and waterproof build.',
+          cost_price: 950,
+          regular_price: 1850,
+          discount_price: 1350,
+          image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80',
+          category: 'Smart Gadgets',
+          sub_category: 'Smart Watch',
+          product_type: 'T900 Series',
+          child_category: 'Calling Watch',
+          brand: 'Maxora',
+          stock: 60,
+          sku: 'MX-SW-T900U',
+          meta_title: 'T900 Ultra 2 Smartwatch Price in Bangladesh | Maxora Shop',
+          meta_description: 'Buy original T900 Ultra 2 Smartwatch at best price in BD with fast cash on delivery across Bangladesh.',
+          meta_keywords: 't900 ultra, smartwatch bd, bluetooth calling watch, smart gadgets bd',
+          slug: 't900-ultra-2-smartwatch-with-bluetooth-calling',
+        },
+      ];
+
+      const ws = XLSX.utils.json_to_sheet(advancedData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Advanced_Products');
+      XLSX.writeFile(wb, 'Maxora_Advanced_Products_Template.xlsx');
+      showToast('অ্যাডভান্সড এক্সেল টেমপ্লেট ডাউনলোড সফল হয়েছে!', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast('টেমপ্লেট ডাউনলোড ব্যর্থ হয়েছে', 'error');
+    }
+  };
+
+  // 2. Parse Excel/CSV File with Flexible Aliases & Google SEO Generator
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
@@ -206,11 +214,13 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
         }
 
         const parsed: ParsedImportProduct[] = rawRows.map((row, index) => {
-          // Normalize column names (support case insensitive & aliases)
+          // Normalize column names (support case-insensitive & bilingual aliases)
           const getVal = (...keys: string[]) => {
             for (const k of keys) {
+              const kClean = k.trim().toLowerCase().replace(/[\s_-]+/g, '');
               for (const rowKey of Object.keys(row)) {
-                if (rowKey.trim().toLowerCase() === k.toLowerCase()) {
+                const rowKeyClean = rowKey.trim().toLowerCase().replace(/[\s_-]+/g, '');
+                if (rowKeyClean === kClean) {
                   return row[rowKey];
                 }
               }
@@ -218,85 +228,175 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
             return '';
           };
 
-          const name = String(getVal('name', 'product_name', 'title', 'product name') || '').trim();
-          const category = String(getVal('category', 'category_name', 'cat') || 'Smart Gadgets').trim();
-          const subCategory = String(getVal('sub_category', 'subcategory', 'sub category', 'sub-category') || '').trim();
-          const productType = String(getVal('product_type', 'type', 'product type') || '').trim();
-          const childCategory = String(getVal('child_category', 'child category') || '').trim();
-          const brand = String(getVal('brand', 'brand_name') || 'Maxora').trim();
+          // 1. Title / Name (supports 'title', 'titel', 'produter titel', 'name', etc.)
+          const title = String(
+            getVal('title', 'titel', 'produter titel', 'produter title', 'name', 'product_name', 'product_title', 'product name', 'product title', 'item', 'item_name', 'পণ্যের নাম', 'নাম') || ''
+          ).trim();
 
-          const sellingPriceRaw = getVal('selling_price', 'price', 'selling price', 'sale_price', 'offer_price');
-          const sellingPrice = Math.max(0, Number(String(sellingPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          // 2. Description
+          const description = String(
+            getVal('description', 'details', 'desc', 'product_description', 'বিবরণ', 'প্রোডাক্ট বিবরণ') || ''
+          ).trim();
 
-          const regularPriceRaw = getVal('regular_price', 'regular price', 'original_price', 'mrp', 'old_price');
-          const regularPrice = Math.max(0, Number(String(regularPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          // 3. Hierarchy: Category, Sub Category, Child Category, Product Type
+          const category = String(
+            getVal('category', 'catagory', 'category_name', 'catagory_name', 'cat', 'ক্যাটাগরি') || 'Smart Gadgets'
+          ).trim();
 
-          const buyingPriceRaw = getVal('buying_price', 'cost_price', 'buying price');
-          const buyingPrice = Math.max(0, Number(String(buyingPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          const subCategory = String(
+            getVal('sub_category', 'sub_catagory', 'subcategory', 'subcatagory', 'sub category', 'sub catagory', 'sub-category', 'সাব ক্যাটাগরি') || ''
+          ).trim();
+
+          const childCategory = String(
+            getVal('child_category', 'child_catagory', 'childcategory', 'childcatagory', 'child category', 'child catagory', 'চাইল্ড ক্যাটাগরি') || ''
+          ).trim();
+
+          const productType = String(
+            getVal('product_type', 'type', 'product type', 'producttype', 'প্রোডাক্ট টাইপ') || ''
+          ).trim();
+
+          const brand = String(
+            getVal('brand', 'brand_name', 'ব্র্যান্ড') || 'Maxora'
+          ).trim();
+
+          // 4. Prices & Discounts
+          // discount_price = selling_price (the final discounted price customer pays)
+          const discountPriceRaw = getVal('discount_price', 'discount price', 'discountprice', 'selling_price', 'selling price', 'sale_price', 'offer_price', 'price', 'বিক্রয় মূল্য', 'ডিসকাউন্ট মূল্য', 'অফার মূল্য');
+          const regularPriceRaw = getVal('regular_price', 'regular price', 'regularprice', 'mrp', 'original_price', 'old_price', 'নিয়মিত মূল্য', 'পূর্বের মূল্য');
+          const costPriceRaw = getVal('cost_price', 'cost price', 'costprice', 'cost', 'buying_price', 'buying price', 'purchase_price', 'ক্রয়মূল্য', 'কেনা দাম', 'কেনা মূল্য');
+
+          let sellingPrice = Math.max(0, Number(String(discountPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          let regularPrice = Math.max(0, Number(String(regularPriceRaw).replace(/[^0-9.]/g, '') || 0));
+          let buyingPrice = Math.max(0, Number(String(costPriceRaw).replace(/[^0-9.]/g, '') || 0));
+
+          // Smart Price Balancing:
+          if (sellingPrice === 0 && regularPrice > 0) {
+            sellingPrice = regularPrice;
+          } else if (regularPrice === 0 && sellingPrice > 0) {
+            // If user only gave selling/discount price, estimate standard 20% strike-through MRP
+            regularPrice = Math.round(sellingPrice * 1.25);
+          } else if (regularPrice < sellingPrice) {
+            regularPrice = sellingPrice;
+          }
 
           const discount = regularPrice > sellingPrice ? regularPrice - sellingPrice : 0;
 
-          const stockRaw = getVal('stock', 'quantity', 'qty', 'inventory');
+          // If cost price was not given, estimate 70% of selling price
+          if (buyingPrice === 0 && sellingPrice > 0) {
+            buyingPrice = Math.round(sellingPrice * 0.7);
+          }
+
+          // 5. Stock & Inventory
+          const stockRaw = getVal('stock', 'quantity', 'qty', 'inventory', 'স্টক');
           const stock = Math.max(0, Number(String(stockRaw).replace(/[^0-9]/g, '') || 50));
 
-          const skuRaw = String(getVal('sku', 'code', 'product_code') || '').trim();
-          const sku = skuRaw || `MX-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+          // 6. Image & Gallery Images (supports 'image', 'image link', 'immage', 'photo', etc.)
+          const imageRaw = String(
+            getVal('image', 'immage', 'image_url', 'image link', 'image_link', 'image link ba immage', 'img', 'photo', 'picture', 'main_image', 'ছবি', 'ইমেজ', 'ইমেজ লিংক') || ''
+          ).trim();
 
-          const imageUrlRaw = String(getVal('image_url', 'image', 'photo', 'picture', 'main_image') || '').trim();
-          const imageUrl = imageUrlRaw || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+          let imageUrl = imageRaw;
+          let galleryImages: string[] = [];
 
+          // If user provided multiple comma/line separated images in image column
+          if (imageRaw.includes(',') || imageRaw.includes('\n')) {
+            const splitImgs = imageRaw.split(/[,;\n]/).map((u) => u.trim()).filter(Boolean);
+            imageUrl = splitImgs[0] || '';
+            galleryImages = splitImgs.slice(1);
+          }
+
+          // Fallback image if empty
+          if (!imageUrl) {
+            imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+          }
+
+          // Also check explicit gallery column
           const galleryRaw = String(getVal('gallery_images', 'gallery', 'more_images', 'images') || '').trim();
-          const galleryImages = galleryRaw
-            ? galleryRaw.split(/[,;\n]/).map((u) => u.trim()).filter(Boolean)
-            : [];
+          if (galleryRaw) {
+            const extraImgs = galleryRaw.split(/[,;\n]/).map((u) => u.trim()).filter(Boolean);
+            galleryImages = Array.from(new Set([...galleryImages, ...extraImgs]));
+          }
 
+          // 7. Colors
           const colorsRaw = String(getVal('colors', 'color', 'variants') || '').trim();
           const colors = colorsRaw
             ? colorsRaw.split(/[,;\n]/).map((c) => c.trim()).filter(Boolean)
             : [];
 
-          const description = String(getVal('description', 'details', 'desc') || '').trim();
+          // 8. Auto SKU
+          const customSku = String(getVal('sku', 'code', 'product_code') || '').trim();
+          const catPrefix = category.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'ITM';
+          const sku = customSku || `MX-${catPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-          // SEO HANDLING (Automated Smart SEO or explicit custom SEO from Excel)
+          // =====================================================================
+          // 🚀 HIGH-PERFORMANCE GOOGLE RANKING & SEO ENGINE (AUTO-GENERATED)
+          // =====================================================================
+          const cleanTitle = title || `Item-${index + 1}`;
+
+          // A. Clean SEO URL Slug
           const customSlug = String(getVal('slug', 'url_slug', 'url') || '').trim();
-          const cleanSlug = customSlug ? generateSlug(customSlug) : generateSlug(name || `item-${index + 1}`);
+          const cleanSlug = customSlug ? generateSlug(customSlug) : generateSlug(cleanTitle);
 
+          // B. High-CTR Google Search Meta Title (Optimized for Bangladesh Market)
+          // Format: "[Title] Price in BD ৳[Price] | Maxora BD" (Matches top Google BD search queries)
           const customMetaTitle = String(getVal('meta_title', 'seo_title', 'meta title') || '').trim();
-          const metaTitle = customMetaTitle || `${name} Price in Bangladesh | Maxora Shop`;
+          const autoMetaTitle = sellingPrice > 0
+            ? `${cleanTitle} Price in BD ৳${sellingPrice.toLocaleString('en-BD')} | Maxora BD`
+            : `${cleanTitle} Price in Bangladesh | 100% Original | Maxora BD`;
+          const metaTitle = customMetaTitle || autoMetaTitle;
 
+          // C. Google SERP Snippet Meta Description (150-160 characters action-oriented)
           const customMetaDesc = String(getVal('meta_description', 'seo_description', 'meta description') || '').trim();
-          const metaDescription = customMetaDesc || (description
-            ? description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim().slice(0, 160)
-            : `Buy ${name} at the best price in Bangladesh with fast Cash on Delivery and authentic warranty at Maxora Shop.`);
+          let autoMetaDescription = '';
+          if (description) {
+            const cleanDesc = description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
+            const descIntro = cleanDesc.slice(0, 85);
+            autoMetaDescription = `${descIntro}... Buy ${cleanTitle} at best price in BD (৳${sellingPrice.toLocaleString('en-BD')}) with Cash on Delivery at Maxora.`;
+          } else {
+            autoMetaDescription = `Buy original ${cleanTitle} at best price in Bangladesh (৳${sellingPrice.toLocaleString('en-BD')}). 100% genuine quality, Cash on Delivery across 64 districts & express delivery at Maxora.`;
+          }
+          const metaDescription = customMetaDesc || autoMetaDescription;
 
+          // D. Google High-Search-Intent Keywords (LSI & Target Search Phrases)
           const customKeywords = String(getVal('meta_keywords', 'keywords', 'tags') || '').trim();
-          const metaKeywords = customKeywords || [
-            name.toLowerCase(),
-            category.toLowerCase(),
+          const autoKeywords = Array.from(new Set([
+            cleanTitle.toLowerCase(),
+            `${cleanTitle.toLowerCase()} price in bd`,
+            `${cleanTitle.toLowerCase()} price in bangladesh`,
+            `buy ${cleanTitle.toLowerCase()} online`,
+            `${category.toLowerCase()} in bd`,
             subCategory ? subCategory.toLowerCase() : '',
+            productType ? productType.toLowerCase() : '',
+            childCategory ? childCategory.toLowerCase() : '',
             'online shopping bangladesh',
             'cash on delivery bd',
-          ].filter(Boolean).join(', ');
+            `authentic ${cleanTitle.toLowerCase()}`,
+            'maxora shop bd',
+          ])).filter(Boolean).join(', ');
+          const metaKeywords = customKeywords || autoKeywords;
 
+          const isAutoSeoGenerated = !customMetaTitle || !customMetaDesc || !customKeywords || !customSlug;
+
+          // Validation
           let isValid = true;
           let validationError = '';
 
-          if (!name) {
+          if (!title) {
             isValid = false;
-            validationError = 'পণ্যের নাম নেই (Name missing)';
+            validationError = 'পণ্যের নাম নেই (Product title is required)';
           } else if (sellingPrice <= 0) {
             isValid = false;
             validationError = 'সঠিক বিক্রয় মূল্য দিন (Invalid selling price)';
           }
 
           return {
-            name,
+            name: cleanTitle,
             category,
             sub_category: subCategory,
             product_type: productType,
             child_category: childCategory,
             selling_price: sellingPrice,
-            regular_price: regularPrice || sellingPrice,
+            regular_price: regularPrice,
             buying_price: buyingPrice,
             discount,
             stock,
@@ -312,11 +412,12 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
             brand,
             isValid,
             validationError,
+            isAutoSeoGenerated,
           };
         });
 
         setParsedProducts(parsed);
-        showToast(`${parsed.length}টি প্রোডাক্ট এক্সেল থেকে সফলভাবে লোড হয়েছে!`, 'success');
+        showToast(`🎉 ${parsed.length}টি প্রোডাক্ট এক্সেল থেকে সফলভাবে লোড হয়েছে! গুগল এসইও অটো-জেনারেট সম্পন্ন।`, 'success');
       } catch (err: any) {
         console.error(err);
         showToast('ফাইল রিড করতে সমস্যা হয়েছে: ' + (err.message || 'Unknown format'), 'error');
@@ -327,7 +428,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
     reader.readAsBinaryString(selectedFile);
   };
 
-  // 3. Confirm & Execute Bulk Import to Firestore
+  // 3. Confirm & Execute Bulk Import to Firestore & Database
   const handleExecuteImport = async () => {
     const validOnes = parsedProducts.filter((p) => p.isValid);
     if (validOnes.length === 0) {
@@ -388,7 +489,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
         const subCatSlug = subCatName ? generateSlug(subCatName) : '';
         const subCatId = subCatSlug ? `sub-${subCatSlug}` : '';
 
-        const typeName = (p.product_type || 'Standard Product').trim();
+        const typeName = (p.product_type || '').trim();
         const typeSlug = typeName ? generateSlug(typeName) : '';
         const typeId = typeSlug ? `pt-${typeSlug}` : '';
 
@@ -418,6 +519,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           brand: brandName,
           brand_slug: brandSlug,
           selling_price: p.selling_price,
+          regular_price: p.regular_price || p.selling_price,
           discount: p.discount || 0,
           buying_price: p.buying_price || 0,
           stock: p.stock,
@@ -455,7 +557,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
     }
 
     if (successCount > 0) {
-      showToast(`🎉 অভিনন্দন! ${successCount}টি প্রোডাক্ট সফলভাবে আপলোড ও ক্যাটাগরাইজ হয়েছে!`, 'success');
+      showToast(`🎉 অভিনন্দন! ${successCount}টি প্রোডাক্ট সফলভাবে আপলোড হয়েছে এবং গুগলের জন্য অটো এসইও কনফিগার করা হয়েছে!`, 'success');
       onSuccess(successCount);
       onClose();
     } else {
@@ -489,28 +591,41 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
             </div>
             <div>
               <h2 className="font-black text-lg sm:text-xl text-zinc-900 tracking-tight flex items-center gap-2">
-                <span>Excel / CSV Bulk Product Import</span>
-                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Auto Category & SEO
+                <span>Excel Bulk Product Import</span>
+                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-emerald-600" />
+                  Auto Google Rank SEO
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 mt-0.5">
-                এক্সেলে প্রোডাক্ট যোগ করে এক ক্লিকে শত শত প্রোডাক্ট লাইভ করুন
+                শুধু টাইটেল, দাম, ছবি ও ক্যাটাগরি লিখুন — বাকি Google SEO, মেটা টাইটেল ও URL অটো জেনারেট হবে!
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Download Simple 10-Col Template (Recommended) */}
             <button
               type="button"
-              onClick={handleDownloadSampleTemplate}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 text-xs font-bold shadow-xs transition-all cursor-pointer"
-              title="নমুনা এক্সেল ফাইল ডাউনলোড করুন"
+              onClick={handleDownloadSimpleTemplate}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-black shadow-xs transition-all cursor-pointer"
+              title="সহজ ১০-কলামের এক্সেল টেমপ্লেট ডাউনলোড করুন"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">Download Sample Template</span>
-              <span className="sm:hidden">Template</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>সহজ টেমপ্লেট (১০ কলাম)</span>
             </button>
+
+            {/* Advanced Template */}
+            <button
+              type="button"
+              onClick={handleDownloadAdvancedTemplate}
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-xs font-bold transition-all cursor-pointer"
+              title="অ্যাডভান্সড এক্সেল টেমপ্লেট ডাউনলোড করুন"
+            >
+              <Download className="w-3.5 h-3.5 text-zinc-500" />
+              <span>অ্যাডভান্সড টেমপ্লেট</span>
+            </button>
+
             <button
               onClick={onClose}
               disabled={isImporting}
@@ -524,25 +639,42 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
 
         {/* Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
-          {/* SEO & Category Explanation Banner */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 text-xs text-blue-950">
-            <div className="flex items-start gap-2.5">
-              <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-extrabold text-sm text-indigo-950">
-                  💡 প্রোডাক্ট SEO এবং ক্যাটাগরি যেভাবে স্বয়ংক্রিয়ভাবে কাজ করে:
+          {/* Smart SEO & Google Ranking Banner */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 rounded-2xl p-4 text-xs text-zinc-900 shadow-2xs">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="font-black text-sm text-emerald-950 flex items-center gap-1.5">
+                    <span>🚀 গুগল র‍্যাঙ্কিং অটোমেটিক সিস্টেম (Google Rank Engine)</span>
+                  </p>
+                  <span className="text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    Zero Manual SEO Effort
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 leading-relaxed">
+                  আপনাকে আর কষ্ট করে মেটা টাইটেল, কি-ওয়ার্ড বা স্লাগ লিখতে হবে না! এক্সেলে শুধু নিচের <strong>১০টি তথ্য</strong> দেবেন:
                 </p>
-                <ul className="list-disc list-inside space-y-0.5 text-zinc-700">
-                  <li>
-                    <strong className="text-zinc-900">অটোমেটিক ক্যাটাগরি শো:</strong> এক্সেলে আপনি যে ক্যাটাগরি ও সাব-ক্যাটাগরি দেবেন, আপলোড করার সাথে সাথে ওয়েবসাইট এবং অ্যাডমিন প্যানেলে সেই ক্যাটাগরি অনুযায়ী প্রোডাক্ট ফিল্টার হয়ে সাজিয়ে যাবে।
-                  </li>
-                  <li>
-                    <strong className="text-zinc-900">স্মার্ট এসইও (Auto-SEO Generation):</strong> এক্সেলে <code className="bg-white px-1 rounded text-indigo-700">meta_title</code>, <code className="bg-white px-1 rounded text-indigo-700">meta_description</code>, এবং <code className="bg-white px-1 rounded text-indigo-700">slug</code> কলামগুলো ফাঁকা রাখলে সিস্টেম স্বয়ংক্রিয়ভাবে গুগলের জন্য সর্বোচ্চ র‍্যাঙ্কিং উপযোগী টাইটেল, ডেসক্রিপশন এবং পারফেক্ট ক্লিন ইউআরএল তৈরি করে দেবে!
-                  </li>
-                  <li>
-                    <strong className="text-zinc-900">কাস্টম এসইও:</strong> আপনি চাইলে এক্সেল ফাইলে নিজের মতো করে মেটা টাইটেল ও মেটা ডেসক্রিপশন লিখেও আপলোড করতে পারেন।
-                  </li>
-                </ul>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1 font-mono text-[11px]">
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">1. title</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">2. description</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">3. cost_price</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">4. regular_price</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">5. discount_price</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">6. image</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">7. category</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">8. sub_category</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">9. child_category</span>
+                  <span className="bg-white/80 p-1.5 rounded-lg border border-emerald-200 text-emerald-900">10. product_type</span>
+                </div>
+                <div className="text-[11px] text-zinc-600 pt-1 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>সিস্টেম অটো করবে:</strong> SEO URL Slug, Google Meta Title (Price in BD), 150-char Google Snippet Description, LSI Keywords, SKU এবং ৪-স্তর ক্যাটাগরি ডাটাবেজে লিংকিং!
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -579,14 +711,27 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                 <UploadCloud className="w-8 h-8" />
               </div>
               <h3 className="font-extrabold text-base sm:text-lg text-zinc-900">
-                এক্সেল বা সিএসভি ফাইল ড্রপ করুন অথবা ক্লিক করে সিলেক্ট করুন
+                এক্সেল (.xlsx, .xls) বা সিএসভি (.csv) ফাইল এখানে ড্রপ করুন
               </h3>
               <p className="text-xs text-zinc-500 mt-1 max-w-md">
-                সাপোর্টেড ফরম্যাট: <span className="font-bold text-zinc-700">.xlsx, .xls, .csv</span>। ফাইল সিলেক্ট করার সাথে সাথে নিচে ইন্টারেক্টিভ প্রিভিউ তৈরি হবে।
+                ১০টি সাধারণ কলাম সহ আপনার এক্সেল ফাইলটি আপলোড করলেই স্বয়ংক্রিয়ভাবে গুগল র‍্যাঙ্কিং প্রিভিউ তৈরি হবে।
               </p>
-              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-600/20">
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>ফাইল সিলেক্ট করুন</span>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadSimpleTemplate();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-50 font-bold text-xs shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>নমুনা এক্সেল ডাউনলোড করুন</span>
+                </button>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-600/20">
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>ফাইল ব্রাউজ করুন</span>
+                </div>
               </div>
             </div>
           )}
@@ -595,7 +740,9 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           {isProcessingFile && (
             <div className="p-8 text-center bg-zinc-50 rounded-2xl border border-zinc-200">
               <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm font-bold text-zinc-800">এক্সেল ফাইল প্রসেস ও এসইও এনালাইজ করা হচ্ছে...</p>
+              <p className="text-sm font-bold text-zinc-800">
+                এক্সেল ফাইল প্রসেস ও গুগল এসইও (Google Rank SEO) অটো-জেনারেট করা হচ্ছে...
+              </p>
             </div>
           )}
 
@@ -613,7 +760,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                       {file.name}
                     </p>
                     <p className="text-[11px] text-zinc-500">
-                      {(file.size / 1024).toFixed(1)} KB • {parsedProducts.length}টি সারি সনাক্ত হয়েছে
+                      {(file.size / 1024).toFixed(1)} KB • {parsedProducts.length}টি প্রোডাক্ট প্রসেস সম্পন্ন
                     </p>
                   </div>
                 </div>
@@ -621,7 +768,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{validCount} ভ্যালিড</span>
+                    <span>{validCount} প্রস্তুত</span>
                   </span>
                   {invalidCount > 0 && (
                     <span className="px-2.5 py-1 rounded-xl bg-rose-100 text-rose-800 font-extrabold text-xs flex items-center gap-1">
@@ -637,7 +784,7 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                     }}
                     className="px-2.5 py-1 text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 rounded-lg transition-colors cursor-pointer"
                   >
-                    ফাইল পরিবর্তন
+                    নতুন ফাইল
                   </button>
                 </div>
               </div>
@@ -654,19 +801,19 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                         : 'text-zinc-600 hover:text-zinc-900'
                     }`}
                   >
-                    প্রোডাক্ট তালিকা ও স্টক ({parsedProducts.length})
+                    পণ্য ও মূল্য তালিকা ({parsedProducts.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveTab('seo')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                       activeTab === 'seo'
-                        ? 'bg-white text-zinc-950 shadow-xs'
+                        ? 'bg-white text-zinc-950 shadow-xs font-black'
                         : 'text-zinc-600 hover:text-zinc-900'
                     }`}
                   >
-                    <Globe className="w-3 h-3 text-indigo-600" />
-                    <span>গুগল এসইও ও মেটা প্রিভিউ</span>
+                    <Globe className="w-3.5 h-3.5 text-blue-600" />
+                    <span>🔍 গুগল সার্চ প্রিভিউ (Google Rank Preview)</span>
                   </button>
                 </div>
 
@@ -682,154 +829,191 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                 </div>
               </div>
 
-              {/* Table Preview */}
-              <div className="border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
-                <div className="overflow-x-auto max-h-[380px]">
-                  <table className="w-full text-left text-xs text-zinc-600">
-                    <thead className="bg-zinc-100 border-b border-zinc-200 text-zinc-800 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10">
-                      <tr>
-                        <th className="p-3 w-12 text-center">#</th>
-                        {activeTab === 'preview' ? (
-                          <>
-                            <th className="p-3">প্রোডাক্ট ও ছবি</th>
-                            <th className="p-3">ক্যাটাগরি / সাব-ক্যাটাগরি</th>
-                            <th className="p-3 text-right">বিক্রয় মূল্য</th>
-                            <th className="p-3 text-right">আসল মূল্য</th>
-                            <th className="p-3 text-center">স্টক</th>
-                            <th className="p-3">SKU</th>
-                            <th className="p-3 text-center">স্ট্যাটাস</th>
-                          </>
-                        ) : (
-                          <>
-                            <th className="p-3">প্রোডাক্ট</th>
-                            <th className="p-3">গুগল এসইও স্লাগ (Clean URL)</th>
-                            <th className="p-3">এসইও মেটা টাইটেল (Title)</th>
-                            <th className="p-3">মেটা ডেসক্রিপশন (Description)</th>
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-200 bg-white">
-                      {filteredPreview.map((item, idx) => (
-                        <tr
-                          key={idx}
-                          className={`hover:bg-zinc-50/80 transition-colors ${
-                            !item.isValid ? 'bg-rose-50/40' : ''
-                          }`}
-                        >
-                          <td className="p-3 text-center font-bold text-zinc-400">
-                            {idx + 1}
-                          </td>
-
-                          {activeTab === 'preview' ? (
-                            <>
-                              <td className="p-3">
-                                <div className="flex items-center gap-2.5 min-w-[220px]">
-                                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200">
-                                    <img
-                                      src={item.image_url}
-                                      alt={item.name}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src =
-                                          'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="font-extrabold text-zinc-900 truncate">
-                                      {item.name}
-                                    </p>
-                                    {item.colors && item.colors.length > 0 && (
-                                      <p className="text-[10px] text-zinc-500 truncate">
-                                        কালার: {item.colors.join(', ')}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-
-                              <td className="p-3 whitespace-nowrap">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-                                  <Tag className="w-2.5 h-2.5" />
-                                  <span>{item.category}</span>
-                                </span>
-                                {item.sub_category && (
-                                  <span className="block text-[10px] text-zinc-500 font-semibold mt-0.5">
-                                    ↳ {item.sub_category}
-                                  </span>
-                                )}
-                              </td>
-
-                              <td className="p-3 text-right font-black text-zinc-900 whitespace-nowrap">
-                                ৳{item.selling_price.toLocaleString('en-BD')}
-                              </td>
-
-                              <td className="p-3 text-right text-zinc-400 line-through whitespace-nowrap">
-                                {item.regular_price && item.regular_price > item.selling_price
-                                  ? `৳${item.regular_price.toLocaleString('en-BD')}`
-                                  : '—'}
-                              </td>
-
-                              <td className="p-3 text-center whitespace-nowrap">
-                                <span className="font-extrabold text-zinc-800 bg-zinc-100 px-2 py-0.5 rounded-md">
-                                  {item.stock}
-                                </span>
-                              </td>
-
-                              <td className="p-3 font-mono text-[10px] text-zinc-600 whitespace-nowrap">
-                                {item.sku}
-                              </td>
-
-                              <td className="p-3 text-center whitespace-nowrap">
-                                {item.isValid ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                    <Check className="w-2.5 h-2.5" />
-                                    <span>রেডি</span>
-                                  </span>
-                                ) : (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full"
-                                    title={item.validationError}
-                                  >
-                                    <AlertTriangle className="w-2.5 h-2.5" />
-                                    <span>ত্রুটি</span>
-                                  </span>
-                                )}
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="p-3 font-bold text-zinc-900 min-w-[180px]">
-                                {item.name}
-                              </td>
-
-                              <td className="p-3 min-w-[200px]">
-                                <div className="flex items-center gap-1 font-mono text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-1 rounded-lg">
-                                  <Globe className="w-3 h-3 shrink-0" />
-                                  <span className="truncate">maxorabd.com/product/{item.slug}</span>
-                                </div>
-                              </td>
-
-                              <td className="p-3 min-w-[220px]">
-                                <p className="font-extrabold text-zinc-900 text-xs truncate">
-                                  {item.meta_title}
-                                </p>
-                              </td>
-
-                              <td className="p-3 min-w-[260px]">
-                                <p className="text-[11px] text-zinc-600 line-clamp-2">
-                                  {item.meta_description}
-                                </p>
-                              </td>
-                            </>
-                          )}
+              {/* Table / Preview Area */}
+              {activeTab === 'preview' ? (
+                /* Tab 1: Product Specs & Pricing Table */
+                <div className="border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto max-h-[380px]">
+                    <table className="w-full text-left text-xs text-zinc-600">
+                      <thead className="bg-zinc-100 border-b border-zinc-200 text-zinc-800 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10">
+                        <tr>
+                          <th className="p-3 w-12 text-center">#</th>
+                          <th className="p-3">প্রোডাক্ট ও ছবি</th>
+                          <th className="p-3">ক্যাটাগরি হায়ারার্কি</th>
+                          <th className="p-3 text-right">ডিসকাউন্ট মূল্য</th>
+                          <th className="p-3 text-right">আসল মূল্য</th>
+                          <th className="p-3 text-right">ক্রয়মূল্য</th>
+                          <th className="p-3 text-center">স্টক</th>
+                          <th className="p-3">SKU</th>
+                          <th className="p-3 text-center">স্ট্যাটাস</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 bg-white font-medium">
+                        {filteredPreview.map((item, idx) => (
+                          <tr
+                            key={idx}
+                            className={`hover:bg-zinc-50/80 transition-colors ${
+                              !item.isValid ? 'bg-rose-50/40' : ''
+                            }`}
+                          >
+                            <td className="p-3 text-center font-bold text-zinc-400">
+                              {idx + 1}
+                            </td>
+
+                            <td className="p-3">
+                              <div className="flex items-center gap-2.5 min-w-[220px]">
+                                <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200">
+                                  <img
+                                    src={item.image_url}
+                                    alt={item.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).src =
+                                        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+                                    }}
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-extrabold text-zinc-900 truncate">
+                                    {item.name}
+                                  </p>
+                                  {item.description && (
+                                    <p className="text-[10px] text-zinc-400 truncate">
+                                      {item.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="p-3 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                                <Tag className="w-2.5 h-2.5" />
+                                <span>{item.category}</span>
+                              </span>
+                              {item.sub_category && (
+                                <span className="block text-[10px] text-zinc-500 font-semibold mt-0.5">
+                                  ↳ {item.sub_category} {item.product_type ? `> ${item.product_type}` : ''}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="p-3 text-right font-black text-emerald-700 whitespace-nowrap">
+                              ৳{item.selling_price.toLocaleString('en-BD')}
+                            </td>
+
+                            <td className="p-3 text-right text-zinc-400 line-through whitespace-nowrap">
+                              {item.regular_price && item.regular_price > item.selling_price
+                                ? `৳${item.regular_price.toLocaleString('en-BD')}`
+                                : '—'}
+                            </td>
+
+                            <td className="p-3 text-right text-zinc-600 whitespace-nowrap">
+                              ৳{item.buying_price?.toLocaleString('en-BD') || '—'}
+                            </td>
+
+                            <td className="p-3 text-center whitespace-nowrap">
+                              <span className="font-extrabold text-zinc-800 bg-zinc-100 px-2 py-0.5 rounded-md">
+                                {item.stock}
+                              </span>
+                            </td>
+
+                            <td className="p-3 font-mono text-[10px] text-zinc-600 whitespace-nowrap">
+                              {item.sku}
+                            </td>
+
+                            <td className="p-3 text-center whitespace-nowrap">
+                              {item.isValid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                  <Check className="w-2.5 h-2.5" />
+                                  <span>রেডি</span>
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full"
+                                  title={item.validationError}
+                                >
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  <span>ত্রুটি</span>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* Tab 2: Google SERP Ranking Simulator (Interactive Snippet Preview) */
+                <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                  <div className="bg-blue-50/70 border border-blue-200 p-3 rounded-2xl text-xs text-blue-950 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-blue-600" />
+                      <span className="font-bold">
+                        গুগল সার্চে আপনার প্রোডাক্ট ঠিক যেভাবে দেখতে পাবেন (Google Desktop & Mobile SERP Snippet)
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-extrabold text-blue-800 bg-white px-2.5 py-0.5 rounded-full border border-blue-200">
+                      Auto SEO Engine Active
+                    </span>
+                  </div>
+
+                  {filteredPreview.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 bg-white rounded-2xl border border-zinc-200 shadow-2xs space-y-2 hover:border-blue-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          #{idx + 1} • {item.category} {item.sub_category ? `› ${item.sub_category}` : ''}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          <span>Google Rank Optimized</span>
+                        </span>
+                      </div>
+
+                      {/* Google Search Mockup Snippet */}
+                      <div className="bg-zinc-50/70 p-3.5 rounded-xl border border-zinc-200/80 space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] text-[#202124]">
+                          <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[9px]">
+                            M
+                          </div>
+                          <span className="font-semibold text-zinc-800">Maxora BD</span>
+                          <span className="text-zinc-400">›</span>
+                          <span className="text-zinc-500 font-mono text-[10px] truncate">
+                            product › {item.slug}
+                          </span>
+                        </div>
+
+                        {/* Blue Google Result Link */}
+                        <h4 className="text-sm font-semibold text-[#1a0dab] hover:underline cursor-pointer leading-snug">
+                          {item.meta_title}
+                        </h4>
+
+                        {/* Snippet Description */}
+                        <p className="text-xs text-[#4d5156] leading-relaxed line-clamp-2">
+                          {item.meta_description}
+                        </p>
+                      </div>
+
+                      {/* Keywords Badges */}
+                      <div className="flex flex-wrap items-center gap-1 pt-1">
+                        <span className="text-[10px] font-bold text-zinc-400 mr-1">গুগল সার্চ ট্যাগ:</span>
+                        {item.meta_keywords.split(',').slice(0, 6).map((kw, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 font-medium border border-zinc-200"
+                          >
+                            #{kw.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -862,10 +1046,10 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           <div className="text-xs text-zinc-500 font-medium">
             {parsedProducts.length > 0 ? (
               <span>
-                মোট <strong className="text-zinc-900 font-bold">{validCount}টি</strong> প্রোডাক্ট প্রস্তুত
+                মোট <strong className="text-zinc-900 font-bold">{validCount}টি</strong> প্রোডাক্ট প্রস্তুত (Auto SEO Ready)
               </span>
             ) : (
-              <span>প্রথমে এক্সেল ফাইল আপলোড করুন</span>
+              <span>১০টি সাধারণ কলাম সহ এক্সেল ফাইল আপলোড করুন</span>
             )}
           </div>
 
