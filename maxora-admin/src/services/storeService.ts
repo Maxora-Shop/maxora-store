@@ -588,6 +588,20 @@ export function initRealtimeFirestoreListeners() {
     }, (err) => handleStoreFirestoreError('Settings snapshot', err));
     activeFirestoreUnsubscribers.push(unsubSettings);
 
+    // 3. Listen for categories changes in real-time: instant update when admin creates, updates, or deletes a category
+    const unsubCategories = onSnapshot(collection(db, 'categories'), (snapshot) => {
+      if (!snapshot.empty) {
+        const cats: Category[] = [];
+        snapshot.docs.forEach((d) => {
+          const item = d.data() as Category;
+          cats.push({ ...item, id: String(item.id || d.id) });
+        });
+        setLocal(CATEGORIES_KEY, cats);
+        notifyCategoriesChanged();
+      }
+    }, (err) => handleStoreFirestoreError('Categories snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubCategories);
+
     // Note: Global orders collection onSnapshot removed from customer storefront
     // for data privacy (preventing public download of customer orders) and Firestore read quota conservation.
     // Order creation (createOrder) and on-demand customer order tracking (trackOrder) remain fully functional.

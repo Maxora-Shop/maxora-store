@@ -147,59 +147,26 @@ export const DEFAULT_HERO_BANNERS: HeroBanner[] = [
 
 export const INITIAL_CATEGORIES: Category[] = [
   {
-    id: "cat-electronics",
-    name: "Electronics",
-    slug: "electronics",
-    icon: "Cpu",
-    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    id: "cat-home-kitchen-appliances",
+    name: "Home & Kitchen Appliances",
+    slug: "home-kitchen-appliances",
+    icon: "Utensils",
+    image_url: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1,
-    meta_title: "Electronics & Smart Tech in Bangladesh | Maxora",
-    meta_description: "Explore smart gadgets, smartwatches, audio devices, and computer accessories with fast Cash on Delivery in Bangladesh."
+    meta_title: "Home & Kitchen Appliances in Bangladesh | Maxora",
+    meta_description: "Explore home appliances, electric kettles, blenders, and kitchen gadgets with fast delivery across Bangladesh."
   },
   {
-    id: "cat-smart-gadgets",
-    name: "Smart Gadgets",
-    slug: "smart-gadgets",
-    icon: "Watch",
-    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    id: "cat-health-beauty",
+    name: "Health & Beauty",
+    slug: "health-beauty",
+    icon: "Sparkles",
+    image_url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400&auto=format&fit=crop&q=80",
     display_order: 2,
     active: 1,
-    meta_title: "Smart Gadgets & Wearables in Bangladesh | Maxora",
-    meta_description: "Explore smartwatches, fitness bands, and wearable tech with fast Cash on Delivery in Bangladesh."
-  },
-  {
-    id: "cat-audio",
-    name: "Audio",
-    slug: "audio",
-    icon: "Headphones",
-    image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80",
-    display_order: 3,
-    active: 1,
-    meta_title: "Premium Wireless Earbuds & Audio in BD | Maxora",
-    meta_description: "Shop Active Noise Cancelling (ANC) earbuds, headphones, and Bluetooth speakers at best prices in BD."
-  },
-  {
-    id: "cat-computer-gaming",
-    name: "Computer & Gaming",
-    slug: "computer-gaming",
-    icon: "Sparkles",
-    image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400&auto=format&fit=crop&q=80",
-    display_order: 3,
-    active: 1,
-    meta_title: "Mechanical Keyboards & Gaming Gear in BD | Maxora",
-    meta_description: "RGB mechanical keyboards, gaming mice, and desk accessories for gamers and professionals in Bangladesh."
-  },
-  {
-    id: "cat-lifestyle-bags",
-    name: "Lifestyle & Bags",
-    slug: "lifestyle-bags",
-    icon: "ShoppingBag",
-    image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80",
-    display_order: 4,
-    active: 1,
-    meta_title: "Anti-Theft Backpacks & Travel Bags | Maxora BD",
-    meta_description: "Water-repellent anti-theft backpacks, laptop bags, and travel gear delivered across 64 districts."
+    meta_title: "Health & Beauty Products in Bangladesh | Maxora",
+    meta_description: "Shop 100% authentic skin care, hair care, and personal wellness essentials at Maxora Shop BD."
   },
   {
     id: "cat-home-living",
@@ -207,43 +174,54 @@ export const INITIAL_CATEGORIES: Category[] = [
     slug: "home-living",
     icon: "Home",
     image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80",
-    display_order: 5,
+    display_order: 3,
     active: 1,
     meta_title: "Home & Living Essentials | Maxora BD",
     meta_description: "Vacuum insulated flasks, coffee dripper sets, and premium home essentials for everyday comfort."
   },
   {
+    id: "cat-electronics",
+    name: "Electronics",
+    slug: "electronics",
+    icon: "Cpu",
+    image_url: "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80",
+    display_order: 4,
+    active: 1,
+    meta_title: "Electronics & Smart Tech in Bangladesh | Maxora",
+    meta_description: "Explore smart gadgets, smartwatches, audio devices, and computer accessories with fast Cash on Delivery in Bangladesh."
+  },
+  {
     id: "cat-accessories",
     name: "Accessories",
     slug: "accessories",
-    icon: "Shirt",
+    icon: "ShoppingBag",
     image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80",
-    display_order: 6,
+    display_order: 5,
     active: 1,
     meta_title: "Genuine Leather Wallets & Accessories | Maxora BD",
     meta_description: "Handcrafted 100% genuine BD cowhide leather wallets, cardholders, and everyday accessories."
   },
   {
-    id: "cat-mobile-accessories",
-    name: "Mobile Accessories",
-    slug: "mobile-accessories",
-    icon: "Sparkles",
-    image_url: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&auto=format&fit=crop&q=80",
-    display_order: 7,
+    id: "cat-kids-baby",
+    name: "Kids & Baby",
+    slug: "kids-baby",
+    icon: "Baby",
+    image_url: "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&auto=format&fit=crop&q=80",
+    display_order: 6,
     active: 1,
-    meta_title: "Fast GaN Chargers & Cables | Maxora BD",
-    meta_description: "Fast chargers, GaN adapters, heavy-duty braided Type-C cables, and mobile accessories."
+    meta_title: "Kids & Baby Care Products | Maxora BD",
+    meta_description: "Safe educational toys, baby care essentials, and learning accessories with nationwide home delivery."
   },
   {
-    id: "cat-gourmet-food",
-    name: "Gourmet & Food",
-    slug: "gourmet-food",
-    icon: "Coffee",
-    image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&auto=format&fit=crop&q=80",
-    display_order: 8,
+    id: "cat-lifestyle-accessories",
+    name: "Lifestyle & Accessories",
+    slug: "lifestyle-accessories",
+    icon: "Shirt",
+    image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80",
+    display_order: 7,
     active: 1,
-    meta_title: "Pure Organic Tea & Artisanal Food | Maxora BD",
-    meta_description: "Single-origin whole-leaf Sylhet Sreemangal black tea and gourmet specialty goods."
+    meta_title: "Lifestyle & Accessories | Maxora BD",
+    meta_description: "Water-repellent anti-theft backpacks, laptop bags, and lifestyle travel gear delivered across 64 districts."
   }
 ];
 

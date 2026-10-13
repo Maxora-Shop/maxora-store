@@ -18,6 +18,9 @@ import {
   Shirt,
   Sparkles,
   Baby,
+  Utensils,
+  Headphones,
+  Gift,
   ArrowRight,
   Tag,
 } from 'lucide-react';
@@ -189,209 +192,104 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  // The 7 Required Categories for Maxora Shop Category Navigation
-  interface DefinedNavCategory {
-    name: string;
-    slug: string;
-    matchPatterns: RegExp[];
-    icon: React.ReactNode;
-    fallbackSubcategories?: string[];
-  }
+  // Dynamic Icon Resolver for any category name or slug
+  const getCategoryIcon = (name: string, slug: string): React.ReactNode => {
+    const s = `${slug} ${name}`.toLowerCase();
+    if (s.includes('electronic') || s.includes('cpu') || s.includes('computer')) return <Cpu className="w-3.5 h-3.5" />;
+    if (s.includes('gadget') || s.includes('watch')) return <Watch className="w-3.5 h-3.5" />;
+    if (s.includes('audio') || s.includes('headphone') || s.includes('earbud') || s.includes('sound')) return <Headphones className="w-3.5 h-3.5" />;
+    if (s.includes('beauty') || s.includes('health') || s.includes('personal') || s.includes('skin') || s.includes('hair')) return <Sparkles className="w-3.5 h-3.5" />;
+    if (s.includes('kitchen') || s.includes('appliance') || s.includes('cook') || s.includes('dining')) return <Utensils className="w-3.5 h-3.5" />;
+    if (s.includes('home') || s.includes('living')) return <Home className="w-3.5 h-3.5" />;
+    if (s.includes('kid') || s.includes('baby') || s.includes('toy')) return <Baby className="w-3.5 h-3.5" />;
+    if (s.includes('lifestyle') || s.includes('bag') || s.includes('fashion') || s.includes('backpack')) return <Shirt className="w-3.5 h-3.5" />;
+    if (s.includes('accessori') || s.includes('wallet') || s.includes('charger')) return <ShoppingBag className="w-3.5 h-3.5" />;
+    return <LayoutGrid className="w-3.5 h-3.5" />;
+  };
 
-  const DEFINED_NAV_CATEGORIES: DefinedNavCategory[] = useMemo(
-    () => [
-      {
-        name: 'Electronics',
-        slug: 'electronics',
-        matchPatterns: [/^electronic/i, /computer/i, /audio/i],
-        icon: <Cpu className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Audio', 'Power Banks', 'Printers & Accessories', 'Computer & Gaming'],
-      },
-      {
-        name: 'Smart Gadgets',
-        slug: 'smart-gadgets',
-        matchPatterns: [/smart/i, /gadget/i],
-        icon: <Watch className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Kids & Educational Gadgets', 'Smartwatches', 'Fitness Bands', 'Smart Devices'],
-      },
-      {
-        name: 'Fashion & Lifestyle',
-        slug: 'fashion-lifestyle',
-        matchPatterns: [/fashion/i, /lifestyle/i, /bag/i, /backpack/i],
-        icon: <Shirt className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Backpacks & Bags', 'Backpacks', 'Lifestyle Accessories', "Men's Fashion"],
-      },
-      {
-        name: 'Beauty & Personal Care',
-        slug: 'beauty-personal-care',
-        matchPatterns: [/beauty/i, /personal/i, /health/i, /skin/i, /hair/i],
-        icon: <Sparkles className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Hair Care', 'Skin Care', 'Sexual Wellness', 'Personal Grooming'],
-      },
-      {
-        name: 'Home & Living',
-        slug: 'home-living',
-        matchPatterns: [/home/i, /living/i, /kitchen/i],
-        icon: <Home className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Home Appliances', 'Kitchen & Dining', 'Kitchen Appliances', 'Portable Washing Machines', 'Coffee Drippers', 'Vacuum Flasks'],
-      },
-      {
-        name: 'Accessories',
-        slug: 'accessories',
-        matchPatterns: [/accessor/i, /charger/i, /wallet/i, /lighter/i],
-        icon: <ShoppingBag className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Lighter', 'Wallets', 'Chargers & Cables', 'Mobile Accessories'],
-      },
-      {
-        name: 'Kids & Baby',
-        slug: 'kids-baby',
-        matchPatterns: [/kid/i, /baby/i, /toy/i],
-        icon: <Baby className="w-3.5 h-3.5" />,
-        fallbackSubcategories: ['Toys & Games', 'Kids Educational Gadgets', 'Baby Care', 'Kids Learning'],
-      },
-    ],
-    []
-  );
-
-  // Aggregate subcategories and product types for each defined navigation category
-  const categoryNavItems = useMemo<MegaMenuCategoryItem[]>(() => {
-    return DEFINED_NAV_CATEGORIES.map((navCat) => {
-      // Find matching categories in taxonomy tree
-      const matchingTaxCats = taxonomy.filter((tCat) =>
-        navCat.matchPatterns.some((pattern) => pattern.test(tCat.slug) || pattern.test(tCat.name))
-      );
-
-      // Find primary category in database
-      const primaryCat = categories.find((c) =>
-        navCat.matchPatterns.some((p) => p.test(c.slug) || p.test(c.name))
-      );
-
-      // Aggregate all subcategories and their product types from matched taxonomy
-      const subMap = new Map<string, MegaMenuSubItem>();
-
-      matchingTaxCats.forEach((tCat) => {
-        tCat.subCategories?.forEach((sub) => {
-          const subKey = sub.name.toLowerCase();
-          const pTypes: MegaMenuProductType[] = (sub.productTypes || []).map((pt) => ({
-            id: pt.id,
-            name: pt.name,
-            slug: pt.slug,
-            count: pt.count,
-          }));
-
-          if (!subMap.has(subKey)) {
-            subMap.set(subKey, {
-              id: sub.id,
-              name: sub.name,
-              slug: sub.slug,
-              count: sub.count,
-              parentCatSlug: tCat.slug,
-              parentCatId: tCat.id,
-              productTypes: pTypes,
-            });
-          } else {
-            const existing = subMap.get(subKey)!;
-            existing.count = (existing.count || 0) + (sub.count || 0);
-            pTypes.forEach((pt) => {
-              if (
-                !existing.productTypes?.some(
-                  (existingPt) => existingPt.name.toLowerCase() === pt.name.toLowerCase()
-                )
-              ) {
-                existing.productTypes?.push(pt);
-              }
-            });
-          }
-        });
-      });
-
-      // Ensure all fallback subcategories are present
-      if (navCat.fallbackSubcategories) {
-        navCat.fallbackSubcategories.forEach((name) => {
-          const subKey = name.toLowerCase();
-          if (!subMap.has(subKey)) {
-            const slug = name.toLowerCase().replace(/[\s_&]+/g, '-');
-            subMap.set(subKey, {
-              name,
-              slug,
-              count: 0,
-              parentCatSlug: primaryCat?.slug || navCat.slug,
-              parentCatId: primaryCat?.id,
-              productTypes: [],
-            });
-          }
-        });
-      }
-
-      const subcategories = Array.from(subMap.values()).sort((a, b) => {
-        if ((b.count || 0) !== (a.count || 0)) {
-          return (b.count || 0) - (a.count || 0);
-        }
-        return a.name.localeCompare(b.name);
-      });
-
-      const totalCount = subcategories.reduce((acc, s) => acc + (s.count || 0), 0);
-
-      return {
-        name: navCat.name,
-        slug: primaryCat?.slug || navCat.slug,
-        id: primaryCat?.id || `cat-${navCat.slug}`,
-        icon: navCat.icon,
-        count: totalCount,
-        subcategories,
-      };
-    });
-  }, [categories, taxonomy, DEFINED_NAV_CATEGORIES]);
-
-  // Combine defined nav categories + any additional database categories for "All Categories" menu
+  // Combine ALL active registered & taxonomy categories dynamically from the Admin Panel / Database
   const allMegaMenuCategories = useMemo<MegaMenuCategoryItem[]>(() => {
-    const list: MegaMenuCategoryItem[] = [...categoryNavItems];
+    const list: MegaMenuCategoryItem[] = [];
+    const seenSlugs = new Set<string>();
 
-    // Check for any categories in taxonomy that are not already covered
-    taxonomy.forEach((tCat) => {
-      const isCovered = DEFINED_NAV_CATEGORIES.some((d) =>
-        d.matchPatterns.some((pattern) => pattern.test(tCat.slug) || pattern.test(tCat.name))
+    // 1. Process 4-tier taxonomy categories (includes real subcategories & product counts)
+    (taxonomy || []).forEach((tCat) => {
+      if (!tCat || !tCat.name) return;
+      const slug = tCat.slug || tCat.name.toLowerCase().replace(/[\s_&]+/g, '-');
+      if (seenSlugs.has(slug)) return;
+
+      // Filter out if explicitly hidden in categories registry (active: 0)
+      const regCat = categories.find(
+        (c) =>
+          c.slug === slug ||
+          (c.id && tCat.id && c.id === tCat.id) ||
+          c.name.toLowerCase() === tCat.name.toLowerCase()
       );
-      if (!isCovered && tCat.name) {
-        list.push({
-          id: tCat.id,
-          name: tCat.name,
-          slug: tCat.slug,
-          icon: <LayoutGrid className="w-3.5 h-3.5" />,
-          count: tCat.count,
-          subcategories: (tCat.subCategories || []).map((s) => ({
-            id: s.id,
-            name: s.name,
-            slug: s.slug,
-            count: s.count,
-            parentCatSlug: tCat.slug,
-            parentCatId: tCat.id,
-            productTypes: (s.productTypes || []).map((pt) => ({
-              id: pt.id,
-              name: pt.name,
-              slug: pt.slug,
-              count: pt.count,
-            })),
-          })),
-        });
+      if (regCat && (regCat.active === 0 || regCat.active === false || String(regCat.active) === '0')) {
+        return; // Skip hidden categories
       }
+
+      seenSlugs.add(slug);
+
+      const subcategories: MegaMenuSubItem[] = (tCat.subCategories || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        count: s.count,
+        parentCatSlug: slug,
+        parentCatId: tCat.id,
+        productTypes: (s.productTypes || []).map((pt) => ({
+          id: pt.id,
+          name: pt.name,
+          slug: pt.slug,
+          count: pt.count,
+        })),
+      }));
+
+      list.push({
+        id: tCat.id,
+        name: tCat.name,
+        slug,
+        icon: getCategoryIcon(tCat.name, slug),
+        count: tCat.count,
+        subcategories,
+      });
     });
 
-    return list;
-  }, [categoryNavItems, taxonomy, DEFINED_NAV_CATEGORIES]);
+    // 2. Also include any registered categories in database that have active: 1 but might not have products yet
+    (categories || []).forEach((c) => {
+      if (!c || !c.name) return;
+      if (c.active === 0 || c.active === false || String(c.active) === '0') return;
+      const slug = c.slug || c.name.toLowerCase().replace(/[\s_&]+/g, '-');
+      if (seenSlugs.has(slug)) return;
+      seenSlugs.add(slug);
+
+      list.push({
+        id: c.id,
+        name: c.name,
+        slug,
+        icon: getCategoryIcon(c.name, slug),
+        count: 0,
+        subcategories: [],
+      });
+    });
+
+    // Sort categories according to display_order or products count
+    return list.sort((a, b) => {
+      const catA = categories.find((c) => c.slug === a.slug || c.id === a.id);
+      const catB = categories.find((c) => c.slug === b.slug || c.id === b.id);
+      const orderA = catA?.display_order ?? 999;
+      const orderB = catB?.display_order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (b.count || 0) - (a.count || 0);
+    });
+  }, [taxonomy, categories]);
 
   // Find currently active category object when a specific category mega-menu is open
   const currentActiveCategory = useMemo<MegaMenuCategoryItem | null>(() => {
     if (!activeMegaMenu || activeMegaMenu === 'all') return null;
-    return (
-      allMegaMenuCategories.find((c) => c.slug === activeMegaMenu) ||
-      allMegaMenuCategories.find((c) => {
-        const def = DEFINED_NAV_CATEGORIES.find((d) => d.slug === c.slug || d.name === c.name);
-        return def?.matchPatterns.some((p) => p.test(activeMegaMenu));
-      }) ||
-      null
-    );
-  }, [activeMegaMenu, allMegaMenuCategories, DEFINED_NAV_CATEGORIES]);
+    return allMegaMenuCategories.find((c) => c.slug === activeMegaMenu || c.id === activeMegaMenu) || null;
+  }, [activeMegaMenu, allMegaMenuCategories]);
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-xs border-b border-zinc-200/90 w-full max-w-full">
