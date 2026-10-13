@@ -36,7 +36,7 @@ const THEME_FALLBACK_IMAGES: Record<string, string> = {
   'beauty': 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&auto=format&fit=crop&q=80',
   'beauty-personal-care': 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&auto=format&fit=crop&q=80',
   'home-living': 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80',
-  'electronics': 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&auto=format&fit=crop&q=80',
+  'electronics': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&auto=format&fit=crop&q=80',
   'accessories': 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80',
   'kids-baby': 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&auto=format&fit=crop&q=80',
   'lifestyle-accessories': 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80',
@@ -95,6 +95,12 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Mouse Drag-To-Scroll states
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeftPos, setScrollLeftPos] = useState(0);
+  const [hasDragged, setHasDragged] = useState(false);
 
   // Close subcategory modal on Escape
   useEffect(() => {
@@ -172,15 +178,16 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
         countByCatSlug.get(slugKey) ??
         0;
 
-      // Determine best image
+      // Determine best image (prioritizes category's own uploaded profile image, then dedicated curated theme image)
       let imageUrl = cat.image_url?.trim() || '';
       if (!imageUrl || imageUrl.includes('placeholder')) {
         imageUrl =
+          THEME_FALLBACK_IMAGES[slugKey] ||
+          THEME_FALLBACK_IMAGES[nameKey] ||
+          THEME_FALLBACK_IMAGES[cat.name.toLowerCase().replace(/[\s_&]+/g, '-')] ||
           sampleProductImage.get(idKey) ||
           sampleProductImage.get(nameKey) ||
           sampleProductImage.get(slugKey) ||
-          THEME_FALLBACK_IMAGES[slugKey] ||
-          THEME_FALLBACK_IMAGES[nameKey] ||
           GENERIC_FALLBACK_IMAGE;
       }
 
@@ -261,32 +268,67 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
 
   // Auto-advance animation: smoothly slides to the next category one by one
   useEffect(() => {
-    if (isHovered || isExpanded || displayCategories.length <= 4) return;
+    if (isHovered || isMouseDown || isExpanded || displayCategories.length <= 4) return;
 
     const timer = setInterval(() => {
       if (!sliderRef.current) return;
       const { scrollLeft, scrollWidth, clientWidth } = sliderRef.current;
-      const scrollStep = 240; // smoothly advance by 1 card
+      const cardEl = sliderRef.current.firstElementChild as HTMLElement | null;
+      const scrollStep = cardEl ? cardEl.offsetWidth + 24 : 220; // smoothly advance by 1 card
 
-      if (scrollLeft + clientWidth >= scrollWidth - 20) {
+      if (scrollLeft + clientWidth >= scrollWidth - 15) {
         // Smoothly loop back to start
         sliderRef.current.scrollTo({ left: 0, behavior: 'smooth' });
       } else {
         sliderRef.current.scrollBy({ left: scrollStep, behavior: 'smooth' });
       }
-    }, 3200);
+    }, 2800);
 
     return () => clearInterval(timer);
-  }, [isHovered, isExpanded, displayCategories.length]);
+  }, [isHovered, isMouseDown, isExpanded, displayCategories.length]);
 
   const handleScrollLeft = () => {
     if (!sliderRef.current) return;
-    sliderRef.current.scrollBy({ left: -260, behavior: 'smooth' });
+    const cardEl = sliderRef.current.firstElementChild as HTMLElement | null;
+    const scrollStep = cardEl ? cardEl.offsetWidth + 24 : 240;
+    sliderRef.current.scrollBy({ left: -scrollStep, behavior: 'smooth' });
   };
 
   const handleScrollRight = () => {
     if (!sliderRef.current) return;
-    sliderRef.current.scrollBy({ left: 260, behavior: 'smooth' });
+    const cardEl = sliderRef.current.firstElementChild as HTMLElement | null;
+    const scrollStep = cardEl ? cardEl.offsetWidth + 24 : 240;
+    sliderRef.current.scrollBy({ left: scrollStep, behavior: 'smooth' });
+  };
+
+  // Mouse Drag-To-Scroll Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!sliderRef.current) return;
+    setIsMouseDown(true);
+    setHasDragged(false);
+    setStartX(e.pageX - sliderRef.current.offsetLeft);
+    setScrollLeftPos(sliderRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsMouseDown(false);
+    setIsHovered(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDown(false);
+    setTimeout(() => setHasDragged(false), 50);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDown || !sliderRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - sliderRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    if (Math.abs(walk) > 6) {
+      setHasDragged(true);
+    }
+    sliderRef.current.scrollLeft = scrollLeftPos - walk;
   };
 
   // Navigate directly to category product listing page and scroll
@@ -324,6 +366,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
 
   // Card click handler: open subcategory popup if multiple subs exist, otherwise navigate directly
   const handleCardClick = (cat: DisplayCategoryItem) => {
+    if (hasDragged) return; // prevent triggering navigation on drag release
     if (cat.subCategories && cat.subCategories.length > 0) {
       setActiveSubcategoryCat(cat);
     } else {
@@ -355,7 +398,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
             </h2>
           </div>
           <p className="text-xs sm:text-sm font-medium text-zinc-500 mt-1">
-            Explore our most popular categories (স্বয়ংক্রিয় স্লাইডার ও অ্যানিমেশন)
+            Explore our most popular categories
           </p>
         </div>
 
@@ -415,17 +458,30 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
          ========================================================================= */}
       {!isExpanded ? (
         <div className="relative">
-          {/* Scroll Track with sequential staggered card animation */}
+          {/* Scroll Track with sequential smooth animation */}
           <div
             ref={sliderRef}
-            className="flex items-start gap-4 sm:gap-6 lg:gap-8 overflow-x-auto no-scrollbar scroll-smooth py-2 px-1"
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            className={`flex items-start gap-4 sm:gap-6 lg:gap-8 overflow-x-auto no-scrollbar scrollbar-none py-2 px-1 select-none ${
+              isMouseDown ? 'cursor-grabbing' : 'cursor-grab scroll-smooth'
+            }`}
           >
             {displayCategories.map((cat, idx) => {
               const isBroken = brokenImages[cat.id || cat.slug];
               const imageSrc =
                 !isBroken && cat.image_url
                   ? cat.image_url
-                  : THEME_FALLBACK_IMAGES[cat.slug] || GENERIC_FALLBACK_IMAGE;
+                  : THEME_FALLBACK_IMAGES[cat.slug] ||
+                    THEME_FALLBACK_IMAGES[cat.name.toLowerCase().replace(/[\s_&]+/g, '-')] ||
+                    GENERIC_FALLBACK_IMAGE;
 
               return (
                 <div
@@ -512,7 +568,9 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
             const imageSrc =
               !isBroken && cat.image_url
                 ? cat.image_url
-                : THEME_FALLBACK_IMAGES[cat.slug] || GENERIC_FALLBACK_IMAGE;
+                : THEME_FALLBACK_IMAGES[cat.slug] ||
+                  THEME_FALLBACK_IMAGES[cat.name.toLowerCase().replace(/[\s_&]+/g, '-')] ||
+                  GENERIC_FALLBACK_IMAGE;
 
             return (
               <div

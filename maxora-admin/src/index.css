@@ -1,6 +1,22 @@
 @import "tailwindcss";
 
 /* -------------------------------------------------------------------------- */
+/* Utility: Completely Hide Native Scrollbars across all browsers (Chrome/Firefox/Edge) */
+/* -------------------------------------------------------------------------- */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dedicated Print-Only Invoice Styles for A4 Paper & PDF Generation         */
 /* -------------------------------------------------------------------------- */
 

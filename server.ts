@@ -243,12 +243,14 @@ const defaultOrders: any[] = [];
 const defaultOrderItems: any[] = [];
 
 const defaultCategories = [
-  { id: "cat-smart-gadgets", name: "Smart Gadgets", slug: "smart-gadgets", icon: "Watch", active: 1, display_order: 1 },
-  { id: "cat-audio", name: "Audio", slug: "audio", icon: "Headphones", active: 1, display_order: 2 },
-  { id: "cat-lifestyle-bags", name: "Lifestyle & Bags", slug: "lifestyle-bags", icon: "ShoppingBag", active: 1, display_order: 3 },
-  { id: "cat-home-living", name: "Home & Living", slug: "home-living", icon: "Home", active: 1, display_order: 4 },
-  { id: "cat-accessories", name: "Accessories", slug: "accessories", icon: "Shirt", active: 1, display_order: 5 },
-  { id: "cat-gourmet-food", name: "Gourmet & Food", slug: "gourmet-food", icon: "Coffee", active: 1, display_order: 6 }
+  { id: "cat-electronics", name: "Electronics", slug: "electronics", icon: "Cpu", image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "cat-smart-gadgets", name: "Smart Gadgets", slug: "smart-gadgets", icon: "Watch", image_url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 2 },
+  { id: "cat-home-living", name: "Home & Living", slug: "home-living", icon: "Home", image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 3 },
+  { id: "cat-accessories", name: "Accessories", slug: "accessories", icon: "Shirt", image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 4 },
+  { id: "cat-health-beauty", name: "Health & Beauty", slug: "health-beauty", icon: "Sparkles", image_url: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 5 },
+  { id: "cat-kids-baby", name: "Kids & Baby", slug: "kids-baby", icon: "Baby", image_url: "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 6 },
+  { id: "cat-lifestyle-accessories", name: "Lifestyle & Accessories", slug: "lifestyle-accessories", icon: "ShoppingBag", image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 7 },
+  { id: "cat-home-kitchen-appliances", name: "Home & Kitchen Appliances", slug: "home-kitchen-appliances", icon: "Utensils", image_url: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 8 }
 ];
 
 const defaultSubCategories = [
@@ -300,13 +302,33 @@ try {
       return { ...p, sold_count: defaultSold };
     });
 
+    const existingCats: any[] = Array.isArray(parsed.categories) ? parsed.categories : [];
+    const mergedCategories = [...defaultCategories].map((dc) => {
+      const found = existingCats.find((ec: any) => ec.slug === dc.slug || ec.id === dc.id);
+      if (found) {
+        return {
+          ...dc,
+          ...found,
+          image_url: (found.image_url && typeof found.image_url === 'string' && found.image_url.trim()) ? found.image_url : dc.image_url,
+          name: found.name || dc.name,
+          active: found.active !== undefined ? found.active : dc.active
+        };
+      }
+      return dc;
+    });
+    existingCats.forEach((ec: any) => {
+      if (!mergedCategories.some((mc) => mc.slug === ec.slug || mc.id === ec.id)) {
+        mergedCategories.push(ec);
+      }
+    });
+
     db = {
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
       products: loadedProducts,
       customers: Array.isArray(parsed.customers) ? parsed.customers : [],
       orders: Array.isArray(parsed.orders) ? parsed.orders : [],
       order_items: Array.isArray(parsed.order_items) ? parsed.order_items : [],
-      categories: parsed.categories && parsed.categories.length > 0 ? parsed.categories : defaultCategories,
+      categories: mergedCategories,
       subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories,
       uploaded_images: parsed.uploaded_images || {},
       reviews: Array.isArray(parsed.reviews) ? parsed.reviews : [],

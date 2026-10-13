@@ -1,6 +1,7 @@
 import { Category, SubCategory, ProductType, ChildCategory, Product } from '../types';
 import { generateSlug } from './seo';
 import { matchesTaxonomyField } from './taxonomy';
+import { INITIAL_CATEGORIES } from '../data/initialData';
 
 /**
  * Checks whether a product belongs to a given category.
@@ -74,9 +75,14 @@ export function reconcileCategories(
   (existingCategories || []).forEach((cat) => {
     if (!cat || !cat.name) return;
     const slug = cat.slug || generateSlug(cat.name);
+    const initialMatch = INITIAL_CATEGORIES.find(
+      (ic) => ic.slug === slug || ic.name.toLowerCase() === cat.name.toLowerCase()
+    );
     categoryMap.set(slug, {
       ...cat,
       slug,
+      image_url: cat.image_url?.trim() || initialMatch?.image_url || '',
+      icon: cat.icon || initialMatch?.icon || 'Sparkles',
     });
   });
 
@@ -97,11 +103,16 @@ export function reconcileCategories(
     if (matchesRegistered) return;
 
     if (!categoryMap.has(slug)) {
+      const initialMatch = INITIAL_CATEGORIES.find(
+        (ic) => ic.slug === slug || ic.name.toLowerCase() === catName.toLowerCase()
+      );
       categoryMap.set(slug, {
-        id: prod.category_id || `cat-auto-${slug}`,
+        id: prod.category_id || initialMatch?.id || `cat-auto-${slug}`,
         name: catName,
         slug: slug,
-        display_order: categoryMap.size + 1,
+        icon: initialMatch?.icon || 'Sparkles',
+        image_url: initialMatch?.image_url || '',
+        display_order: initialMatch?.display_order || categoryMap.size + 1,
         active: 1,
         created_at: new Date().toISOString(),
       });
