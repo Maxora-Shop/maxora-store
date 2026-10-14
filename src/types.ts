@@ -112,6 +112,7 @@ export interface Product {
   product_link?: string;
   buying_price: number;
   selling_price: number;
+  regular_price?: number;
   discount: number;
   final_price?: number;
   stock: number;

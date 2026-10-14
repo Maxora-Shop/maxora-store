@@ -424,8 +424,8 @@ Maxora Shop BD respects your personal privacy:
           <div className="pt-7 flex flex-col md:flex-row items-center justify-between gap-5 text-xs">
             {/* Left: Copyright & Brand Guarantee */}
             <div className="order-2 md:order-1 text-center md:text-left space-y-1">
-              <p className="font-semibold text-zinc-300 tracking-wide">
-                {settings.footer_text || `© ${new Date().getFullYear()} ${settings.store_name || 'Maxora Shop BD'}. All Rights Reserved.`}
+              <p className="font-semibold text-zinc-300 tracking-wide flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                <span>{settings.footer_text || `© ${new Date().getFullYear()} ${settings.store_name || 'Maxora Shop BD'}. All Rights Reserved.`}</span>
               </p>
               <p className="text-[11px] text-zinc-400">
                 Crafted for genuine gadgets, electronics & lifestyle accessories in Bangladesh.

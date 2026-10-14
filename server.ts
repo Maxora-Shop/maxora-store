@@ -364,12 +364,20 @@ interface VisitorSession {
 const activeVisitorSessions = new Map<string, VisitorSession>();
 
 let saveTrafficTimeout: NodeJS.Timeout | null = null;
-function debouncedSaveTrafficDB() {
+function debouncedSaveTrafficDB(immediate: boolean = false) {
+  if (immediate) {
+    if (saveTrafficTimeout) {
+      clearTimeout(saveTrafficTimeout);
+      saveTrafficTimeout = null;
+    }
+    saveDB();
+    return;
+  }
   if (saveTrafficTimeout) return;
   saveTrafficTimeout = setTimeout(() => {
     saveTrafficTimeout = null;
     saveDB();
-  }, 60000); // 1 minute throttle
+  }, 5000); // 5 seconds throttle
 }
 
 function getLiveTrafficData() {

@@ -316,6 +316,7 @@ export const FaviconPreviewImage: React.FC<{
 
 export type AdminTab =
   | 'overview'
+  | 'traffic'
   | 'products'
   | 'categories'
   | 'subcategories'
@@ -338,6 +339,7 @@ export const getAdminTabFromLocation = (): {
   const searchParams = new URLSearchParams(window.location.search);
   const hash = window.location.hash.toLowerCase().replace(/^#/, '');
 
+  if (pathname === '/admin/traffic' || pathname === '/admin/visitors' || hash === 'traffic' || hash === 'visitors' || searchParams.get('tab') === 'traffic' || searchParams.get('tab') === 'visitors') return { tab: 'traffic' };
   if (pathname === '/admin/products/new') return { tab: 'products', openNewProduct: true };
   if (pathname === '/admin/products/inventory' || pathname === '/admin/products') return { tab: 'products' };
   if (pathname === '/admin/products/brands' || pathname === '/admin/brands') return { tab: 'brands' };
@@ -442,6 +444,8 @@ export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string =
       return '/admin/ai-assistant';
     case 'settings':
       return '/admin/settings';
+    case 'traffic':
+      return '/admin/traffic';
     case 'overview':
     default:
       return '/admin';
@@ -3160,10 +3164,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-lg flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleTabChange('traffic')}
+            className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="লাইভ ভিজিটর ও ট্রাফিক বিশ্লেষণ"
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0}
-          </span>
+            <span>লাইভ: {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0} জন</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
@@ -3234,26 +3243,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Real-Time Live Visitors Beacon in Sidebar */}
-          <div className="bg-zinc-900/90 border border-emerald-500/25 rounded-2xl p-3 flex items-center justify-between shadow-xs">
+          {/* Real-Time Live Visitors Beacon in Sidebar - Clickable */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('traffic')}
+            className={`w-full text-left rounded-2xl p-3 flex items-center justify-between shadow-xs transition-all cursor-pointer border group ${
+              currentTab === 'traffic'
+                ? 'bg-emerald-950 border-emerald-500 ring-1 ring-emerald-500/50 shadow-md shadow-emerald-500/20'
+                : 'bg-zinc-900/90 border-emerald-500/25 hover:border-emerald-400/60 hover:bg-zinc-900'
+            }`}
+            title="ক্লিক করে লাইভ গ্রাহক ভিজিটর ও রিয়েল-টাইম ট্রাফিক দেখুন"
+          >
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
               <div className="min-w-0">
-                <span className="text-xs font-bold text-zinc-200 block truncate">Live Visitors</span>
-                <span className="text-[10px] text-zinc-400 block truncate">সাইটে আছেন</span>
+                <span className="text-xs font-bold text-zinc-200 block truncate group-hover:text-white transition-colors">
+                  Live Visitors
+                </span>
+                <span className="text-[10px] text-emerald-400 font-medium block truncate">
+                  {trafficAnalytics?.today_visitors ?? totals?.traffic?.today_visitors ?? 0} জন আজ ভিজিট ➔
+                </span>
               </div>
             </div>
-            <span className="text-xs font-black text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2 py-0.5 rounded-lg shrink-0">
-              {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0} জন
+            <span className="text-xs font-black text-emerald-300 bg-emerald-950/90 border border-emerald-500/40 px-2 py-0.5 rounded-lg shrink-0">
+              {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0} জন লাইভ
             </span>
-          </div>
+          </button>
 
           {/* Navigation Links */}
           <nav className="space-y-1">
-            {/* Dashboard */}
+            {/* 1. Dashboard Overview */}
             <button
               type="button"
               onClick={() => handleTabChange('overview')}
@@ -3265,6 +3287,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               <span>Dashboard</span>
+            </button>
+
+            {/* 2. Live Traffic & Visitor Analytics (New Dedicated Tab) */}
+            <button
+              type="button"
+              onClick={() => handleTabChange('traffic')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'traffic'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Activity className={`w-4 h-4 shrink-0 ${currentTab === 'traffic' ? 'text-zinc-950' : 'text-emerald-400 animate-pulse'}`} />
+                <span className="truncate">Traffic & Visitors</span>
+              </div>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  currentTab === 'traffic'
+                    ? 'bg-zinc-950 text-emerald-400'
+                    : 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
+                }`}
+              >
+                {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0} Live
+              </span>
             </button>
 
             {/* Expandable Products Menu */}
@@ -4325,7 +4372,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             {/* Primary KPI Metric Cards Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3 sm:gap-4">
+              {/* 0a. Live Online Customers */}
+              <div
+                onClick={() => handleTabChange('traffic')}
+                className="bg-gradient-to-br from-emerald-50/90 to-teal-50/50 p-4 rounded-2xl border border-emerald-300/80 shadow-xs space-y-1 hover:border-emerald-400 hover:shadow-sm transition-all cursor-pointer group"
+                title="ক্লিক করে লাইভ ভিজিটর বিস্তারিত দেখুন"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+                    </span>
+                    Live Online
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:scale-110 transition-transform">
+                    <Activity className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-700 tracking-tight flex items-baseline gap-1">
+                  <span>{trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0}</span>
+                  <span className="text-xs font-bold text-emerald-600">জন</span>
+                </div>
+                <div className="text-[10px] text-emerald-700/90 font-medium truncate">
+                  এই মুহূর্তে সরাসরি সাইটে আছেন
+                </div>
+              </div>
+
+              {/* 0b. Today's Unique Visitors */}
+              <div
+                onClick={() => handleTabChange('traffic')}
+                className="bg-gradient-to-br from-blue-50/90 to-indigo-50/50 p-4 rounded-2xl border border-blue-300/80 shadow-xs space-y-1 hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer group"
+                title="ক্লিক করে আজকের ভিজিটর বিস্তারিত দেখুন"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-800">
+                    Today Visitors
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs group-hover:scale-110 transition-transform">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+                <div className="text-xl sm:text-2xl font-black text-blue-700 tracking-tight flex items-baseline gap-1">
+                  <span>{trafficAnalytics?.today_visitors ?? totals?.traffic?.today_visitors ?? 0}</span>
+                  <span className="text-xs font-bold text-blue-600">জন</span>
+                </div>
+                <div className="text-[10px] text-blue-700/90 font-medium truncate">
+                  {trafficAnalytics?.today_page_views ?? totals?.traffic?.today_page_views ?? 0} বার পেজ ভিউ
+                </div>
+              </div>
               {/* 1. Today's Sales */}
               <div className="bg-white p-4 rounded-2xl border border-zinc-200 shadow-xs space-y-1 hover:border-zinc-300 transition-colors">
                 <div className="flex items-center justify-between text-zinc-400">
@@ -4730,6 +4826,357 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ====================================================
+            1b. TAB: LIVE TRAFFIC & VISITOR ANALYTICS
+        ==================================================== */}
+        {currentTab === 'traffic' && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Breadcrumb & Header Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-500 mb-1">
+                  <span>Dashboard</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
+                  <span className="text-emerald-600 font-bold">Traffic & Visitors</span>
+                </div>
+                <h2 className="text-2xl font-black text-zinc-900 tracking-tight flex items-center gap-2.5">
+                  <Activity className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <span>লাইভ কাস্টমার ভিজিটর ও ট্রাফিক ড্যাশবোর্ড</span>
+                </h2>
+                <p className="text-xs text-zinc-500 mt-1">
+                  সারাদিনে কতজন কাস্টমার ওয়েবসাইট ভিজিট করেছেন এবং এই মুহূর্তে লাইভ কতজন ব্রাউজ করছেন তার রিয়েল-টাইম তথ্য
+                </p>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsAutoRefreshTraffic(!isAutoRefreshTraffic)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                    isAutoRefreshTraffic
+                      ? 'bg-emerald-100/90 border-emerald-300 text-emerald-800 shadow-2xs'
+                      : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
+                  }`}
+                  title={isAutoRefreshTraffic ? 'স্বয়ংক্রিয় রিফ্রেশ চালু আছে (প্রতি ১০ সেকেন্ড)' : 'অটো রিফ্রেশ বন্ধ'}
+                >
+                  <Radio className={`w-3.5 h-3.5 ${isAutoRefreshTraffic ? 'animate-pulse text-emerald-600' : 'text-zinc-400'}`} />
+                  <span>{isAutoRefreshTraffic ? 'অটো-রিফ্রেশ চালু (১০ সে.)' : 'অটো-রিফ্রেশ বন্ধ'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualRefreshTraffic}
+                  disabled={trafficRefreshing}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${trafficRefreshing ? 'animate-spin text-emerald-600' : 'text-emerald-600'}`} />
+                  <span>এখনই রিফ্রেশ করুন</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      window.open('/', '_blank', 'noopener,noreferrer');
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>ওয়েবসাইট খুলুন</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Core Traffic Metric Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* 1. Live Visitors Right Now */}
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-50/50 rounded-2xl p-5 border-2 border-emerald-300/80 shadow-xs space-y-2 relative overflow-hidden group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-2">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-600"></span>
+                    </span>
+                    এই মুহূর্তে লাইভ
+                  </span>
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-zinc-950 px-2 py-0.5 rounded-full">
+                    Online Now
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2 pt-1">
+                  <span className="text-4xl sm:text-5xl font-black text-emerald-600 tracking-tight">
+                    {trafficAnalytics?.live_now ?? totals?.traffic?.live_now ?? 0}
+                  </span>
+                  <span className="text-sm font-bold text-emerald-800">জন কাস্টমার</span>
+                </div>
+                <p className="text-xs text-emerald-700 font-medium">
+                  সরাসরি ওয়েবসাইট বা পণ্যের পেজে ব্রাউজ করছেন
+                </p>
+              </div>
+
+              {/* 2. Today's Unique Visitors */}
+              <div className="bg-gradient-to-br from-blue-50 via-white to-blue-50/50 rounded-2xl p-5 border-2 border-blue-300/80 shadow-xs space-y-2 relative overflow-hidden group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-blue-800">
+                    আজকের মোট ভিজিটর
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-xs">
+                    <Users className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2 pt-1">
+                  <span className="text-4xl sm:text-5xl font-black text-blue-600 tracking-tight">
+                    {trafficAnalytics?.today_visitors ?? totals?.traffic?.today_visitors ?? 0}
+                  </span>
+                  <span className="text-sm font-bold text-blue-800">ইউনিক ভিজিটর</span>
+                </div>
+                <p className="text-xs text-blue-700 font-medium">
+                  সারাদিনে আলাদা আলাদা ডিভাইস বা ব্রাউজার থেকে ভিজিট
+                </p>
+              </div>
+
+              {/* 3. Total Page Views Today */}
+              <div className="bg-gradient-to-br from-purple-50 via-white to-purple-50/50 rounded-2xl p-5 border-2 border-purple-300/80 shadow-xs space-y-2 relative overflow-hidden group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-purple-800">
+                    আজকের পেজ ভিউ
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-xs">
+                    <Eye className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-2 pt-1">
+                  <span className="text-4xl sm:text-5xl font-black text-purple-600 tracking-tight">
+                    {trafficAnalytics?.today_page_views ?? totals?.traffic?.today_page_views ?? 0}
+                  </span>
+                  <span className="text-sm font-bold text-purple-800">বার দেখা হয়েছে</span>
+                </div>
+                <p className="text-xs text-purple-700 font-medium">
+                  মোট ভিজিট হওয়া হোমপেজ, ক্যাটাগরি ও প্রোডাক্ট
+                </p>
+              </div>
+
+              {/* 4. Device Breakdown */}
+              <div className="bg-gradient-to-br from-amber-50 via-white to-amber-50/50 rounded-2xl p-5 border-2 border-amber-300/80 shadow-xs space-y-2 relative overflow-hidden group">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-800">
+                    ডিভাইস অনুপাত
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-xs">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="flex items-baseline justify-between text-xs font-black pt-1">
+                  <span className="text-emerald-700 flex items-center gap-1 text-sm font-extrabold">
+                    <Smartphone className="w-4 h-4" />
+                    <span>{trafficAnalytics?.device_breakdown?.mobile_percent ?? 88}% মোবাইল</span>
+                  </span>
+                  <span className="text-amber-800 text-sm font-extrabold">
+                    {trafficAnalytics?.device_breakdown?.desktop_percent ?? 12}% কম্পিউটার
+                  </span>
+                </div>
+                {/* Visual Progress Bar */}
+                <div className="w-full h-2.5 bg-amber-100 rounded-full mt-2 overflow-hidden flex">
+                  <div
+                    className="bg-emerald-500 h-full rounded-l-full transition-all"
+                    style={{ width: `${trafficAnalytics?.device_breakdown?.mobile_percent ?? 88}%` }}
+                  />
+                  <div
+                    className="bg-amber-500 h-full rounded-r-full transition-all"
+                    style={{ width: `${trafficAnalytics?.device_breakdown?.desktop_percent ?? 12}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-amber-800/80 font-medium">
+                  অধিকাংশ গ্রাহক স্মার্টফোন দিয়ে ওয়েবসাইট ভিজিট করছেন
+                </p>
+              </div>
+            </div>
+
+            {/* Main Traffic Dashboard Tabs & Data Panels */}
+            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-zinc-200 shadow-xs space-y-5">
+              <div className="flex items-center gap-2 border-b border-zinc-200 pb-3 overflow-x-auto text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setTrafficActiveTab('pages')}
+                  className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                    trafficActiveTab === 'pages'
+                      ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                      : 'text-zinc-600 hover:text-emerald-800 hover:bg-emerald-50'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>বর্তমানে দেখা হচ্ছে ({trafficAnalytics?.active_pages?.length ?? 0})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTrafficActiveTab('sources')}
+                  className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                    trafficActiveTab === 'sources'
+                      ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                      : 'text-zinc-600 hover:text-emerald-800 hover:bg-emerald-50'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>ট্রাফিক সোর্স ও রেফারাল (Ads/Search)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTrafficActiveTab('history')}
+                  className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                    trafficActiveTab === 'history'
+                      ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                      : 'text-zinc-600 hover:text-emerald-800 hover:bg-emerald-50'
+                  }`}
+                >
+                  <BarChart2 className="w-4 h-4" />
+                  <span>বিগত ১৪ দিনের দৈনিক হিস্ট্রি</span>
+                </button>
+              </div>
+
+              {/* Sub-Tab 1: Active Pages */}
+              {trafficActiveTab === 'pages' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-emerald-600" />
+                      <span>বর্তমানে গ্রাহকরা কোন পেজগুলোতে আছেন</span>
+                    </h3>
+                    <span className="text-xs text-zinc-500">
+                      লাইভ সেশন প্রতি ১০-৩০ সেকেন্ডে স্বয়ংক্রিয়ভাবে আপডেট হয়
+                    </span>
+                  </div>
+
+                  {trafficAnalytics?.active_pages && trafficAnalytics.active_pages.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {trafficAnalytics.active_pages.map((p, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-emerald-400 transition-colors shadow-2xs"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-zinc-900 truncate">
+                              {p.title || (p.path === '/' ? 'হোমপেজ (Homepage)' : p.path)}
+                            </p>
+                            <p className="text-[11px] text-emerald-700 font-mono truncate mt-0.5">
+                              {p.path}
+                            </p>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-black shrink-0">
+                            {p.count} জন লাইভ
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 rounded-2xl bg-zinc-50 border border-dashed border-zinc-300 text-center space-y-2">
+                      <Activity className="w-8 h-8 text-zinc-400 mx-auto" />
+                      <p className="text-xs font-bold text-zinc-700">বর্তমানে কোনো লাইভ ব্রাউজিং নেই</p>
+                      <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                        গ্রাহকরা যখন আপনার ওয়েবসাইটে ফেসবুক বিজ্ঞাপন বা গুগলের মাধ্যমে আসবেন, সাথে সাথে এখানে তাদের সক্রিয় পেজ ও লাইভ সংখ্যা প্রদর্শিত হবে।
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sub-Tab 2: Traffic Sources */}
+              {trafficActiveTab === 'sources' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-emerald-600" />
+                      <span>গ্রাহকরা কোথা থেকে আসছেন (Traffic Referral Breakdown)</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    {(trafficAnalytics?.traffic_sources || []).map((source, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 bg-zinc-50 hover:bg-zinc-100/80 rounded-2xl border border-zinc-200 transition-colors space-y-2"
+                      >
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="text-zinc-800 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            {source.source}
+                          </span>
+                          <span className="text-emerald-700 font-extrabold">
+                            {source.count} জন ({source.percentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all"
+                            style={{ width: `${source.percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Sub-Tab 3: 14-Day History */}
+              {trafficActiveTab === 'history' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
+                      <BarChart2 className="w-4 h-4 text-emerald-600" />
+                      <span>বিগত ১৪ দিনের দৈনিক ভিজিটর ট্রেন্ড</span>
+                    </h3>
+                    <span className="text-xs text-emerald-700 font-bold">
+                      সবুজ বার: ইউনিক ভিজিটর · হালকা শেড: পেজ ভিউ
+                    </span>
+                  </div>
+
+                  <div className="h-44 flex items-end gap-2 pt-4 border-b border-zinc-200">
+                    {(trafficAnalytics?.daily_history || []).map((day, idx) => {
+                      const maxV = Math.max(...(trafficAnalytics?.daily_history?.map(d => d.visitors) || [1]), 10);
+                      const heightV = Math.max(8, (day.visitors / maxV) * 100);
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center gap-1 group relative">
+                          <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center z-20 pointer-events-none">
+                            <div className="bg-zinc-900 text-white text-[10px] rounded-xl py-1.5 px-2.5 font-bold whitespace-nowrap shadow-xl border border-zinc-800">
+                              <div>{day.date} ({day.label})</div>
+                              <div className="text-emerald-400">{day.visitors} ইউনিক ভিজিটর</div>
+                              <div className="text-zinc-400">{day.views} পেজ ভিউ</div>
+                            </div>
+                          </div>
+
+                          <div
+                            className="w-full bg-emerald-500 hover:bg-emerald-600 rounded-t-md transition-all cursor-pointer"
+                            style={{ height: `${heightV}%` }}
+                          />
+                          <span className="text-[9px] text-zinc-500 font-mono truncate w-full text-center">
+                            {day.date.split('-').slice(1).join('/')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Guidance Info Banner */}
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5">
+              <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-xs text-zinc-700">
+                <p className="font-bold text-zinc-900">
+                  লাইভ ভিজিটর ট্র্যাকিং ইঞ্জিন কীভাবে কাজ করে?
+                </p>
+                <p>
+                  আপনার ওয়েবসাইটে যখনই কোনো সাধারণ গ্রাহক মোবাইল বা কম্পিউটার থেকে প্রবেশ করেন, সিস্টেম স্বয়ংক্রিয়ভাবে তাদের ব্রাউজার সেশন ও পেজ ভিউ ট্র্যাক করে। ফেসবুক অ্যাড বা গুগলে অ্যাড ক্যাম্পেইন চালালে গ্রাহকদের রেফারাল সোর্স ও সক্রিয় পেজ এখানে রিয়েল-টাইমে প্রদর্শিত হবে।
+                </p>
               </div>
             </div>
           </div>

@@ -111,16 +111,17 @@ class VisitorTrackingService {
 
   private isIgnoredPath(): boolean {
     if (typeof window === 'undefined') return true;
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-    const search = window.location.search;
+    const path = (window.location.pathname || '').toLowerCase();
+    const hash = (window.location.hash || '').toLowerCase();
+    const search = (window.location.search || '').toLowerCase();
 
-    // Do not track admin users as customer traffic
+    // Only ignore if the user is currently actively viewing an admin dashboard route
     if (
       path.startsWith('/admin') ||
+      path.includes('/admin') ||
       hash.startsWith('#admin') ||
-      search.includes('admin=true') ||
-      localStorage.getItem('maxora_admin_token')
+      hash.includes('admin') ||
+      search.includes('admin=true')
     ) {
       return true;
     }
@@ -130,13 +131,13 @@ class VisitorTrackingService {
   /**
    * Send heartbeat or page view ping to server
    */
-  public async ping(customPath?: string, customTitle?: string): Promise<void> {
+  public async ping(customPath?: string, customTitle?: string, force: boolean = false): Promise<void> {
     if (typeof window === 'undefined' || this.isIgnoredPath()) return;
     const now = Date.now();
-    if (!customPath && now - this.lastPingTime < 8000) return;
+    if (!force && !customPath && now - this.lastPingTime < 4000) return;
 
-    const path = customPath || window.location.pathname;
-    const title = customTitle || document.title || 'Maxora Storefront';
+    const path = customPath || window.location.pathname || '/';
+    const title = customTitle || (typeof document !== 'undefined' ? document.title : '') || 'Maxora Storefront';
 
     this.currentPath = path;
     this.lastPingTime = now;
@@ -175,8 +176,8 @@ class VisitorTrackingService {
     if (typeof window === 'undefined' || this.isInitialized) return;
     this.isInitialized = true;
 
-    // 1. Initial page view ping
-    this.ping();
+    // 1. Initial page view ping immediately
+    this.ping(undefined, undefined, true);
 
     // 2. Heartbeat ping every 30 seconds if tab is active
     this.heartbeatInterval = setInterval(() => {
