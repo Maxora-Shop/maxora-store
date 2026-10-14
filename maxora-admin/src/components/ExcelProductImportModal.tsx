@@ -19,6 +19,10 @@ import {
   Eye,
   ExternalLink,
   Zap,
+  Edit2,
+  Trash2,
+  Save,
+  RefreshCw,
 } from 'lucide-react';
 import { Product, Category } from '../types';
 import { generateSlug } from '../utils/seo';
@@ -178,6 +182,145 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
   const [activeTab, setActiveTab] = useState<'preview' | 'seo'>('preview');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit State for in-modal editing
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [editingDraft, setEditingDraft] = useState<ParsedImportProduct | null>(null);
+
+  // Open Single Item Edit Modal
+  const handleOpenEdit = (index: number) => {
+    if (parsedProducts[index]) {
+      setEditingItemIndex(index);
+      setEditingDraft({ ...parsedProducts[index] });
+    }
+  };
+
+  const handleCloseEdit = () => {
+    setEditingItemIndex(null);
+    setEditingDraft(null);
+  };
+
+  const handleAutoRefreshSEOForDraft = () => {
+    if (!editingDraft) return;
+    const title = editingDraft.name.trim();
+    const cleanSlug = generateSlug(title || 'product');
+    const autoMetaTitle = editingDraft.final_price > 0
+      ? `${title} Price in BD ৳${editingDraft.final_price.toLocaleString('en-BD')} | Maxora BD`
+      : `${title} Price in Bangladesh | 100% Original | Maxora BD`;
+    
+    let autoMetaDescription = '';
+    if (editingDraft.description) {
+      const cleanDesc = editingDraft.description.replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
+      const descIntro = cleanDesc.slice(0, 85);
+      autoMetaDescription = `${descIntro}... Buy ${title} at best price in BD (৳${editingDraft.final_price.toLocaleString('en-BD')}) with Cash on Delivery at Maxora.`;
+    } else {
+      autoMetaDescription = `Buy original ${title} at best price in Bangladesh (৳${editingDraft.final_price.toLocaleString('en-BD')}). 100% genuine quality, Cash on Delivery across 64 districts & express delivery at Maxora.`;
+    }
+
+    const autoKeywords = generateGoogleRankKeywords(
+      title,
+      editingDraft.category,
+      editingDraft.sub_category,
+      editingDraft.child_category,
+      editingDraft.product_type,
+      editingDraft.brand
+    );
+
+    setEditingDraft({
+      ...editingDraft,
+      slug: cleanSlug,
+      meta_title: autoMetaTitle,
+      meta_description: autoMetaDescription,
+      meta_keywords: autoKeywords,
+    });
+    showToast('গুগল এসইও সফলভাবে অটো-জেনারেট করা হয়েছে!', 'success');
+  };
+
+  const handleSaveEdit = () => {
+    if (editingItemIndex === null || !editingDraft) return;
+    const updated = { ...editingDraft };
+    
+    // Balance prices:
+    if (updated.selling_price < updated.final_price) {
+      updated.selling_price = updated.final_price;
+      updated.regular_price = updated.final_price;
+      updated.discount = 0;
+    } else {
+      updated.discount = updated.selling_price - updated.final_price;
+    }
+
+    updated.isValid = Boolean(updated.name.trim() && updated.final_price > 0);
+    updated.validationError = !updated.name.trim()
+      ? 'পণ্যের নাম নেই (Title required)'
+      : updated.final_price <= 0
+      ? 'সঠিক বিক্রয় মূল্য দিন (Price required)'
+      : '';
+
+    setParsedProducts((prev) => {
+      const next = [...prev];
+      next[editingItemIndex] = updated;
+      return next;
+    });
+
+    showToast(`'${updated.name}' সফলভাবে আপডেট করা হয়েছে!`, 'success');
+    handleCloseEdit();
+  };
+
+  // Inline Quick Edit for table inputs
+  const handleInlineChange = (
+    index: number,
+    field: 'final_price' | 'selling_price' | 'buying_price' | 'stock' | 'name',
+    value: string | number
+  ) => {
+    setParsedProducts((prev) => {
+      const next = [...prev];
+      const item = { ...next[index] };
+      if (!item) return prev;
+
+      if (field === 'final_price') {
+        const val = Math.max(0, Number(value) || 0);
+        item.final_price = val;
+        if (item.selling_price < val) {
+          item.selling_price = val;
+          item.regular_price = val;
+          item.discount = 0;
+        } else {
+          item.discount = item.selling_price - val;
+        }
+        item.meta_title = `${item.name} Price in BD ৳${val.toLocaleString('en-BD')} | Maxora BD`;
+      } else if (field === 'selling_price') {
+        const val = Math.max(0, Number(value) || 0);
+        item.selling_price = val;
+        item.regular_price = val;
+        if (val >= item.final_price) {
+          item.discount = val - item.final_price;
+        } else {
+          item.final_price = val;
+          item.discount = 0;
+        }
+      } else if (field === 'buying_price') {
+        item.buying_price = Math.max(0, Number(value) || 0);
+      } else if (field === 'stock') {
+        item.stock = Math.max(0, Math.floor(Number(value) || 0));
+      } else if (field === 'name') {
+        item.name = String(value);
+      }
+
+      item.isValid = Boolean(item.name.trim() && item.final_price > 0);
+      item.validationError = !item.name.trim()
+        ? 'পণ্যের নাম নেই (Title required)'
+        : item.final_price <= 0
+        ? 'সঠিক বিক্রয় মূল্য দিন (Price required)'
+        : '';
+      next[index] = item;
+      return next;
+    });
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setParsedProducts((prev) => prev.filter((_, i) => i !== index));
+    showToast('প্রোডাক্টটি তালিকা থেকে মুছে ফেলা হয়েছে', 'info');
+  };
 
   if (!isOpen) return null;
 
@@ -699,17 +842,19 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
     }
   };
 
-  const filteredPreview = parsedProducts.filter((p) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      (p.sub_category && p.sub_category.toLowerCase().includes(q)) ||
-      (p.sku && p.sku.toLowerCase().includes(q)) ||
-      p.slug.toLowerCase().includes(q)
-    );
-  });
+  const filteredPreview = parsedProducts
+    .map((p, origIndex) => ({ ...p, _origIndex: origIndex }))
+    .filter((p) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q) ||
+        (p.sub_category && p.sub_category.toLowerCase().includes(q)) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
+        p.slug.toLowerCase().includes(q)
+      );
+    });
 
   const validCount = parsedProducts.filter((p) => p.isValid).length;
   const invalidCount = parsedProducts.filter((p) => !p.isValid).length;
@@ -974,28 +1119,29 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
               {/* Table / Preview Area */}
               {activeTab === 'preview' ? (
                 /* Tab 1: Product Specs & Pricing Table */
-                <div className="border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
-                  <div className="overflow-x-auto max-h-[380px]">
+                <div className="border border-zinc-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+                  <div className="overflow-x-auto max-h-[390px]">
                     <table className="w-full text-left text-xs text-zinc-600">
                       <thead className="bg-zinc-100 border-b border-zinc-200 text-zinc-800 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10">
                         <tr>
-                          <th className="p-3 w-12 text-center">#</th>
-                          <th className="p-3">প্রোডাক্ট ও ছবি</th>
-                          <th className="p-3">ক্যাটাগরি হায়ারার্কি</th>
-                          <th className="p-3 text-right">বিক্রয় মূল্য (Customer Price)</th>
-                          <th className="p-3 text-right">রেগুলার মূল্য (MRP)</th>
-                          <th className="p-3 text-right">ছাড় (Discount)</th>
-                          <th className="p-3 text-right">ক্রয়মূল্য (Cost)</th>
-                          <th className="p-3 text-center">স্টক</th>
-                          <th className="p-3">SKU</th>
-                          <th className="p-3 text-center">স্ট্যাটাস</th>
+                          <th className="p-3 w-10 text-center">#</th>
+                          <th className="p-3 min-w-[200px]">প্রোডাক্ট ও ছবি</th>
+                          <th className="p-3 min-w-[140px]">ক্যাটাগরি</th>
+                          <th className="p-3 text-right min-w-[110px]">বিক্রয় মূল্য (Customer Price)</th>
+                          <th className="p-3 text-right min-w-[100px]">রেগুলার মূল্য (MRP)</th>
+                          <th className="p-3 text-right min-w-[85px]">ছাড় (Discount)</th>
+                          <th className="p-3 text-right min-w-[95px]">ক্রয়মূল্য (Cost)</th>
+                          <th className="p-3 text-center min-w-[70px]">স্টক</th>
+                          <th className="p-3 min-w-[95px]">SKU</th>
+                          <th className="p-3 text-center min-w-[75px]">স্ট্যাটাস</th>
+                          <th className="p-3 text-center min-w-[95px] sticky right-0 bg-zinc-100 shadow-xs">অ্যাকশন</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-200 bg-white font-medium">
                         {filteredPreview.map((item, idx) => (
                           <tr
                             key={idx}
-                            className={`hover:bg-zinc-50/80 transition-colors ${
+                            className={`group hover:bg-zinc-50/80 transition-colors ${
                               !item.isValid ? 'bg-rose-50/40' : ''
                             }`}
                           >
@@ -1004,8 +1150,12 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                             </td>
 
                             <td className="p-3">
-                              <div className="flex items-center gap-2.5 min-w-[220px]">
-                                <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200">
+                              <div className="flex items-center gap-2.5 min-w-[200px]">
+                                <div
+                                  onClick={() => handleOpenEdit(item._origIndex)}
+                                  className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200 cursor-pointer hover:opacity-85 relative group/img"
+                                  title="ক্লিক করে তথ্য এডিট করুন"
+                                >
                                   <img
                                     src={item.image_url}
                                     alt={item.name}
@@ -1015,9 +1165,16 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                                         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
                                     }}
                                   />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Edit2 className="w-3.5 h-3.5 text-white" />
+                                  </div>
                                 </div>
-                                <div className="min-w-0">
-                                  <p className="font-extrabold text-zinc-900 truncate">
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    onClick={() => handleOpenEdit(item._origIndex)}
+                                    className="font-extrabold text-zinc-900 truncate hover:text-blue-600 cursor-pointer transition-colors"
+                                    title="ক্লিক করে সম্পূর্ণ প্রোডাক্ট ও এসইও এডিট করুন"
+                                  >
                                     {item.name}
                                   </p>
                                   {item.description && (
@@ -1041,15 +1198,36 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                               )}
                             </td>
 
-                            <td className="p-3 text-right font-black text-emerald-700 whitespace-nowrap text-sm">
-                              ৳{item.final_price.toLocaleString('en-BD')}
+                            {/* Editable Final Customer Selling Price */}
+                            <td className="p-2.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-xs font-bold text-emerald-700">৳</span>
+                                <input
+                                  type="number"
+                                  value={item.final_price || ''}
+                                  onChange={(e) => handleInlineChange(item._origIndex, 'final_price', e.target.value)}
+                                  className="w-20 px-2 py-1 text-right text-xs font-black text-emerald-950 bg-emerald-50 hover:bg-emerald-100/70 focus:bg-white border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all shadow-2xs"
+                                  title="কাস্টমার বিক্রয় মূল্য সরাসরি পরিবর্তন করুন"
+                                />
+                              </div>
                             </td>
 
-                            <td className="p-3 text-right text-zinc-500 font-semibold whitespace-nowrap">
-                              ৳{item.selling_price.toLocaleString('en-BD')}
+                            {/* Editable Regular MRP Price */}
+                            <td className="p-2.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-xs font-semibold text-zinc-400">৳</span>
+                                <input
+                                  type="number"
+                                  value={item.selling_price || ''}
+                                  onChange={(e) => handleInlineChange(item._origIndex, 'selling_price', e.target.value)}
+                                  className="w-20 px-2 py-1 text-right text-xs font-semibold text-zinc-800 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-all"
+                                  title="রেগুলার মূল্য সরাসরি পরিবর্তন করুন"
+                                />
+                              </div>
                             </td>
 
-                            <td className="p-3 text-right whitespace-nowrap">
+                            {/* Calculated Discount */}
+                            <td className="p-2.5 text-right whitespace-nowrap">
                               {item.discount && item.discount > 0 ? (
                                 <span className="inline-block bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
                                   -৳{item.discount.toLocaleString('en-BD')}
@@ -1059,14 +1237,29 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                               )}
                             </td>
 
-                            <td className="p-3 text-right text-zinc-600 whitespace-nowrap font-medium">
-                              {item.buying_price && item.buying_price > 0 ? `৳${item.buying_price.toLocaleString('en-BD')}` : '—'}
+                            {/* Editable Buying/Cost Price */}
+                            <td className="p-2.5 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <span className="text-xs text-zinc-400">৳</span>
+                                <input
+                                  type="number"
+                                  value={item.buying_price || ''}
+                                  onChange={(e) => handleInlineChange(item._origIndex, 'buying_price', e.target.value)}
+                                  className="w-18 px-1.5 py-1 text-right text-xs text-zinc-700 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-all"
+                                  title="ক্রয়মূল্য সরাসরি পরিবর্তন করুন"
+                                />
+                              </div>
                             </td>
 
-                            <td className="p-3 text-center whitespace-nowrap">
-                              <span className="font-extrabold text-zinc-800 bg-zinc-100 px-2 py-0.5 rounded-md">
-                                {item.stock}
-                              </span>
+                            {/* Editable Stock */}
+                            <td className="p-2.5 text-center whitespace-nowrap">
+                              <input
+                                type="number"
+                                value={item.stock}
+                                onChange={(e) => handleInlineChange(item._origIndex, 'stock', e.target.value)}
+                                className="w-14 px-1 py-1 text-center text-xs font-bold text-zinc-800 bg-zinc-100 hover:bg-zinc-200/60 focus:bg-white border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-400 transition-all"
+                                title="স্টক সরাসরি পরিবর্তন করুন"
+                              />
                             </td>
 
                             <td className="p-3 font-mono text-[10px] text-zinc-600 whitespace-nowrap">
@@ -1088,6 +1281,29 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                                   <span>ত্রুটি</span>
                                 </span>
                               )}
+                            </td>
+
+                            {/* Action Buttons: Edit Modal & Delete Row */}
+                            <td className="p-2.5 text-center whitespace-nowrap sticky right-0 bg-white group-hover:bg-zinc-50/80 shadow-xs z-5">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(item._origIndex)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                                  title="সম্পূর্ণ তথ্য ও এসইও এডিট করুন"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>এডিট</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItem(item._origIndex)}
+                                  className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+                                  title="তালিকা থেকে বাদ দিন"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1119,10 +1335,20 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
                         <span className="text-[10px] font-mono text-zinc-400">
                           #{idx + 1} • {item.category} {item.sub_category ? `› ${item.sub_category}` : ''}
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          <Sparkles className="w-3 h-3 text-emerald-600" />
-                          <span>Google Rank Optimized</span>
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                            <span>Google Rank Optimized</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item._origIndex)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-full transition-all cursor-pointer"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" />
+                            <span>এডিট করুন</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Google Search Mockup Snippet */}
@@ -1239,6 +1465,303 @@ export const ExcelProductImportModal: React.FC<ExcelProductImportModalProps> = (
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* ✏️ SINGLE ITEM EDIT DIALOG (MODAL OVERLAY)                               */}
+      {/* ========================================================================= */}
+      {editingItemIndex !== null && editingDraft !== null && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-6 bg-zinc-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="relative bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            {/* Edit Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-200 flex items-center justify-between bg-zinc-50 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shadow-blue-500/20">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 leading-tight">
+                    প্রোডাক্ট এডিট করুন (#{editingItemIndex + 1})
+                  </h3>
+                  <p className="text-[11px] text-zinc-500">
+                    নাম, দাম, ছবি, ক্যাটাগরি ও গুগল এসইও কি-ওয়ার্ড সরাসরি সংশোধন করুন
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCloseEdit}
+                className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Edit Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 text-xs">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  পণ্যের নাম (Product Title) *
+                </label>
+                <input
+                  type="text"
+                  value={editingDraft.name}
+                  onChange={(e) => setEditingDraft({ ...editingDraft, name: e.target.value })}
+                  className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="প্রোডাক্টের নাম লিখুন"
+                />
+              </div>
+
+              {/* Pricing & Stock Card */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-emerald-50/40 p-3.5 rounded-2xl border border-emerald-200/80">
+                <div>
+                  <label className="block text-[11px] font-bold text-emerald-900 mb-1">
+                    বিক্রয় মূল্য (Customer Price ৳) *
+                  </label>
+                  <input
+                    type="number"
+                    value={editingDraft.final_price || ''}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value) || 0);
+                      setEditingDraft({ ...editingDraft, final_price: val });
+                    }}
+                    className="w-full bg-white text-emerald-950 text-xs sm:text-sm p-2 rounded-xl border border-emerald-300 font-black text-right focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    রেগুলার মূল্য (MRP ৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingDraft.selling_price || ''}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value) || 0);
+                      setEditingDraft({ ...editingDraft, selling_price: val, regular_price: val });
+                    }}
+                    className="w-full bg-white text-zinc-800 text-xs sm:text-sm p-2 rounded-xl border border-zinc-300 font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    ক্রয়মূল্য (Cost Price ৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingDraft.buying_price || ''}
+                    onChange={(e) => {
+                      const val = Math.max(0, Number(e.target.value) || 0);
+                      setEditingDraft({ ...editingDraft, buying_price: val });
+                    }}
+                    className="w-full bg-white text-zinc-800 text-xs sm:text-sm p-2 rounded-xl border border-zinc-300 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    স্টক (Quantity)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingDraft.stock}
+                    onChange={(e) => {
+                      const val = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                      setEditingDraft({ ...editingDraft, stock: val });
+                    }}
+                    className="w-full bg-white text-zinc-900 text-xs sm:text-sm p-2 rounded-xl border border-zinc-300 font-bold text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Category Hierarchy */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    ক্যাটাগরি (Category) *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.category}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, category: e.target.value })}
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    সাব ক্যাটাগরি (Sub Category)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.sub_category || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, sub_category: e.target.value })}
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    চাইল্ড ক্যাটাগরি (Child)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.child_category || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, child_category: e.target.value })}
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+                    প্রোডাক্ট টাইপ (Type)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.product_type || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, product_type: e.target.value })}
+                    className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Image URL & Thumbnail */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  ছবির লিংক (Image Link)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editingDraft.image_url}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, image_url: e.target.value })}
+                    className="flex-1 bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="https://..."
+                  />
+                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-100 border border-zinc-200 shrink-0 flex items-center justify-center">
+                    {editingDraft.image_url ? (
+                      <img
+                        src={editingDraft.image_url}
+                        alt="preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+                        }}
+                      />
+                    ) : (
+                      <Package className="w-4 h-4 text-zinc-400" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  বিবরণ (Description)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingDraft.description || ''}
+                  onChange={(e) => setEditingDraft({ ...editingDraft, description: e.target.value })}
+                  className="w-full bg-zinc-50 text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="পণ্যের বৈশিষ্ট্য ও বিবরণ..."
+                />
+              </div>
+
+              {/* Google SEO Metadata Card */}
+              <div className="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-blue-950 flex items-center gap-1.5 text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <span>গুগল র‍্যাঙ্কিং ও এসইও মেটাডাটা (Google SEO)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAutoRefreshSEOForDraft}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-white hover:bg-blue-100 border border-blue-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>এসইও অটো-জেনারেট</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-0.5">
+                      Google Meta Title
+                    </label>
+                    <input
+                      type="text"
+                      value={editingDraft.meta_title}
+                      onChange={(e) => setEditingDraft({ ...editingDraft, meta_title: e.target.value })}
+                      className="w-full bg-white text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-zinc-700 mb-0.5">
+                      URL Slug
+                    </label>
+                    <input
+                      type="text"
+                      value={editingDraft.slug}
+                      onChange={(e) => setEditingDraft({ ...editingDraft, slug: generateSlug(e.target.value) })}
+                      className="w-full bg-white text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-0.5">
+                    Google Rank Keywords (কমা দিয়ে কি-ওয়ার্ড লিখুন)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.meta_keywords}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, meta_keywords: e.target.value })}
+                    className="w-full bg-white text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. t900 ultra, t900 ultra price in bd, smartwatch bd"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-700 mb-0.5">
+                    Google SERP Snippet Description
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDraft.meta_description}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, meta_description: e.target.value })}
+                    className="w-full bg-white text-zinc-900 text-xs p-2 rounded-xl border border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Edit Modal Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-zinc-200 flex items-center justify-end gap-2 bg-zinc-50 shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseEdit}
+                className="px-4 py-2 bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-100 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                বাতিল (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>সংরক্ষণ করুন (Save Changes)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
