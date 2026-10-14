@@ -58,6 +58,7 @@ import {
   KeyRound,
   Film,
   Mail,
+  Info,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
@@ -5037,7 +5038,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       : 'text-zinc-600 hover:text-emerald-800 hover:bg-emerald-50'
                   }`}
                 >
-                  <BarChart2 className="w-4 h-4" />
+                  <BarChart3 className="w-4 h-4" />
                   <span>বিগত ১৪ দিনের দৈনিক হিস্ট্রি</span>
                 </button>
               </div>
@@ -5130,7 +5131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="space-y-4 animate-fade-in">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black text-zinc-900 flex items-center gap-2">
-                      <BarChart2 className="w-4 h-4 text-emerald-600" />
+                      <BarChart3 className="w-4 h-4 text-emerald-600" />
                       <span>বিগত ১৪ দিনের দৈনিক ভিজিটর ট্রেন্ড</span>
                     </h3>
                     <span className="text-xs text-emerald-700 font-bold">
