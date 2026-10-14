@@ -25,6 +25,21 @@ import {
   FileText
 } from 'lucide-react';
 import { AboutPageData, defaultAboutPageData, FeatureCard } from '../models/aboutPageSchema';
+import { db } from '../firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
+function cleanForFirestore(data: any): any {
+  if (data === null || data === undefined) return '';
+  if (Array.isArray(data)) return data.map(cleanForFirestore);
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined) cleaned[k] = cleanForFirestore(v);
+    }
+    return cleaned;
+  }
+  return data;
+}
 
 interface AboutPageEditorProps {
   adminPassword?: string;
@@ -59,31 +74,66 @@ export const AboutPageEditor: React.FC<AboutPageEditorProps> = ({
     };
   };
 
-  // Load existing data from backend API
+  // Load existing data from Firestore and backend API
   useEffect(() => {
     let isMounted = true;
     const loadAboutData = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/admin/about', {
-          headers: getAdminAuthHeader(),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && json.data && isMounted) {
-            setFormData({
-              ...defaultAboutPageData,
-              ...json.data,
-              features:
-                Array.isArray(json.data.features) && json.data.features.length >= 3
-                  ? json.data.features.slice(0, 3)
-                  : defaultAboutPageData.features,
-              contact_info: {
-                ...defaultAboutPageData.contact_info,
-                ...(json.data.contact_info || {}),
-              },
-            });
+
+        // 1. Try Firestore first
+        if (db) {
+          try {
+            const snap = await getDoc(doc(db, 'settings', 'about_page'));
+            if (snap.exists() && isMounted) {
+              const data = snap.data();
+              setFormData({
+                ...defaultAboutPageData,
+                ...data,
+                features:
+                  Array.isArray(data.features) && data.features.length >= 3
+                    ? data.features.slice(0, 3)
+                    : defaultAboutPageData.features,
+                contact_info: {
+                  ...defaultAboutPageData.contact_info,
+                  ...(data.contact_info || {}),
+                },
+              });
+            }
+          } catch (fsErr) {
+            console.warn('Firestore initial about_page read note:', fsErr);
           }
+        }
+
+        // 2. Try REST API as well
+        const endpoints = ['/api/admin/about', '/api/about'];
+        for (const ep of endpoints) {
+          try {
+            const res = await fetch(ep, {
+              headers: getAdminAuthHeader(),
+            });
+            const text = await res.text();
+            let json: any = null;
+            try {
+              json = text ? JSON.parse(text) : null;
+            } catch {}
+
+            if (res.ok && json && json.data && isMounted) {
+              setFormData({
+                ...defaultAboutPageData,
+                ...json.data,
+                features:
+                  Array.isArray(json.data.features) && json.data.features.length >= 3
+                    ? json.data.features.slice(0, 3)
+                    : defaultAboutPageData.features,
+                contact_info: {
+                  ...defaultAboutPageData.contact_info,
+                  ...(json.data.contact_info || {}),
+                },
+              });
+              break;
+            }
+          } catch {}
         }
       } catch (err: any) {
         console.warn('Could not fetch about data from backend, using defaults:', err);
@@ -98,28 +148,66 @@ export const AboutPageEditor: React.FC<AboutPageEditorProps> = ({
     };
   }, []);
 
-  // Save changes to backend database
+  // Save changes to Firestore and backend database
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     try {
       setSaving(true);
-      const res = await fetch('/api/admin/about', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeader(),
-        },
-        body: JSON.stringify(formData),
-      });
+      const cleanedData = cleanForFirestore(formData);
+      cleanedData.updated_at = new Date().toISOString();
 
-      const json = await res.json();
-      if (res.ok && json.success) {
-        showToast('About Us page content saved and published successfully!', 'success');
-        if (json.data) {
-          setFormData(json.data);
+      let savedInFirestore = false;
+      let savedInApi = false;
+      let apiErrorMessage = '';
+
+      // 1. Primary write: Cloud Firestore
+      if (db) {
+        try {
+          await setDoc(doc(db, 'settings', 'about_page'), cleanedData, { merge: true });
+          await setDoc(doc(db, 'site_settings', 'about_page'), cleanedData, { merge: true });
+          savedInFirestore = true;
+        } catch (fsErr: any) {
+          console.warn('Firestore about_page direct write warning:', fsErr?.message || fsErr);
         }
+      }
+
+      // 2. Secondary write: REST API endpoints (with safe response parsing)
+      const endpoints = ['/api/admin/about', '/api/about', '/api/about/update'];
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAdminAuthHeader(),
+            },
+            body: JSON.stringify(formData),
+          });
+
+          const text = await res.text();
+          let json: any = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {}
+
+          if (res.ok) {
+            savedInApi = true;
+            if (json && json.data) {
+              setFormData(json.data);
+            }
+            break;
+          } else if (json && json.error) {
+            apiErrorMessage = json.error;
+          }
+        } catch (fetchErr: any) {
+          console.warn(`Endpoint ${ep} write note:`, fetchErr?.message || fetchErr);
+        }
+      }
+
+      if (savedInFirestore || savedInApi) {
+        showToast('About Us page content saved and published successfully!', 'success');
       } else {
-        throw new Error(json.error || 'Failed to save changes');
+        throw new Error(apiErrorMessage || 'Failed to save changes to server or database.');
       }
     } catch (err: any) {
       console.error('Save error:', err);
@@ -165,8 +253,13 @@ export const AboutPageEditor: React.FC<AboutPageEditorProps> = ({
             }),
           });
 
-          const json = await res.json();
-          if (res.ok && json.success && json.url) {
+          const text = await res.text();
+          let json: any = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {}
+
+          if (res.ok && json && json.success && json.url) {
             setFormData((prev) => ({
               ...prev,
               ceo_image_url: json.url,

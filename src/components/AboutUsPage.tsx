@@ -22,6 +22,8 @@ import {
   UserCheck
 } from 'lucide-react';
 import { AboutPageData, defaultAboutPageData, FeatureCard } from '../../backend/models/aboutPageSchema';
+import { db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AboutUsPageProps {
   onBackToStore?: () => void;
@@ -43,18 +45,49 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
   const [data, setData] = useState<AboutPageData>(defaultAboutPageData);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Fetch dynamic About Us data from backend API
+  // Fetch dynamic About Us data from backend API and Firestore
   useEffect(() => {
     let isMounted = true;
 
     const fetchAboutData = async () => {
       try {
-        const response = await fetch('/api/about');
-        if (response.ok) {
-          const json = await response.json();
-          if (json.success && json.data && isMounted) {
-            setData(json.data);
+        let fetchedData: any = null;
+
+        // 1. Try backend REST API first with safe response parsing
+        try {
+          const response = await fetch('/api/about');
+          const text = await response.text();
+          let json: any = null;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {}
+
+          if (response.ok && json && json.data) {
+            fetchedData = json.data;
           }
+        } catch (apiErr) {
+          console.warn('REST API about fetch warning:', apiErr);
+        }
+
+        // 2. If REST API did not return data, query Firestore directly
+        if (!fetchedData && db) {
+          try {
+            const snap = await getDoc(doc(db, 'settings', 'about_page'));
+            if (snap.exists()) {
+              fetchedData = snap.data();
+            } else {
+              const snap2 = await getDoc(doc(db, 'site_settings', 'about_page'));
+              if (snap2.exists()) {
+                fetchedData = snap2.data();
+              }
+            }
+          } catch (fsErr) {
+            console.warn('Firestore about fetch note:', fsErr);
+          }
+        }
+
+        if (fetchedData && isMounted) {
+          setData(fetchedData);
         }
       } catch (err) {
         console.warn('Could not fetch dynamic About Us data, using defaults:', err);

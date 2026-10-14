@@ -3,6 +3,50 @@ import fs from 'fs';
 import path from 'path';
 import { AboutPageData, defaultAboutPageData } from '../models/aboutPageSchema';
 
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: 'gen-lang-client-0786093112',
+  appId: '1:69433257808:web:fb4fbbe84e9a5188354655',
+  apiKey: 'AIzaSyCTbIx95MxDltN100CSrPA9e9J-YrdF3Gg',
+  authDomain: 'gen-lang-client-0786093112.firebaseapp.com',
+  firestoreDatabaseId: 'ai-studio-maxorapremiumonl-a712e7fa-09e4-41f4-9cfb-9515c7736ab5',
+  storageBucket: 'gen-lang-client-0786093112.firebasestorage.app',
+  messagingSenderId: '69433257808',
+};
+
+function getFirestoreInstance() {
+  try {
+    let firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      try {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch (e) {}
+    }
+    const fbApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    return firebaseConfig.firestoreDatabaseId
+      ? getFirestore(fbApp, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(fbApp);
+  } catch (e) {
+    return null;
+  }
+}
+
+function cleanForFirestore(data: any): any {
+  if (data === null || data === undefined) return '';
+  if (Array.isArray(data)) return data.map(cleanForFirestore);
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined) cleaned[k] = cleanForFirestore(v);
+    }
+    return cleaned;
+  }
+  return data;
+}
+
 // Reference to shared DB and save function injected by server
 let sharedDb: any = null;
 let saveDbFn: (() => void) | null = null;
@@ -145,6 +189,17 @@ export async function updateAboutPage(req: Request, res: Response) {
       if (saveDbFn) {
         saveDbFn();
       }
+    }
+
+    // Persist to Cloud Firestore
+    try {
+      const fsDb = getFirestoreInstance();
+      if (fsDb) {
+        setDoc(doc(fsDb, 'settings', 'about_page'), cleanForFirestore(updatedAboutPage), { merge: true }).catch(() => {});
+        setDoc(doc(fsDb, 'site_settings', 'about_page'), cleanForFirestore(updatedAboutPage), { merge: true }).catch(() => {});
+      }
+    } catch (fsErr) {
+      console.warn('Firestore about_page async sync note:', fsErr);
     }
 
     if (syncVersionsRef) {
