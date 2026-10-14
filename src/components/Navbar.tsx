@@ -58,6 +58,7 @@ interface NavbarProps {
   }) => void;
   products?: Product[];
   onSelectProduct?: (product: Product) => void;
+  onOpenAboutUs?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -69,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenWishlist,
   onOpenTracker,
   onOpenCustomerAccount,
+  onOpenAboutUs,
   searchQuery,
   onSearchChange,
   categories: propCategories = [],
@@ -641,6 +643,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Home className="w-3.5 h-3.5 text-zinc-400" />
               <span>Home</span>
             </button>
+            {onOpenAboutUs && (
+              <button
+                type="button"
+                id="navbar-about-us-button"
+                onClick={() => {
+                  setActiveMegaMenu(null);
+                  onOpenAboutUs();
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 text-zinc-300 hover:text-teal-300 hover:bg-slate-800/50 font-medium"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                <span>About Us</span>
+              </button>
+            )}
           </nav>
         </div>
 

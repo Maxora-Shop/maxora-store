@@ -9,6 +9,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
+import { AboutUsPage } from './components/AboutUsPage';
 
 // Customer Modals (loaded on-demand)
 const CustomerAccountModal = React.lazy(() =>
@@ -154,6 +155,34 @@ export default function App() {
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [quickViewInitialTab, setQuickViewInitialTab] = useState<'details' | 'reviews'>('details');
   const [isProductNotFound, setIsProductNotFound] = useState(false);
+
+  // About Us Page state & URL synchronization
+  const [isAboutUsOpen, setIsAboutUsOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const hash = (window.location.hash || '').toLowerCase();
+    const path = (window.location.pathname || '').toLowerCase();
+    const search = new URLSearchParams(window.location.search);
+    return hash === '#about' || hash === '#about-us' || path === '/about' || path === '/about-us' || search.get('page') === 'about';
+  });
+
+  useEffect(() => {
+    const handleUrlRoute = () => {
+      const hash = (window.location.hash || '').toLowerCase();
+      const path = (window.location.pathname || '').toLowerCase();
+      const search = new URLSearchParams(window.location.search);
+      const isAbout = hash === '#about' || hash === '#about-us' || path === '/about' || path === '/about-us' || search.get('page') === 'about';
+      setIsAboutUsOpen(isAbout);
+      if (isAbout) {
+        setQuickViewProduct(null);
+      }
+    };
+    window.addEventListener('popstate', handleUrlRoute);
+    window.addEventListener('hashchange', handleUrlRoute);
+    return () => {
+      window.removeEventListener('popstate', handleUrlRoute);
+      window.removeEventListener('hashchange', handleUrlRoute);
+    };
+  }, []);
 
   // Wishlist / Saved Items State (persisted in localStorage)
   const [wishlistIds, setWishlistIds] = useState<string[]>(() => getStoredWishlist());
@@ -972,6 +1001,7 @@ export default function App() {
     setSearchQuery('');
     setQuickViewProduct(null);
     setIsProductNotFound(false);
+    setIsAboutUsOpen(false);
 
     // Update browser URL cleanly
     let newPath = '/';
@@ -1444,11 +1474,37 @@ export default function App() {
         onSelectTaxonomy={handleTaxonomySelect}
         products={products}
         onSelectProduct={handleOpenProductDetail}
+        onOpenAboutUs={() => {
+          setIsAboutUsOpen(true);
+          setQuickViewProduct(null);
+          window.location.hash = 'about';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Main Content Area */}
       <main className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 w-full min-h-[60vh]">
-        {quickViewProduct ? (
+        {isAboutUsOpen ? (
+          <AboutUsPage
+            onBackToStore={() => {
+              setIsAboutUsOpen(false);
+              if (window.location.hash === '#about' || window.location.hash === '#about-us') {
+                window.history.pushState(null, '', window.location.pathname);
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onExploreProducts={() => {
+              setIsAboutUsOpen(false);
+              if (window.location.hash === '#about' || window.location.hash === '#about-us') {
+                window.history.pushState(null, '', window.location.pathname);
+              }
+              scrollToProducts();
+            }}
+            storeName={settings.store_name}
+            storePhone={settings.phone}
+            storeEmail={settings.email}
+          />
+        ) : quickViewProduct ? (
           <ProductDetailsPage
             product={quickViewProduct}
             settings={settings}
@@ -1987,6 +2043,12 @@ export default function App() {
         onOpenTracker={() => setIsTrackerOpen(true)}
         onScrollToProducts={scrollToProducts}
         onSelectCategory={(slug) => handleTaxonomySelect({ category: slug })}
+        onOpenAboutUs={() => {
+          setIsAboutUsOpen(true);
+          setQuickViewProduct(null);
+          window.location.hash = 'about';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
 
       {/* Mobile Bottom Navigation & Floating Checkout */}

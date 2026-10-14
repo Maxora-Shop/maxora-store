@@ -10,6 +10,7 @@ import { getFirestore, doc, getDoc, collection, getDocs, query, where, setDoc, d
 import { generateDynamicSitemapXml, invalidateSitemapCache } from './src/utils/sitemapGenerator';
 import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
+import aboutRoutes, { initAboutDb } from './backend/routes/aboutRoutes';
 
 // Set Firestore log level to silent to prevent noisy internal quota backoff logs
 try {
@@ -213,6 +214,7 @@ interface DBSchema {
   traffic_analytics?: {
     daily?: Record<string, any>;
   };
+  about_page?: any;
 }
 
 const defaultSettings: Record<string, any> = {
@@ -332,7 +334,8 @@ try {
       subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories,
       uploaded_images: parsed.uploaded_images || {},
       reviews: Array.isArray(parsed.reviews) ? parsed.reviews : [],
-      traffic_analytics: parsed.traffic_analytics || { daily: {} }
+      traffic_analytics: parsed.traffic_analytics || { daily: {} },
+      about_page: parsed.about_page || null
     };
   } else {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -348,6 +351,10 @@ function saveDB() {
     console.error("Error saving DB:", e);
   }
 }
+
+// Initialize and mount About Us API Router
+initAboutDb(db, saveDB, syncVersions);
+app.use(aboutRoutes);
 
 // ==========================================
 // REAL-TIME VISITOR & TRAFFIC TRACKING ENGINE

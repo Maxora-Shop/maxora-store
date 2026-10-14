@@ -125,6 +125,7 @@ import { AdminCategories } from './AdminCategories';
 import { AdminBrands } from './AdminBrands';
 import { AdminBanners } from './AdminBanners';
 import { AdminAiAssistant } from './AdminAiAssistant';
+import { AboutPageEditor } from './AboutPageEditor';
 import { BrandSelectDropdown } from './BrandSelectDropdown';
 import { CategoryHierarchyMenu } from './CategoryHierarchyMenu';
 import { buildTaxonomyTree } from '../utils/taxonomy';
@@ -328,7 +329,8 @@ export type AdminTab =
   | 'orders'
   | 'order_analytics'
   | 'customers'
-  | 'settings';
+  | 'settings'
+  | 'about';
 
 export const getAdminTabFromLocation = (): {
   tab: AdminTab;
@@ -413,6 +415,7 @@ export const getAdminTabFromLocation = (): {
   if (hash === 'customers') return { tab: 'customers' };
   if (hash === 'ai-assistant') return { tab: 'ai-assistant' };
   if (hash === 'settings') return { tab: 'settings' };
+  if (hash === 'about' || hash === 'about-us' || pathname === '/admin/about' || searchParams.get('tab') === 'about') return { tab: 'about' };
 
   return { tab: 'overview' };
 };
@@ -445,6 +448,8 @@ export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string =
       return '/admin/ai-assistant';
     case 'settings':
       return '/admin/settings';
+    case 'about':
+      return '/admin/about';
     case 'traffic':
       return '/admin/traffic';
     case 'overview':
@@ -3806,6 +3811,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             >
               <SettingsIcon className="w-4 h-4 shrink-0" />
               <span>Settings</span>
+            </button>
+
+            {/* About Us Page */}
+            <button
+              type="button"
+              onClick={() => handleTabChange('about')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'about'
+                  ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
+                  : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+              }`}
+            >
+              <Info className="w-4 h-4 shrink-0" />
+              <span>About Us (আমাদের সম্পর্কে)</span>
             </button>
           </nav>
         </div>
@@ -9091,6 +9110,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </form>
             )}
+          </div>
+        )}
+
+        {/* ====================================================
+            6. TAB: ABOUT US PAGE MANAGEMENT
+        ==================================================== */}
+        {currentTab === 'about' && (
+          <div className="max-w-5xl space-y-6 animate-fade-in pb-12">
+            <AboutPageEditor
+              adminPassword={password}
+              showToast={showToast}
+            />
           </div>
         )}
       </main>

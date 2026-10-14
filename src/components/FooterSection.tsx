@@ -58,6 +58,7 @@ interface FooterSectionProps {
   onScrollToProducts: () => void;
   onSelectCategory?: (cat: string) => void;
   onScrollToHotDeals?: () => void;
+  onOpenAboutUs?: () => void;
 }
 
 export const FooterSection: React.FC<FooterSectionProps> = ({
@@ -66,6 +67,7 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
   onScrollToProducts,
   onSelectCategory,
   onScrollToHotDeals,
+  onOpenAboutUs,
 }) => {
   const [modalContent, setModalContent] = useState<{ title: string; content: string } | null>(null);
 
@@ -228,6 +230,18 @@ Maxora Shop BD respects your personal privacy:
                     <span>Track Order</span>
                   </button>
                 </li>
+                {onOpenAboutUs && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={onOpenAboutUs}
+                      className="group text-zinc-400 hover:text-white transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-600 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
+                      <span>About Us (আমাদের সম্পর্কে)</span>
+                    </button>
+                  </li>
+                )}
               </ul>
             </div>
 
