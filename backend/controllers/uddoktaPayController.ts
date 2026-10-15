@@ -68,12 +68,16 @@ export function setSharedPaymentDb(db: any, saveFn: () => void, syncVersions?: R
  * Returns normalized UddoktaPay URLs and API Key
  */
 function getUddoktaPayConfig() {
-  // Sandbox API key fallback for seamless developer testing
-  const apiKey = (process.env.UDDOKTAPAY_API_KEY || '982d381360a69d419689740d9f2e26ce36fb7a50').trim();
-  let rawUrl = (process.env.UDDOKTAPAY_API_URL || 'https://sandbox.uddoktapay.com/api/checkout-v2').trim();
+  const apiKey = (process.env.UDDOKTAPAY_API_KEY || 'FvRPvzR94ah2KFgmrBRME1WKZYp1nLIC7Sa8s2IG').trim();
+  let rawUrl = (process.env.UDDOKTAPAY_API_URL || 'https://paymently.io').trim();
 
   // Strip trailing slashes
   rawUrl = rawUrl.replace(/\/+$/, '');
+
+  // If user provided paymently.io root without subdomain, pay.paymently.io is the active API gateway
+  if (rawUrl === 'https://paymently.io' || rawUrl === 'http://paymently.io') {
+    rawUrl = 'https://pay.paymently.io';
+  }
 
   let checkoutUrl = rawUrl;
   let baseUrl = rawUrl;
@@ -246,36 +250,51 @@ export async function initiatePayment(req: Request, res: Response) {
 
     console.log(`[UDDOKTAPAY_INITIATE] Requesting checkout for order ${safeOrderNo} (${safeOrderId}) - Amount: ৳${amount}`);
 
-    // Call UddoktaPay API
-    const response = await fetch(checkoutUrl, {
-      method: 'POST',
-      headers: {
-        'RT-UDDOKTAPAY-API-KEY': apiKey,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    // Call UddoktaPay / Paymently API with support for candidate URL fallbacks
+    const candidateUrls = [
+      checkoutUrl,
+      ...(checkoutUrl.includes('pay.paymently.io') ? [] : ['https://pay.paymently.io/api/checkout-v2'])
+    ];
 
-    const responseText = await response.text();
+    let response: any = null;
+    let responseText = '';
     let data: any = {};
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error('[UDDOKTAPAY_PARSE_ERROR] Non-JSON response from UddoktaPay:', responseText);
-      return res.status(502).json({
-        success: false,
-        error: 'Invalid response from UddoktaPay payment gateway. Please try again or choose Cash on Delivery.',
-        details: responseText.slice(0, 300)
-      });
+
+    for (const url of candidateUrls) {
+      try {
+        console.log(`[UDDOKTAPAY_POST] Calling ${url}...`);
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'RT-UDDOKTAPAY-API-KEY': apiKey,
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        responseText = await response.text();
+        try {
+          data = JSON.parse(responseText);
+          // If response is valid JSON, we have a genuine API answer
+          if (data && (data.payment_url || data.status !== undefined)) {
+            break;
+          }
+        } catch {
+          // If non-JSON (e.g. 404 HTML), try next candidate URL
+        }
+      } catch (err: any) {
+        console.warn(`[UDDOKTAPAY_ATTEMPT_FAILED] Failed calling ${url}:`, err.message);
+      }
     }
 
-    if (!response.ok || data.status === false || !data.payment_url) {
-      console.error('[UDDOKTAPAY_INIT_FAILED] Status:', response.status, data);
+    if (!data || (!data.payment_url && data.status === false)) {
+      console.error('[UDDOKTAPAY_INIT_FAILED] Final status:', response?.status, data || responseText);
       return res.status(400).json({
         success: false,
-        error: data.message || 'Failed to initiate payment with UddoktaPay.',
-        details: data
+        error: data?.message || 'Failed to initiate payment with UddoktaPay/Paymently gateway.',
+        details: data || responseText.slice(0, 300)
       });
     }
 
@@ -323,6 +342,7 @@ export async function successCallback(req: Request, res: Response) {
       method: 'POST',
       headers: {
         'RT-UDDOKTAPAY-API-KEY': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
@@ -496,6 +516,7 @@ export async function verifyPayment(req: Request, res: Response) {
       method: 'POST',
       headers: {
         'RT-UDDOKTAPAY-API-KEY': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
