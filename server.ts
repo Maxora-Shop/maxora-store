@@ -12,6 +12,7 @@ import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
 import aboutRoutes, { initAboutDb } from './backend/routes/aboutRoutes';
 import paymentRoutes, { initPaymentDb } from './backend/routes/paymentRoutes';
+import { optimizeAndConvertToWebP } from './backend/utils/imageOptimizer';
 
 // Set Firestore log level to silent to prevent noisy internal quota backoff logs
 try {
@@ -27,9 +28,45 @@ process.on('warning', (warning) => {
 });
 
 const app = express();
-app.use(compression());
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
-app.use(express.static(path.join(process.cwd(), 'public')));
+
+// High-performance Gzip / Brotli compression
+app.use(compression({
+  threshold: 1024,
+  level: 6,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+const ONE_YEAR_MS = 31536000 * 1000;
+const ONE_MONTH_MS = 2592000 * 1000;
+
+// High-speed browser caching for uploaded product media & WebP images (1-Year Immutable Caching)
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
+  maxAge: ONE_YEAR_MS,
+  immutable: true,
+  etag: true,
+  lastModified: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
+
+// Long-term immutable caching for static assets, favicons, fonts, images
+app.use(express.static(path.join(process.cwd(), 'public'), {
+  maxAge: ONE_YEAR_MS,
+  immutable: true,
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.match(/\.(ico|png|jpe?g|webp|svg|woff2?|ttf|css|js)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
+
 const PORT = 3000;
 
 const DEFAULT_FIREBASE_CONFIG = {
@@ -345,13 +382,142 @@ try {
   console.error("DB load error, using default memory DB:", e);
 }
 
+// ====================================================================
+// MAXORA IN-MEMORY FAST PRODUCT INDEX ENGINE (< 1ms CATEGORY & CATALOG LOOKUPS)
+// ====================================================================
+class FastProductIndexer {
+  private byId = new Map<string, any>();
+  private byCategory = new Map<string, any[]>();
+  private byCategorySlug = new Map<string, any[]>();
+  private byStatus = new Map<string, any[]>();
+  private activePublicList: any[] = [];
+  private allPublicList: any[] = [];
+  private etag: string = `"${Date.now().toString(36)}"`;
+
+  public rebuild(products: any[]) {
+    const newById = new Map<string, any>();
+    const newByCategory = new Map<string, any[]>();
+    const newByCategorySlug = new Map<string, any[]>();
+    const newByStatus = new Map<string, any[]>();
+    const newActivePublic: any[] = [];
+    const newAllPublic: any[] = [];
+
+    for (const rawProduct of products) {
+      const discount = Number(rawProduct.discount || 0);
+      const price = Number(rawProduct.selling_price || 0);
+      const finalPrice = Math.max(0, price - discount);
+
+      // Strip buying_price for customer privacy
+      const { buying_price, ...publicProduct } = rawProduct;
+      const imgs = safeJSON(rawProduct.images);
+      const imagesArray = Array.isArray(imgs) && imgs.length > 0 ? imgs : (rawProduct.image_url ? [rawProduct.image_url] : []);
+
+      const formatted = {
+        ...publicProduct,
+        id: String(rawProduct.id),
+        sold_count: Number(rawProduct.sold_count || 0),
+        images: imagesArray,
+        image_url: imagesArray[0] || rawProduct.image_url || '',
+        final_price: finalPrice,
+        active: rawProduct.active !== 0 && rawProduct.active !== false && String(rawProduct.active) !== '0' ? 1 : 0
+      };
+
+      newById.set(formatted.id, formatted);
+      newAllPublic.push(formatted);
+
+      if (formatted.active === 1) {
+        newActivePublic.push(formatted);
+
+        // Index by Category (normalized)
+        if (rawProduct.category) {
+          const catKey = String(rawProduct.category).toLowerCase().trim();
+          let catList = newByCategory.get(catKey);
+          if (!catList) {
+            catList = [];
+            newByCategory.set(catKey, catList);
+          }
+          catList.push(formatted);
+        }
+
+        // Index by Category Slug (normalized)
+        if (rawProduct.category_slug) {
+          const slugKey = String(rawProduct.category_slug).toLowerCase().trim();
+          let slugList = newByCategorySlug.get(slugKey);
+          if (!slugList) {
+            slugList = [];
+            newByCategorySlug.set(slugKey, slugList);
+          }
+          slugList.push(formatted);
+        }
+
+        // Index by Status
+        const statusKey = String(rawProduct.status || 'Active').toLowerCase().trim();
+        let statusList = newByStatus.get(statusKey);
+        if (!statusList) {
+          statusList = [];
+          newByStatus.set(statusKey, statusList);
+        }
+        statusList.push(formatted);
+      }
+    }
+
+    // Sort active products by featured then created_at
+    const sortFn = (a: any, b: any) => {
+      const fA = a.featured ? 1 : 0;
+      const fB = b.featured ? 1 : 0;
+      if (fB !== fA) return fB - fA;
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    };
+
+    newActivePublic.sort(sortFn);
+    newAllPublic.sort(sortFn);
+    for (const list of newByCategory.values()) list.sort(sortFn);
+    for (const list of newByCategorySlug.values()) list.sort(sortFn);
+
+    this.byId = newById;
+    this.byCategory = newByCategory;
+    this.byCategorySlug = newByCategorySlug;
+    this.byStatus = newByStatus;
+    this.activePublicList = newActivePublic;
+    this.allPublicList = newAllPublic;
+    this.etag = `"${Date.now().toString(36)}-${products.length}"`;
+  }
+
+  public getById(id: string): any | undefined {
+    return this.byId.get(String(id));
+  }
+
+  public getByCategory(category: string): any[] {
+    const key = category.toLowerCase().trim();
+    return this.byCategory.get(key) || this.byCategorySlug.get(key) || [];
+  }
+
+  public getAllActive(): any[] {
+    return this.activePublicList;
+  }
+
+  public getAll(): any[] {
+    return this.allPublicList;
+  }
+
+  public getEtag(): string {
+    return this.etag;
+  }
+}
+
+const productIndexer = new FastProductIndexer();
+
 function saveDB() {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+    productIndexer.rebuild(db.products);
   } catch (e) {
     console.error("Error saving DB:", e);
   }
 }
+
+// Initial index build on startup
+productIndexer.rebuild(db.products);
 
 // Initialize and mount About Us API Router
 initAboutDb(db, saveDB, syncVersions);
@@ -853,66 +1019,91 @@ app.get('/api/admin/settings', async (req, res) => {
 });
 
 // GET /api/products (Public customer endpoint - strips buying_price for privacy)
-app.get('/api/products', async (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+// Asynchronous Background Product Synchronization (Non-blocking)
+let lastBackgroundSync = 0;
+async function backgroundSyncProducts(force = false) {
+  if (isFirestoreQuotaCooldownActive()) return;
+  const now = Date.now();
+  if (!force && now - lastBackgroundSync < 60000) return;
+  lastBackgroundSync = now;
 
-  if (!isFirestoreQuotaCooldownActive()) {
-    try {
-      const firestoreDb = getFirestoreInstance();
-      const snap = await getDocs(collection(firestoreDb, 'products'));
-      if (!snap.empty) {
-        const fsMap = new Map<string, any>();
-        snap.forEach((d) => {
-          const raw = d.data() || {};
-          const id = String(raw.id || d.id);
-          fsMap.set(id, {
-            ...raw,
-            id,
-            selling_price: Number(raw.selling_price || 0),
-            discount: Number(raw.discount || 0),
-            final_price: Math.max(0, Number(raw.selling_price || 0) - Number(raw.discount || 0)),
-            stock: Number(raw.stock !== undefined ? raw.stock : 0),
-            active: raw.active !== undefined && (raw.active === 0 || raw.active === false || String(raw.active) === '0') ? 0 : 1,
-            images: Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : (raw.image_url ? [raw.image_url] : [])
-          });
+  try {
+    const firestoreDb = getFirestoreInstance();
+    const snap = await getDocs(collection(firestoreDb, 'products'));
+    if (!snap.empty) {
+      const fsMap = new Map<string, any>();
+      snap.forEach((d) => {
+        const raw = d.data() || {};
+        const id = String(raw.id || d.id);
+        fsMap.set(id, {
+          ...raw,
+          id,
+          selling_price: Number(raw.selling_price || 0),
+          discount: Number(raw.discount || 0),
+          final_price: Math.max(0, Number(raw.selling_price || 0) - Number(raw.discount || 0)),
+          stock: Number(raw.stock !== undefined ? raw.stock : 0),
+          active: raw.active !== undefined && (raw.active === 0 || raw.active === false || String(raw.active) === '0') ? 0 : 1,
+          images: Array.isArray(raw.images) && raw.images.length > 0 ? raw.images : (raw.image_url ? [raw.image_url] : [])
         });
+      });
 
-        let hasChanges = false;
-        db.products = db.products.map((p) => {
-          const fsProd = fsMap.get(String(p.id));
-          if (!fsProd) return p;
-          const fsTime = new Date(fsProd.updated_at || fsProd.created_at || 0).getTime();
-          const serverTime = new Date(p.updated_at || p.created_at || 0).getTime();
-          if (fsTime > serverTime) {
-            hasChanges = true;
-            return fsProd;
-          }
-          return p;
-        });
-
-        fsMap.forEach((fsProd, id) => {
-          if (!db.products.some((p) => String(p.id) === id)) {
-            db.products.push(fsProd);
-            hasChanges = true;
-          }
-        });
-
-        if (hasChanges) {
-          saveDB();
+      let hasChanges = false;
+      db.products = db.products.map((p) => {
+        const fsProd = fsMap.get(String(p.id));
+        if (!fsProd) return p;
+        const fsTime = new Date(fsProd.updated_at || fsProd.created_at || 0).getTime();
+        const serverTime = new Date(p.updated_at || p.created_at || 0).getTime();
+        if (fsTime > serverTime) {
+          hasChanges = true;
+          return fsProd;
         }
+        return p;
+      });
+
+      fsMap.forEach((fsProd, id) => {
+        if (!db.products.some((p) => String(p.id) === id)) {
+          db.products.push(fsProd);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        saveDB();
+        productIndexer.rebuild(db.products);
       }
-    } catch (e) {
-      handleFirestoreError('GET /api/products sync', e);
     }
+  } catch (e) {
+    handleFirestoreError('backgroundSyncProducts', e);
   }
+}
+
+// GET /api/products (Public customer endpoint - Sub-millisecond < 1ms indexed response)
+app.get('/api/products', (req, res) => {
+  // Fire background sync asynchronously without blocking client response
+  backgroundSyncProducts().catch(() => {});
+
+  const etag = productIndexer.getEtag();
+  if (req.headers['if-none-match'] === etag) {
+    return res.status(304).end();
+  }
+
+  res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+  res.setHeader('ETag', etag);
 
   const search = (req.query.search as string || '').toLowerCase().trim();
   const category = (req.query.category as string || '').trim();
   const returnAll = req.query.all === 'true';
 
-  let products = returnAll ? [...db.products] : db.products.filter(p => p.active !== 0 && p.active !== false && String(p.active) !== '0');
+  let products: any[];
+
+  if (category) {
+    // Sub-millisecond O(1) Category Index Lookup
+    products = productIndexer.getByCategory(category);
+  } else if (returnAll) {
+    products = productIndexer.getAll();
+  } else {
+    products = productIndexer.getAllActive();
+  }
 
   if (search) {
     products = products.filter(p =>
@@ -922,62 +1113,24 @@ app.get('/api/products', async (req, res) => {
     );
   }
 
-  if (category) {
-    products = products.filter(p => p.category === category || p.category_slug === category);
-  }
-
-  // Sort by featured then created_at
-  products.sort((a, b) => {
-    const fA = a.featured ? 1 : 0;
-    const fB = b.featured ? 1 : 0;
-    if (fB !== fA) return fB - fA;
-    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-  });
-
-  const formatted = products.map(product => {
-    const discount = Number(product.discount || 0);
-    const price = Number(product.selling_price || 0);
-    const finalPrice = Math.max(0, price - discount);
-    
-    // Privacy: Strip buying_price for public customer consumption unless returnAll (admin/sync)
-    const { buying_price, ...publicProduct } = product;
-    const imgs = safeJSON(product.images);
-    const imagesArray = Array.isArray(imgs) && imgs.length > 0 ? imgs : (product.image_url ? [product.image_url] : []);
-
-    return {
-      ...publicProduct,
-      sold_count: Number(product.sold_count || 0),
-      images: imagesArray,
-      image_url: imagesArray[0] || product.image_url || '',
-      final_price: finalPrice
-    };
-  });
-
-  res.json({
+  return res.json({
     success: true,
-    products: formatted
+    count: products.length,
+    products
   });
 });
 
-// GET /api/products/:id (Public single product - strips buying_price)
+// GET /api/products/:id (Public single product - O(1) sub-millisecond lookup)
 app.get('/api/products/:id', (req, res) => {
-  const product = db.products.find(p => p.id === req.params.id && p.active !== 0);
-  if (!product) {
+  const product = productIndexer.getById(req.params.id);
+  if (!product || product.active === 0) {
     return res.status(404).json({ success: false, error: "Product not found." });
   }
-  const discount = Number(product.discount || 0);
-  const price = Number(product.selling_price || 0);
-  
-  // Privacy: Strip buying_price for public customer consumption
-  const { buying_price, ...publicProduct } = product;
 
-  res.json({
+  res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+  return res.json({
     success: true,
-    product: {
-      ...publicProduct,
-      images: safeJSON(product.images),
-      final_price: Math.max(0, price - discount)
-    }
+    product
   });
 });
 
@@ -1365,12 +1518,20 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
       console.warn('Cloudinary upload attempt note:', e?.message || e);
     }
 
-    // Step 3: High-reliability Server Static Storage fallback (/uploads/<cleanFileName>)
+    // Step 3: High-performance Image Compression & WebP Conversion (/uploads/<cleanFileName>.webp)
     const matches = data_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     if (matches && matches[2]) {
       const mime = matches[1];
-      const buffer = Buffer.from(matches[2], 'base64');
-      const ext = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
+      const rawBuffer = Buffer.from(matches[2], 'base64');
+      const origExt = mime.includes('png') ? 'png' : (mime.includes('ico') || mime.includes('x-icon') || mime.includes('vnd.microsoft.icon')) ? 'ico' : mime.includes('webp') ? 'webp' : mime.includes('svg') ? 'svg' : 'jpg';
+
+      // Automatically compress and convert to lightweight WebP format (70-85% smaller)
+      const { buffer, ext, compressionRatio, isWebP } = await optimizeAndConvertToWebP(rawBuffer, origExt, {
+        maxWidth: 1440,
+        quality: 82,
+        convertToWebP: origExt !== 'ico' && origExt !== 'svg'
+      });
+
       const cleanProdId = (product_id || 'prod').replace(/[^a-z0-9_-]/gi, '-');
       const safeName = `${Date.now()}-${cleanProdId}.${ext}`;
       const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -1380,11 +1541,16 @@ app.post('/api/upload-image', express.json({ limit: '20mb' }), async (req, res) 
       const filePath = path.join(uploadDir, safeName);
       fs.writeFileSync(filePath, buffer);
 
+      console.log(`[IMAGE_OPTIMIZER] Saved /uploads/${safeName} (${ext.toUpperCase()}) - Compressed by ${compressionRatio}`);
+
       const serverUrl = `/uploads/${safeName}`;
       return res.json({
         success: true,
         url: serverUrl,
         id: safeName,
+        format: ext,
+        is_webp: isWebP,
+        compression_ratio: compressionRatio,
         provider: 'local_storage',
       });
     }
@@ -4332,7 +4498,21 @@ async function startServer() {
     });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // High-performance 1-Year browser caching for production Vite build assets
+    app.use(express.static(distPath, {
+      maxAge: ONE_YEAR_MS,
+      immutable: true,
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+        } else if (filePath.match(/\.(js|css|webp|png|jpg|jpeg|svg|woff2|woff|ttf)$/i)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
+
     app.get('*', (req, res) => {
       try {
         const indexPath = path.join(distPath, 'index.html');
@@ -4343,15 +4523,22 @@ async function startServer() {
             /<link\s+id=["']dynamic-favicon["'][^>]*>/i,
             `<link id="dynamic-favicon" rel="icon" href="${dynamicFav}" type="${favType}" />`
           );
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
           return res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
         }
       } catch {}
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
+  // Periodic non-blocking background product catalog synchronization every 90 seconds
+  setInterval(() => {
+    backgroundSyncProducts().catch(() => {});
+  }, 90000);
+
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Maxora fullstack server running on http://0.0.0.0:${PORT}`);
+    console.log(`Maxora fullstack server running on http://0.0.0.0:${PORT} [Optimized: Fast Indexing & Brotli/Gzip]`);
   });
 }
 

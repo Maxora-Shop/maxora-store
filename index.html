@@ -2,32 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','GTM-KPK9WPN9');</script>
+    <!-- DNS Prefetch & Preconnect for High-Speed Connection Setup -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    <link rel="dns-prefetch" href="https://pay.uddoktapay.com" />
+    <link rel="dns-prefetch" href="https://paymently.io" />
+    <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Asynchronous Non-blocking Google Fonts (Prevents FCP render-blocking) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+    </noscript>
+
+    <!-- Google Tag Manager (Deferred to avoid blocking initial render) -->
+    <script defer>
+      window.addEventListener('DOMContentLoaded', function() {
+        (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+        })(window,document,'script','dataLayer','GTM-KPK9WPN9');
+      });
+    </script>
     <!-- End Google Tag Manager -->
 
-    <!-- Google tag (gtag.js) -->
+    <!-- Google tag (gtag.js) - Async -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18449328091"></script>
-    <script>
+    <script defer>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-
       gtag('config', 'AW-18449328091');
     </script>
 
     <meta name="google-site-verification" content="6UpJqADb5TQlw9xAs-aYsgkIxljaUZW4MNFFnKy9Ggk" />
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link id="dynamic-favicon" rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <title>Maxora - Premium Online Store</title>
     <meta name="description" content="Full-featured e-commerce platform and admin dashboard for Bangladesh with Cash on Delivery and automated district delivery calculations." />
     <meta property="og:title" content="Maxora - Premium Online Store" />
@@ -41,7 +59,6 @@
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" defer src="/src/main.tsx"></script>
   </body>
 </html>
-

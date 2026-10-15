@@ -645,6 +645,8 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                     }
                     alt=""
                     className="w-full h-full object-contain p-1"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
                 <div>

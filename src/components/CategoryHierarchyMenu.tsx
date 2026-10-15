@@ -969,6 +969,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                           src={prod.images?.[0] || prod.image_url}
                           alt={prod.name}
                           className="w-9 h-9 rounded-lg object-cover bg-white border border-zinc-200 shrink-0"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <div className="w-9 h-9 rounded-lg bg-zinc-200 flex items-center justify-center shrink-0">
@@ -1210,6 +1212,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                           src={prod.images?.[0] || prod.image_url}
                           alt={prod.name}
                           className="w-9 h-9 rounded-lg object-cover bg-zinc-100 shrink-0"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
@@ -1296,6 +1300,8 @@ export const CategoryHierarchyMenu: React.FC<CategoryHierarchyMenuProps> = ({
                           src={prod.images?.[0] || prod.image_url}
                           alt={prod.name}
                           className="w-9 h-9 rounded-lg object-cover bg-zinc-100 shrink-0"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">

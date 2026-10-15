@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { AboutPageData, defaultAboutPageData } from '../models/aboutPageSchema';
+import { optimizeAndConvertToWebP } from '../utils/imageOptimizer';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
@@ -242,14 +243,20 @@ export async function uploadCeoImage(req: Request, res: Response) {
       });
     }
 
-    let ext = matches[1].toLowerCase();
-    if (ext === 'jpeg') ext = 'jpg';
-    if (ext === 'svg+xml') ext = 'svg';
+    let rawExt = matches[1].toLowerCase();
+    if (rawExt === 'jpeg') rawExt = 'jpg';
+    if (rawExt === 'svg+xml') rawExt = 'svg';
+
+    const rawBuffer = Buffer.from(matches[2], 'base64');
+    const { buffer, ext } = await optimizeAndConvertToWebP(rawBuffer, rawExt, {
+      maxWidth: 1200,
+      quality: 85,
+      convertToWebP: rawExt !== 'svg'
+    });
 
     const uploadDir = ensureUploadDirectory();
     const safeName = `ceo-profile-${Date.now()}.${ext}`;
     const filePath = path.join(uploadDir, safeName);
-    const buffer = Buffer.from(matches[2], 'base64');
 
     fs.writeFileSync(filePath, buffer);
     const serverUrl = `/uploads/${safeName}`;

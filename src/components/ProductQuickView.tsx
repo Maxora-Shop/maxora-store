@@ -286,6 +286,8 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                 src={selectedImage || product.image_url}
                 alt={`${product.name}${product.sku ? ` - ${product.sku}` : ''}`}
                 className="w-full h-full object-cover"
+                loading="lazy"
+                decoding="async"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80";
                 }}
@@ -309,6 +311,8 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                       src={img}
                       alt={`${product.name} thumbnail ${idx + 1}`}
                       className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   </button>
                 ))}
