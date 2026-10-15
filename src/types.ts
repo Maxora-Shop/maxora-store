@@ -214,6 +214,7 @@ export interface Order {
   total_amount?: number;
   status: OrderStatus;
   order_status?: string;
+  customer_phone?: string;
   payment_method: string;
   payment_status?: 'Pending' | 'Paid' | 'Failed' | 'Refunded' | string;
   transaction_id?: string;

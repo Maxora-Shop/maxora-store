@@ -397,9 +397,27 @@ export const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
                   <MapPin className="w-3.5 h-3.5 text-zinc-400" />
                   Delivery & Payment
                 </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  {order.payment_method || 'Cash on Delivery'}
-                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    {order.payment_method || 'Cash on Delivery'}
+                  </span>
+                  {order.payment_status && (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      order.payment_status === 'Paid'
+                        ? 'bg-emerald-600 text-white'
+                        : order.payment_status === 'Failed'
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-amber-500 text-white'
+                    }`}>
+                      {order.payment_status}
+                    </span>
+                  )}
+                  {order.transaction_id && (
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-800">
+                      Trx: {order.transaction_id}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -423,7 +441,14 @@ export const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
                     ৳{Number(order.total).toLocaleString('en-BD')}
                   </span>
                 </div>
-                {(!order.payment_method || order.payment_method.toLowerCase().includes('cash') || order.payment_method.toLowerCase().includes('cod')) && (
+                {order.payment_status === 'Paid' ? (
+                  <div className="flex items-center justify-between text-xs pt-1 text-emerald-800 bg-emerald-100 px-2.5 py-1.5 rounded-lg mt-1 border border-emerald-300">
+                    <span className="font-bold">Payment Status:</span>
+                    <span className="font-black font-mono">
+                      ✓ Paid Online (৳{Number(order.total).toLocaleString('en-BD')})
+                    </span>
+                  </div>
+                ) : (!order.payment_method || order.payment_method.toLowerCase().includes('cash') || order.payment_method.toLowerCase().includes('cod')) && (
                   <div className="flex items-center justify-between text-xs pt-1 text-emerald-700 bg-emerald-50/80 px-2 py-1 rounded-lg mt-1 border border-emerald-200">
                     <span className="font-bold">COD Amount to Collect:</span>
                     <span className="font-black font-mono">

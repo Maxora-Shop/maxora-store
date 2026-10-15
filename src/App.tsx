@@ -49,7 +49,7 @@ import {
   INITIAL_PRODUCT_TYPES,
   INITIAL_CHILD_CATEGORIES,
 } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter, CheckCircle2, Sparkles, CreditCard, X } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
@@ -142,6 +142,60 @@ export default function App() {
   const [isCustomerAccountOpen, setIsCustomerAccountOpen] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(() => storeService.getCurrentCustomer());
   const [customerInvoiceOrder, setCustomerInvoiceOrder] = useState<Order | null>(null);
+
+  // UddoktaPay Online Payment Status Notification
+  const [paymentNotice, setPaymentNotice] = useState<{
+    type: 'paid' | 'cancelled' | 'failed' | 'error';
+    orderNumber?: string;
+    trxId?: string;
+    orderId?: string;
+    message?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const paymentStatus = searchParams.get('payment_status');
+    const orderSuccess = searchParams.get('order_success');
+    const orderNumber = orderSuccess || searchParams.get('order_number') || '';
+    const trxId = searchParams.get('trx_id') || '';
+    const orderId = searchParams.get('order_id') || '';
+
+    if (paymentStatus === 'paid' && orderNumber) {
+      setPaymentNotice({
+        type: 'paid',
+        orderNumber,
+        trxId,
+        orderId,
+      });
+      // Clear cart on confirmed online payment
+      setCart([]);
+      try {
+        localStorage.removeItem('maxora_cart');
+      } catch {}
+      // Look up order to display invoice modal automatically
+      storeService.trackOrder(orderNumber).then((res) => {
+        if (res.success && res.order) {
+          setCustomerInvoiceOrder(res.order);
+        }
+      }).catch(() => {});
+      // Clean query parameters from URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'cancelled') {
+      setPaymentNotice({
+        type: 'cancelled',
+        orderNumber,
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'failed' || paymentStatus === 'error') {
+      setPaymentNotice({
+        type: paymentStatus as any,
+        orderNumber,
+        message: searchParams.get('reason') || searchParams.get('message') || 'Payment was not completed',
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   // Sync customer authentication across events
   useEffect(() => {
@@ -1484,6 +1538,105 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto px-3 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 w-full min-h-[60vh]">
+        {/* UddoktaPay Online Payment Notification Banner */}
+        {paymentNotice && (
+          <div className="mb-6 animate-fadeIn">
+            {paymentNotice.type === 'paid' ? (
+              <div className="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-4 sm:p-5 shadow-sm text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm sm:text-base text-emerald-950 flex items-center gap-1.5 flex-wrap">
+                      🎉 অনলাইন পেমেন্ট সফলভাবে সম্পন্ন হয়েছে!
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-200 text-emerald-900">
+                        Paid via UddoktaPay
+                      </span>
+                    </h3>
+                    <p className="text-xs text-emerald-800 mt-0.5">
+                      অর্ডার নম্বর: <strong className="font-mono font-bold text-emerald-950">{paymentNotice.orderNumber}</strong>
+                      {paymentNotice.trxId && (
+                        <> • TrxID: <strong className="font-mono font-bold text-emerald-950">{paymentNotice.trxId}</strong></>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-emerald-700 mt-1">
+                      আপনার অর্ডারটি নিশ্চিত করা হয়েছে। খুব দ্রুত আমাদের টিম আপনার সাথে যোগাযোগ করে ডেলিভারি প্রক্রিয়া শুরু করবে।
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  {paymentNotice.orderNumber && (
+                    <button
+                      onClick={() => {
+                        storeService.trackOrder(paymentNotice.orderNumber!).then((res) => {
+                          if (res.success && res.order) {
+                            setCustomerInvoiceOrder(res.order);
+                          }
+                        });
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      ইনভয়েস দেখুন
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setPaymentNotice(null)}
+                    className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : paymentNotice.type === 'cancelled' ? (
+              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow-sm text-amber-950 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-400 text-amber-950 flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs sm:text-sm text-amber-950">
+                      অনলাইন পেমেন্ট সম্পন্ন হয়নি (Cancelled)
+                    </h3>
+                    <p className="text-xs text-amber-800 mt-0.5">
+                      {paymentNotice.orderNumber ? `অর্ডার #${paymentNotice.orderNumber}-এর জন্য পেমেন্ট বাতিল করা হয়েছে। ` : ''}
+                      আপনি চাইলে চেকআউটে <strong>Cash on Delivery (COD)</strong> নির্বাচন করে পণ্য হাতে পেয়ে মূল্য পরিশোধ করতে পারেন।
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPaymentNotice(null)}
+                  className="p-1 text-amber-700 hover:bg-amber-100 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="bg-rose-50 border border-rose-300 rounded-2xl p-4 shadow-sm text-rose-950 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs sm:text-sm text-rose-950">
+                      পেমেন্ট ব্যর্থ হয়েছে (Payment Failed)
+                    </h3>
+                    <p className="text-xs text-rose-800 mt-0.5">
+                      {paymentNotice.message || 'পেমেন্ট গেটওয়েতে কোনো সমস্যা হয়েছে।'} অনুগ্রহ করে আবার চেষ্টা করুন অথবা ক্যাশ অন ডেলিভারি নির্বাচন করুন।
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPaymentNotice(null)}
+                  className="p-1 text-rose-700 hover:bg-rose-100 rounded transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {isAboutUsOpen ? (
           <AboutUsPage
             onBackToStore={() => {

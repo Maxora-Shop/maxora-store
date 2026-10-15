@@ -6598,9 +6598,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   <div className="font-black text-zinc-950 text-sm font-mono">
                                     ৳{Number(ord.total).toLocaleString('en-BD')}
                                   </div>
-                                  <div className="text-[10px] text-emerald-700 font-semibold">
-                                    {ord.payment_method || 'Cash on Delivery'}
+                                  <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 flex-wrap">
+                                    <span>{ord.payment_method || 'Cash on Delivery'}</span>
+                                    {ord.payment_status && (
+                                      <span className={`px-1 rounded text-[9px] font-bold ${
+                                        ord.payment_status === 'Paid'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : ord.payment_status === 'Failed'
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-amber-100 text-amber-800'
+                                      }`}>
+                                        {ord.payment_status}
+                                      </span>
+                                    )}
                                   </div>
+                                  {ord.transaction_id && (
+                                    <div className="text-[9px] font-mono text-zinc-500 truncate max-w-[120px]" title={ord.transaction_id}>
+                                      Trx: {ord.transaction_id}
+                                    </div>
+                                  )}
                                 </td>
 
                                 {/* 6. Customer Order Journey & Status Changer */}

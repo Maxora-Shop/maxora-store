@@ -488,13 +488,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 <span className="text-zinc-500 font-normal"> ({formatTime(order.created_at)})</span>
               )}
             </div>
-            <div className="flex items-center justify-end gap-1.5 mt-2">
+            <div className="flex items-center justify-end gap-1.5 mt-2 flex-wrap">
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-zinc-300 bg-zinc-50 text-zinc-800">
                 Status: {order.status || 'Pending'}
               </span>
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-zinc-300 bg-zinc-50 text-zinc-800">
-                Payment: {order.payment_method || 'Cash on Delivery'}
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                order.payment_status === 'Paid'
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                  : order.payment_status === 'Failed'
+                  ? 'border-rose-300 bg-rose-50 text-rose-800'
+                  : 'border-zinc-300 bg-zinc-50 text-zinc-800'
+              }`}>
+                Payment: {order.payment_status || 'Pending'} ({order.payment_method || 'Cash on Delivery'})
               </span>
+              {order.transaction_id && (
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-200">
+                  TrxID: {order.transaction_id}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -735,6 +746,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
             <div className="text-right text-[11px] text-zinc-600 font-bold uppercase tracking-wider pt-0.5">
               Payment: {order.payment_method || 'Cash on Delivery'}
+              {order.payment_status && ` (${order.payment_status})`}
+              {order.transaction_id && ` • TrxID: ${order.transaction_id}`}
             </div>
           </div>
         </div>

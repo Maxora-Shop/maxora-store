@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle2, Copy, Check, Truck, ShieldCheck, MapPin, Phone, User, Mail, AlertCircle, ShoppingBag, Sparkles } from 'lucide-react';
+import { X, CheckCircle2, Copy, Check, Truck, ShieldCheck, MapPin, Phone, User, Mail, AlertCircle, ShoppingBag, Sparkles, CreditCard, Banknote, ExternalLink } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict, SUB_DHAKA_AREAS } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
@@ -30,6 +30,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [area, setArea] = useState('');
   const [address, setAddress] = useState('');
   const [deliveryArea, setDeliveryArea] = useState<'inside_dhaka' | 'sub_dhaka' | 'outside_dhaka'>('inside_dhaka');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
   const [note, setNote] = useState('');
 
   // UI State
@@ -109,6 +110,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      const isOnline = paymentMethod === 'online';
       const result = await storeService.createOrder({
         customer_name: customerName.trim(),
         phone: cleanedPhone,
@@ -122,6 +124,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         subtotal,
         total: grandTotal,
         note: note.trim(),
+        payment_method: isOnline ? 'Online Payment (UddoktaPay)' : 'Cash on Delivery',
+        payment_status: 'Pending',
         items: cart.map((item) => ({
           product_id: item.product_id,
           name: item.name,
@@ -138,6 +142,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error(result.error || 'Failed to place order.');
       }
 
+      // If Online Payment (bKash/Nagad/Rocket), initiate UddoktaPay session
+      if (isOnline) {
+        const payInit = await storeService.initiateUddoktaPay({
+          order_id: result.order.id,
+          order_number: result.order.order_number,
+          amount: grandTotal,
+          customer_name: customerName.trim(),
+          phone: cleanedPhone,
+          email: email.trim(),
+        });
+
+        if (payInit.success && payInit.payment_url) {
+          // Notify app to clear cart or record pending state
+          onOrderSuccess(result.order);
+          // Redirect customer to UddoktaPay hosted payment page
+          window.location.href = payInit.payment_url;
+          return;
+        } else {
+          throw new Error(
+            payInit.error || 'Could not initiate online payment. Please try again or select Cash on Delivery.'
+          );
+        }
+      }
+
+      // Cash on Delivery flow
       setCompletedOrder(result.order);
       onOrderSuccess(result.order);
     } catch (err: any) {
@@ -512,6 +541,104 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
+              {/* Payment Method Selector */}
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-zinc-500 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    পেমেন্ট মেথড / Payment Method
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">১০০% নিরাপদ ও সুরক্ষিত</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Option 1: Cash on Delivery (COD) */}
+                  <div
+                    onClick={() => setPaymentMethod('cod')}
+                    className={`relative p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                      paymentMethod === 'cod'
+                        ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-sm'
+                        : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                          paymentMethod === 'cod'
+                            ? 'border-emerald-600 bg-emerald-600'
+                            : 'border-zinc-300 bg-white'
+                        }`}
+                      >
+                        {paymentMethod === 'cod' && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="font-extrabold text-xs sm:text-sm text-zinc-900">
+                            Cash on Delivery (COD)
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700 shrink-0">
+                            ক্যাশ
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 leading-tight">
+                          পণ্য হাতে পেয়ে দেখে মূল্য পরিশোধ করুন। কোনো অগ্রিম ছাড়াই।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Online Payment (bKash, Nagad, Rocket) */}
+                  <div
+                    onClick={() => setPaymentMethod('online')}
+                    className={`relative p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                      paymentMethod === 'online'
+                        ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-sm'
+                        : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
+                          paymentMethod === 'online'
+                            ? 'border-emerald-600 bg-emerald-600'
+                            : 'border-zinc-300 bg-white'
+                        }`}
+                      >
+                        {paymentMethod === 'online' && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-extrabold text-xs sm:text-sm text-zinc-900">
+                            Online Payment
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            ইনস্ট্যান্ট
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 leading-tight mb-2">
+                          বিকাশ, নগদ, রকেট, উপায় বা কার্ড দিয়ে নিরাপদে পেমেন্ট করুন।
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#e2136e] text-white">
+                            bKash
+                          </span>
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#f7941d] text-white">
+                            Nagad
+                          </span>
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#8c3494] text-white">
+                            Rocket
+                          </span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-600">
+                            Cards
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Total Breakdown & Payment Method */}
               <div className="bg-zinc-900 text-white p-4 sm:p-5 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between text-xs text-zinc-300">
@@ -532,7 +659,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   )}
                 </div>
                 <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-base font-black">
-                  <span>Grand Total (Pay on Delivery)</span>
+                  <span>{paymentMethod === 'online' ? 'Grand Total (Pay Online)' : 'Grand Total (Pay on Delivery)'}</span>
                   <span className="text-emerald-400 text-xl">
                     ৳{grandTotal.toLocaleString('en-BD')}
                   </span>
@@ -540,7 +667,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                 <div className="bg-zinc-800/80 p-2.5 rounded-xl text-xs text-zinc-300 flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Payment Method: <strong>Cash on Delivery (No advance required)</strong></span>
+                  {paymentMethod === 'online' ? (
+                    <span>
+                      Payment Gateway: <strong>UddoktaPay</strong> (bKash, Nagad, Rocket, Cards - SSL Secured)
+                    </span>
+                  ) : (
+                    <span>
+                      Payment Method: <strong>Cash on Delivery (No advance required)</strong>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -551,10 +686,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 className="w-full py-4 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-lg active:scale-98 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
-                  <span>Placing Your Order...</span>
+                  <span>{paymentMethod === 'online' ? 'Connecting to Payment Gateway...' : 'Placing Your Order...'}</span>
+                ) : paymentMethod === 'online' ? (
+                  <>
+                    <CreditCard className="w-4 h-4" />
+                    <span>Pay Online with bKash/Nagad/Rocket (৳{grandTotal.toLocaleString('en-BD')})</span>
+                  </>
                 ) : (
                   <>
-                    <span>Confirm Order (৳{grandTotal.toLocaleString('en-BD')})</span>
+                    <span>Confirm Order (Cash on Delivery - ৳{grandTotal.toLocaleString('en-BD')})</span>
                   </>
                 )}
               </button>

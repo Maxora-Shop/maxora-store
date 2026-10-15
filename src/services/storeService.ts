@@ -1614,6 +1614,9 @@ export const storeService = {
     delivery_charge?: number;
     subtotal?: number;
     total?: number;
+    payment_method?: string;
+    payment_status?: string;
+    transaction_id?: string;
     note?: string;
     items: Array<{
       product_id: string;
@@ -1674,6 +1677,9 @@ export const storeService = {
       delivery_charge?: number;
       subtotal?: number;
       total?: number;
+      payment_method?: string;
+      payment_status?: string;
+      transaction_id?: string;
       note?: string;
       items: Array<{
         product_id: string;
@@ -1813,7 +1819,10 @@ export const storeService = {
       subtotal,
       total,
       status: 'Pending',
-      payment_method: 'Cash on Delivery',
+      payment_method: orderPayload.payment_method || 'Cash on Delivery',
+      payment_status: orderPayload.payment_status || (orderPayload.payment_method?.includes('Online') ? 'Pending' : 'Pending'),
+      transaction_id: orderPayload.transaction_id || '',
+      payment_gateway: orderPayload.payment_method?.includes('Online') ? 'uddoktapay' : 'cod',
       note: orderPayload.note || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1823,7 +1832,9 @@ export const storeService = {
         {
           status: 'Pending',
           timestamp: new Date().toISOString(),
-          note: 'Order placed by customer via Cash on Delivery',
+          note: orderPayload.payment_method?.includes('Online')
+            ? 'Order placed with Online Payment (UddoktaPay) - Awaiting confirmation'
+            : 'Order placed by customer via Cash on Delivery',
           by: 'Customer',
         },
       ],
@@ -1955,6 +1966,47 @@ export const storeService = {
     notifyOrdersChanged();
 
     return { success: true, order: newOrder };
+  },
+
+  /**
+   * Initiate UddoktaPay hosted checkout session
+   */
+  async initiateUddoktaPay(payload: {
+    order_id: string;
+    order_number: string;
+    amount: number;
+    customer_name: string;
+    phone: string;
+    email?: string;
+  }): Promise<{ success: boolean; payment_url?: string; order_id?: string; order_number?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/payment/uddoktapay/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.payment_url) {
+        return {
+          success: false,
+          error: data.error || 'Failed to initiate UddoktaPay payment.',
+        };
+      }
+
+      return {
+        success: true,
+        payment_url: data.payment_url,
+        order_id: data.order_id,
+        order_number: data.order_number,
+      };
+    } catch (err: any) {
+      console.error('[storeService.initiateUddoktaPay]', err);
+      return {
+        success: false,
+        error: err.message || 'Could not connect to UddoktaPay payment gateway.',
+      };
+    }
   },
 
   async trackOrder(queryStr: string): Promise<{ success: boolean; order?: Order; error?: string }> {
