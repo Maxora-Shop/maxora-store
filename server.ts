@@ -11,6 +11,7 @@ import { generateDynamicSitemapXml, invalidateSitemapCache } from './src/utils/s
 import { processAiChatMessage } from './src/server/aiChatCore';
 import { DEFAULT_HERO_BANNERS } from './src/data/initialData';
 import aboutRoutes, { initAboutDb } from './backend/routes/aboutRoutes';
+import paymentRoutes, { initPaymentDb } from './backend/routes/paymentRoutes';
 
 // Set Firestore log level to silent to prevent noisy internal quota backoff logs
 try {
@@ -355,6 +356,10 @@ function saveDB() {
 // Initialize and mount About Us API Router
 initAboutDb(db, saveDB, syncVersions);
 app.use(aboutRoutes);
+
+// Initialize and mount UddoktaPay Payment API Router
+initPaymentDb(db, saveDB, syncVersions);
+app.use(paymentRoutes);
 
 // ==========================================
 // REAL-TIME VISITOR & TRAFFIC TRACKING ENGINE
@@ -1519,6 +1524,9 @@ app.post('/api/orders', async (req, res) => {
       total: Number(directOrder.total !== undefined ? directOrder.total : directOrder.total_amount || 0),
       status: directOrder.status || directOrder.order_status || "Pending",
       payment_method: directOrder.payment_method || "Cash on Delivery",
+      payment_status: directOrder.payment_status || (directOrder.payment_method?.includes('Online') ? 'Pending' : 'Pending'),
+      transaction_id: directOrder.transaction_id || directOrder.trx_id || "",
+      payment_gateway: directOrder.payment_gateway || (directOrder.payment_method?.includes('Online') ? 'uddoktapay' : 'cod'),
       note: directOrder.note || "",
       created_at: directOrder.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -1721,8 +1729,11 @@ app.post('/api/orders', async (req, res) => {
     delivery_charge: deliveryCharge,
     subtotal,
     total,
-    status: "Pending",
-    payment_method: "Cash on Delivery",
+    status: body.status || "Pending",
+    payment_method: body.payment_method || "Cash on Delivery",
+    payment_status: body.payment_status || (body.payment_method?.includes('Online') ? 'Pending' : 'Pending'),
+    transaction_id: body.transaction_id || body.trx_id || "",
+    payment_gateway: body.payment_gateway || (body.payment_method?.includes('Online') ? 'uddoktapay' : 'cod'),
     note: body.note || "",
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()

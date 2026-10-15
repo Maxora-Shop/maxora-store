@@ -214,8 +214,11 @@ export interface Order {
   total_amount?: number;
   status: OrderStatus;
   order_status?: string;
-  customer_phone?: string;
   payment_method: string;
+  payment_status?: 'Pending' | 'Paid' | 'Failed' | 'Refunded' | string;
+  transaction_id?: string;
+  payment_gateway?: 'cod' | 'uddoktapay' | string;
+  payment_details?: any;
   note?: string;
   created_at: string;
   updated_at?: string;
