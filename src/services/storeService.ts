@@ -627,6 +627,65 @@ export function initRealtimeFirestoreListeners() {
   }
 }
 
+// Live Server SSE & Polling Sync Connection:
+// Delivers instant updates to customer storefront the instant admin uploads/edits/deletes a product
+let sseConnection: EventSource | null = null;
+let pollTimer: any = null;
+let lastKnownVersions: Record<string, number> = {};
+
+function initServerLiveSync() {
+  if (typeof window === 'undefined') return;
+  if (sseConnection) return;
+
+  try {
+    if ('EventSource' in window) {
+      sseConnection = new EventSource('/api/live-sync');
+      sseConnection.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'products') {
+            notifyProductsChanged();
+          } else if (data.type === 'categories') {
+            notifyCategoriesChanged();
+            notifySubCategoriesChanged();
+          } else if (data.type === 'settings') {
+            window.dispatchEvent(new CustomEvent('maxora_settings_updated'));
+          }
+        } catch {}
+      };
+      sseConnection.onerror = () => {
+        try {
+          sseConnection?.close();
+        } catch {}
+        sseConnection = null;
+      };
+    }
+  } catch {}
+
+  // Lightweight backup polling every 10s to guarantee zero missed updates across devices/tabs
+  if (!pollTimer) {
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/sync-version', { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.versions) {
+            const v = json.versions;
+            if (lastKnownVersions.products && v.products && v.products > lastKnownVersions.products) {
+              notifyProductsChanged();
+            }
+            if (lastKnownVersions.categories && v.categories && v.categories > lastKnownVersions.categories) {
+              notifyCategoriesChanged();
+              notifySubCategoriesChanged();
+            }
+            lastKnownVersions = v;
+          }
+        }
+      } catch {}
+    }, 10000);
+  }
+}
+
 // Background network & visibility reconnect engine
 let isNetworkListenersRegistered = false;
 function registerNetworkSyncListeners() {
@@ -634,6 +693,7 @@ function registerNetworkSyncListeners() {
   isNetworkListenersRegistered = true;
 
   window.addEventListener('online', () => {
+    initServerLiveSync();
     if (!isClientQuotaCooldownActive()) {
       detachFirestoreListeners();
       initRealtimeFirestoreListeners();
@@ -641,14 +701,18 @@ function registerNetworkSyncListeners() {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !isListening && !isClientQuotaCooldownActive()) {
-      initRealtimeFirestoreListeners();
+    if (document.visibilityState === 'visible') {
+      initServerLiveSync();
+      if (!isListening && !isClientQuotaCooldownActive()) {
+        initRealtimeFirestoreListeners();
+      }
     }
   });
 }
 
 // Start listeners immediately
 initRealtimeFirestoreListeners();
+initServerLiveSync();
 
 // Check if online API is reachable
 const isInternalHost = typeof window !== 'undefined' && (
@@ -1197,31 +1261,28 @@ export const storeService = {
       local.forEach((p) => registerProduct(p, undefined, true));
     }
 
-    // 2. PRIMARY CLOUD: Fetch directly from Cloud Firestore if available (short 2000ms timeout)
-    let firestoreLoaded = false;
-    if (!isClientQuotaCooldownActive()) {
-      try {
-        const snapDocs = await fetchFirestoreProductsWithTimeout(2000);
-        if (snapDocs && snapDocs.length > 0) {
-          snapDocs.forEach((d) => registerProduct(d.data, d.id));
-          firestoreLoaded = true;
-        }
-      } catch (e) {
-        handleStoreFirestoreError('Firestore getProducts', e);
-      }
-    }
-
-    // 3. SECONDARY: Fall back to Server REST API
-    if (!firestoreLoaded || prodMap.size === 0) {
-      try {
-        const apiRes = await tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 2500 });
+    // 2. LIVE SERVER REST API & CLOUD FIRESTORE IN PARALLEL:
+    // Both sources are fetched simultaneously with no-cache headers.
+    // If admin uploaded a product to the backend, /api/products?all=true delivers it in ~1ms!
+    const fetchApiPromise = tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 2500 })
+      .then((apiRes) => {
         if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
           apiRes.data.products.forEach((item) => registerProduct(item));
         }
-      } catch (e) {
-        console.warn('API getProducts fallback notice:', e);
-      }
-    }
+      })
+      .catch((e) => console.warn('API getProducts notice:', e));
+
+    const fetchFirestorePromise = (!isClientQuotaCooldownActive())
+      ? fetchFirestoreProductsWithTimeout(2000)
+          .then((snapDocs) => {
+            if (snapDocs && snapDocs.length > 0) {
+              snapDocs.forEach((d) => registerProduct(d.data, d.id));
+            }
+          })
+          .catch((e) => handleStoreFirestoreError('Firestore getProducts', e))
+      : Promise.resolve();
+
+    await Promise.allSettled([fetchApiPromise, fetchFirestorePromise]);
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());

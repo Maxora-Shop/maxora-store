@@ -4403,7 +4403,7 @@
       "category_id": "cat-home-living",
       "slug": "coffee-drippers",
       "active": 1,
-      "image_url": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "name": "Fitness Bands",
@@ -4427,7 +4427,7 @@
       "meta_title": "",
       "meta_description": "",
       "slug": "kids-educational-gadgets",
-      "image_url": "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "meta_title": "",
@@ -4441,7 +4441,7 @@
       "meta_description": "",
       "active": 1,
       "category_id": "cat-home-kitchen-appliances",
-      "image_url": "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "created_at": "2026-09-09T16:44:41.538Z",
@@ -4455,7 +4455,7 @@
       "meta_title": "",
       "slug": "mobile-accessories",
       "name": "Mobile Accessories",
-      "image_url": "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "name": "Power Bank",
@@ -4469,7 +4469,7 @@
       "category_id": "cat-accessories",
       "created_at": "2026-09-09T16:50:01.608Z",
       "id": "subcat-power-bank",
-      "image_url": "https://images.unsplash.com/photo-1609592424364-750d99617d52?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "active": 1,
@@ -4489,7 +4489,7 @@
       "category_slug": "audio",
       "name": "TWS Earbuds",
       "id": "subcat-tws-earbuds",
-      "image_url": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     },
     {
       "display_order": 1,
@@ -4499,7 +4499,7 @@
       "slug": "vacuum-flasks",
       "active": 1,
       "category_id": "cat-home-living",
-      "image_url": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80"
+      "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80"
     }
   ],
   "uploaded_images": {
@@ -4902,23 +4902,23 @@
       "2026-10-16": {
         "date": "2026-10-16",
         "unique_visitors": 1,
-        "page_views": 110,
+        "page_views": 134,
         "visitor_ids": [
           "v_muzn8z7g_ee6e9z0n"
         ],
         "referrers": {
-          "Google Search": 87,
+          "Google Search": 111,
           "ais-dev-bzqlo2xsrfg32tqtn6mrvi-701931449769.asia-southeast1.run.app": 23
         },
         "devices": {
           "mobile": 0,
-          "desktop": 110,
+          "desktop": 134,
           "tablet": 0
         },
         "pages": {
           "/": {
             "title": "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
-            "count": 105
+            "count": 129
           },
           "/product/knife-box-set-price-in-bd": {
             "title": "Knife Box Set price in bd Price in BD ৳1,478 | Maxora BD",
