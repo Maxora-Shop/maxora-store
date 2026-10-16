@@ -294,16 +294,16 @@ const defaultCategories = [
 ];
 
 const defaultSubCategories = [
-  { id: "subcat-smartwatches", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Smartwatches", slug: "smartwatches", active: 1, display_order: 1 },
-  { id: "subcat-fitness-bands", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Fitness Bands", slug: "fitness-bands", active: 1, display_order: 2 },
-  { id: "subcat-gaming-accessories", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Gaming Accessories", slug: "gaming-accessories", active: 1, display_order: 3 },
-  { id: "subcat-wireless-earbuds", category_id: "cat-audio", category_slug: "audio", name: "Wireless Earbuds", slug: "wireless-earbuds", active: 1, display_order: 1 },
-  { id: "subcat-bluetooth-speakers", category_id: "cat-audio", category_slug: "audio", name: "Bluetooth Speakers", slug: "bluetooth-speakers", active: 1, display_order: 2 },
-  { id: "subcat-anti-theft-backpacks", category_id: "cat-lifestyle-bags", category_slug: "lifestyle-bags", name: "Anti-Theft Backpacks", slug: "anti-theft-backpacks", active: 1, display_order: 1 },
-  { id: "subcat-drinkware-flasks", category_id: "cat-home-living", category_slug: "home-living", name: "Drinkware & Vacuum Flasks", slug: "drinkware-flasks", active: 1, display_order: 1 },
-  { id: "subcat-coffee-gear", category_id: "cat-home-living", category_slug: "home-living", name: "Coffee Gear", slug: "coffee-gear", active: 1, display_order: 2 },
-  { id: "subcat-leather-wallets", category_id: "cat-accessories", category_slug: "accessories", name: "Leather Wallets", slug: "leather-wallets", active: 1, display_order: 1 },
-  { id: "subcat-organic-tea", category_id: "cat-gourmet-food", category_slug: "gourmet-food", name: "Organic Tea", slug: "organic-tea", active: 1, display_order: 1 }
+  { id: "subcat-smartwatches", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Smartwatches", slug: "smartwatches", image_url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "subcat-fitness-bands", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Fitness Bands", slug: "fitness-bands", image_url: "https://images.unsplash.com/photo-1576243345690-4e4b79b63288?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 2 },
+  { id: "subcat-gaming-accessories", category_id: "cat-smart-gadgets", category_slug: "smart-gadgets", name: "Gaming Accessories", slug: "gaming-accessories", image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 3 },
+  { id: "subcat-wireless-earbuds", category_id: "cat-audio", category_slug: "audio", name: "Wireless Earbuds", slug: "wireless-earbuds", image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "subcat-bluetooth-speakers", category_id: "cat-audio", category_slug: "audio", name: "Bluetooth Speakers", slug: "bluetooth-speakers", image_url: "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 2 },
+  { id: "subcat-anti-theft-backpacks", category_id: "cat-lifestyle-bags", category_slug: "lifestyle-bags", name: "Anti-Theft Backpacks", slug: "anti-theft-backpacks", image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "subcat-drinkware-flasks", category_id: "cat-home-living", category_slug: "home-living", name: "Drinkware & Vacuum Flasks", slug: "drinkware-flasks", image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "subcat-coffee-gear", category_id: "cat-home-living", category_slug: "home-living", name: "Coffee Gear", slug: "coffee-gear", image_url: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 2 },
+  { id: "subcat-leather-wallets", category_id: "cat-accessories", category_slug: "accessories", name: "Leather Wallets", slug: "leather-wallets", image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 },
+  { id: "subcat-organic-tea", category_id: "cat-gourmet-food", category_slug: "gourmet-food", name: "Organic Tea", slug: "organic-tea", image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&auto=format&fit=crop&q=80", active: 1, display_order: 1 }
 ];
 
 let db: DBSchema = {
@@ -362,6 +362,15 @@ try {
       }
     });
 
+    const existingSubs: any[] = Array.isArray(parsed.subcategories) ? parsed.subcategories : [];
+    const mergedSubCategories = (existingSubs.length > 0 ? existingSubs : defaultSubCategories).map((s: any) => {
+      const defMatch = defaultSubCategories.find((ds) => ds.id === s.id || ds.slug === s.slug);
+      return {
+        ...s,
+        image_url: (s.image_url && typeof s.image_url === 'string' && s.image_url.trim()) ? s.image_url : (defMatch?.image_url || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80')
+      };
+    });
+
     db = {
       settings: { ...defaultSettings, ...(parsed.settings || {}) },
       products: loadedProducts,
@@ -369,7 +378,7 @@ try {
       orders: Array.isArray(parsed.orders) ? parsed.orders : [],
       order_items: Array.isArray(parsed.order_items) ? parsed.order_items : [],
       categories: mergedCategories,
-      subcategories: parsed.subcategories && parsed.subcategories.length > 0 ? parsed.subcategories : defaultSubCategories,
+      subcategories: mergedSubCategories,
       uploaded_images: parsed.uploaded_images || {},
       reviews: Array.isArray(parsed.reviews) ? parsed.reviews : [],
       traffic_analytics: parsed.traffic_analytics || { daily: {} },

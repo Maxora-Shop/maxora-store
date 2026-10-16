@@ -602,6 +602,20 @@ export function initRealtimeFirestoreListeners() {
     }, (err) => handleStoreFirestoreError('Categories snapshot', err));
     activeFirestoreUnsubscribers.push(unsubCategories);
 
+    // 4. Listen for subcategories changes in real-time
+    const unsubSubCategories = onSnapshot(collection(db, 'subcategories'), (snapshot) => {
+      if (!snapshot.empty) {
+        const subs: SubCategory[] = [];
+        snapshot.docs.forEach((d) => {
+          const item = d.data() as SubCategory;
+          subs.push({ ...item, id: String(item.id || d.id) });
+        });
+        setLocal(SUBCATEGORIES_KEY, subs);
+        notifySubCategoriesChanged();
+      }
+    }, (err) => handleStoreFirestoreError('Subcategories snapshot', err));
+    activeFirestoreUnsubscribers.push(unsubSubCategories);
+
     // Note: Global orders collection onSnapshot removed from customer storefront
     // for data privacy (preventing public download of customer orders) and Firestore read quota conservation.
     // Order creation (createOrder) and on-demand customer order tracking (trackOrder) remain fully functional.
@@ -3238,6 +3252,8 @@ export const storeService = {
       category_slug: subData.category_slug || '',
       name: rawName || 'General',
       slug: slug || 'general',
+      icon: subData.icon || '',
+      image_url: subData.image_url?.trim() || '',
       display_order: Number(subData.display_order ?? 999),
       active: subData.active !== undefined ? (subData.active ? 1 : 0) : 1,
       meta_title: subData.meta_title || '',

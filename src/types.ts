@@ -42,6 +42,8 @@ export interface SubCategory {
   category_slug: string;
   name: string;
   slug: string;
+  icon?: string;
+  image_url?: string;
   display_order: number;
   active: boolean | number;
   meta_title?: string;

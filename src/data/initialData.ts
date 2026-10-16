@@ -232,6 +232,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "smart-gadgets",
     name: "Smartwatches",
     slug: "smartwatches",
+    image_url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -241,6 +242,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "smart-gadgets",
     name: "Fitness Bands",
     slug: "fitness-bands",
+    image_url: "https://images.unsplash.com/photo-1576243345690-4e4b79b63288?w=400&auto=format&fit=crop&q=80",
     display_order: 2,
     active: 1
   },
@@ -250,6 +252,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "audio",
     name: "TWS Earbuds",
     slug: "tws-earbuds",
+    image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -259,6 +262,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "audio",
     name: "Bluetooth Speakers",
     slug: "bluetooth-speakers",
+    image_url: "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&auto=format&fit=crop&q=80",
     display_order: 2,
     active: 1
   },
@@ -268,6 +272,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "computer-gaming",
     name: "Mechanical Keyboards",
     slug: "mechanical-keyboards",
+    image_url: "https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -277,6 +282,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "computer-gaming",
     name: "Gaming Mouse",
     slug: "gaming-mouse",
+    image_url: "https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=400&auto=format&fit=crop&q=80",
     display_order: 2,
     active: 1
   },
@@ -286,6 +292,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "lifestyle-bags",
     name: "Backpacks",
     slug: "backpacks",
+    image_url: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -295,6 +302,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "home-living",
     name: "Vacuum Flasks",
     slug: "vacuum-flasks",
+    image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -304,6 +312,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "home-living",
     name: "Coffee Drippers",
     slug: "coffee-drippers",
+    image_url: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&auto=format&fit=crop&q=80",
     display_order: 2,
     active: 1
   },
@@ -313,6 +322,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "home-living",
     name: "Home Appliances",
     slug: "home-appliances",
+    image_url: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&auto=format&fit=crop&q=80",
     display_order: 3,
     active: 1
   },
@@ -322,6 +332,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "accessories",
     name: "Wallets",
     slug: "wallets",
+    image_url: "https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -331,6 +342,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "mobile-accessories",
     name: "Chargers & Cables",
     slug: "chargers-cables",
+    image_url: "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   },
@@ -340,6 +352,7 @@ export const INITIAL_SUBCATEGORIES: SubCategory[] = [
     category_slug: "gourmet-food",
     name: "Organic Tea",
     slug: "organic-tea",
+    image_url: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=400&auto=format&fit=crop&q=80",
     display_order: 1,
     active: 1
   }

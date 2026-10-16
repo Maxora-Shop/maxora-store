@@ -1,7 +1,7 @@
 import { Category, SubCategory, ProductType, ChildCategory, Product } from '../types';
 import { generateSlug } from './seo';
 import { matchesTaxonomyField } from './taxonomy';
-import { INITIAL_CATEGORIES } from '../data/initialData';
+import { INITIAL_CATEGORIES, INITIAL_SUBCATEGORIES } from '../data/initialData';
 
 /**
  * Checks whether a product belongs to a given category.
@@ -143,9 +143,13 @@ export function reconcileSubCategories(
     const subSlug = sub.slug || generateSlug(sub.name);
     const parentSlug = sub.category_slug || '';
     const key = `${parentSlug}:::${subSlug}`;
+    const initialMatch = INITIAL_SUBCATEGORIES.find(
+      (is) => is.id === sub.id || is.slug === subSlug || is.name.toLowerCase() === sub.name.toLowerCase()
+    );
     subCategoryMap.set(key, {
       ...sub,
       slug: subSlug,
+      image_url: sub.image_url?.trim() || initialMatch?.image_url || '',
     });
   });
 
@@ -173,12 +177,16 @@ export function reconcileSubCategories(
     if (matchesRegisteredSub) return;
 
     if (!subCategoryMap.has(key)) {
+      const initialMatch = INITIAL_SUBCATEGORIES.find(
+        (is) => is.slug === subSlug || is.name.toLowerCase() === subName.toLowerCase()
+      );
       subCategoryMap.set(key, {
         id: prod.subcategory_id || `subcat-auto-${subSlug}`,
         category_id: matchedCat?.id || `cat-auto-${parentCatSlug}`,
         category_slug: parentCatSlug,
         name: subName,
         slug: subSlug,
+        image_url: initialMatch?.image_url || '',
         display_order: subCategoryMap.size + 1,
         active: 1,
         created_at: new Date().toISOString(),

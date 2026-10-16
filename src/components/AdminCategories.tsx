@@ -320,6 +320,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
       category_slug: selectedCat?.slug || '',
       name: '',
       slug: '',
+      image_url: '',
       display_order: subCategories.length + 1,
       active: 1,
     });
@@ -332,6 +333,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
       ...sub,
       category_id: parentCat?.id || sub.category_id || '',
       category_slug: parentCat?.slug || sub.category_slug || '',
+      image_url: sub.image_url || '',
       active: sub.active !== undefined ? (sub.active !== 0 && sub.active !== false ? 1 : 0) : 1,
     });
     setIsSubModalOpen(true);
@@ -359,6 +361,7 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
         category_slug: parentCat?.slug || editingSub.category_slug || '',
         display_order: Number(editingSub.display_order) || 1,
         active: editingSub.active !== 0 && editingSub.active !== false ? 1 : 0,
+        image_url: editingSub.image_url?.trim() || '',
       };
 
       await taxonomySaveSubCategory(subToSave, password);
@@ -1032,9 +1035,17 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                                     )}
                                   </button>
 
-                                  <span className="w-5 h-5 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-black text-emerald-800 shrink-0">
-                                    2
-                                  </span>
+                                  {sub.image_url ? (
+                                    <img
+                                      src={sub.image_url}
+                                      alt=""
+                                      className="w-5 h-5 rounded-full object-cover border border-emerald-300 shrink-0"
+                                    />
+                                  ) : (
+                                    <span className="w-5 h-5 rounded bg-emerald-100 flex items-center justify-center text-[10px] font-black text-emerald-800 shrink-0">
+                                      2
+                                    </span>
+                                  )}
 
                                   <div className="truncate">
                                     <span className="font-bold text-xs sm:text-sm text-zinc-900">
@@ -1429,8 +1440,23 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                     <tr key={sub.id} className="hover:bg-zinc-50/80 transition-colors">
                       <td className="p-3.5 font-bold text-zinc-500">{sub.display_order ?? 1}</td>
                       <td className="p-3.5">
-                        <div className="font-bold text-zinc-900 text-sm">{sub.name}</div>
-                        <div className="text-[10px] font-mono text-zinc-400">/{sub.slug}</div>
+                        <div className="flex items-center gap-2.5">
+                          {sub.image_url ? (
+                            <img
+                              src={sub.image_url}
+                              alt={sub.name}
+                              className="w-8 h-8 rounded-full object-cover border border-emerald-300 shrink-0 shadow-2xs"
+                            />
+                          ) : (
+                            <span className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-500 shrink-0">
+                              {sub.name.charAt(0)}
+                            </span>
+                          )}
+                          <div>
+                            <div className="font-bold text-zinc-900 text-sm">{sub.name}</div>
+                            <div className="text-[10px] font-mono text-zinc-400">/{sub.slug}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3.5">
                         <span className="font-bold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-md">
@@ -1957,6 +1983,18 @@ export const AdminCategories: React.FC<AdminCategoriesProps> = ({
                   className="w-full text-xs font-bold p-3 rounded-xl border border-zinc-300"
                 />
               </div>
+
+              {/* Direct File Upload for Subcategory Profile Image */}
+              <CategoryImageUploader
+                imageUrl={editingSub.image_url || ''}
+                categoryId={editingSub.id || editingSub.slug || 'subcat'}
+                onChange={(url) =>
+                  setEditingSub({
+                    ...editingSub,
+                    image_url: url,
+                  })
+                }
+              />
 
               <div className="flex items-center gap-2 pt-1">
                 <input

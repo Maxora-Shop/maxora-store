@@ -64,6 +64,7 @@ export interface DisplayCategoryItem {
     id?: string;
     name: string;
     slug: string;
+    image_url?: string;
     count: number;
   }>;
 }
@@ -185,9 +186,6 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
           THEME_FALLBACK_IMAGES[slugKey] ||
           THEME_FALLBACK_IMAGES[nameKey] ||
           THEME_FALLBACK_IMAGES[cat.name.toLowerCase().replace(/[\s_&]+/g, '-')] ||
-          sampleProductImage.get(idKey) ||
-          sampleProductImage.get(nameKey) ||
-          sampleProductImage.get(slugKey) ||
           GENERIC_FALLBACK_IMAGE;
       }
 
@@ -206,7 +204,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
         }
       }
 
-      // Calculate dynamic count for each subcategory
+      // Calculate dynamic count and image for each subcategory
       const formattedSubs = subs.map((s) => {
         let subCount = s.count || 0;
         if (subCount === 0) {
@@ -221,10 +219,16 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
             }
           });
         }
+        const subRecord = taxonomyContext.subCategories?.find(
+          (sc) => sc.id === s.id || sc.slug === s.slug || sc.name.toLowerCase() === s.name.toLowerCase()
+        );
+        const subImg = subRecord?.image_url || '';
+
         return {
           id: s.id,
           name: s.name,
           slug: s.slug,
+          image_url: subImg,
           count: subCount,
         };
       });
@@ -694,10 +698,26 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                     handleNavigateSubcategory(activeSubcategoryCat, sub);
                     setActiveSubcategoryCat(null);
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-zinc-700 hover:text-emerald-900 hover:bg-zinc-50 transition-colors text-left cursor-pointer group border border-transparent hover:border-zinc-200"
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-zinc-700 hover:text-emerald-900 hover:bg-zinc-50 transition-colors text-left cursor-pointer group border border-transparent hover:border-zinc-200"
                 >
-                  <span>{sub.name}</span>
-                  <span className="flex items-center gap-1 text-[11px] text-zinc-400 group-hover:text-emerald-600 font-medium">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {sub.image_url ? (
+                      <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        <img
+                          src={sub.image_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 font-bold text-[10px] flex items-center justify-center shrink-0">
+                        {sub.name.charAt(0)}
+                      </div>
+                    )}
+                    <span className="truncate">{sub.name}</span>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] text-zinc-400 group-hover:text-emerald-600 font-medium shrink-0">
                     {sub.count > 0 ? `${sub.count} items` : ''}
                     <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </span>
