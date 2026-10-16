@@ -1077,22 +1077,20 @@ async function backgroundSyncProducts(force = false) {
   }
 }
 
-// GET /api/products (Public customer endpoint - Sub-millisecond < 1ms indexed response)
+// GET /api/products (Public customer endpoint - Live Sub-millisecond < 1ms real-time response)
 app.get('/api/products', (req, res) => {
   // Fire background sync asynchronously without blocking client response
   backgroundSyncProducts().catch(() => {});
 
-  const etag = productIndexer.getEtag();
-  if (req.headers['if-none-match'] === etag) {
-    return res.status(304).end();
-  }
-
-  res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
-  res.setHeader('ETag', etag);
+  // Guaranteed no-cache live response for instant real-time product updates
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
 
   const search = (req.query.search as string || '').toLowerCase().trim();
   const category = (req.query.category as string || '').trim();
-  const returnAll = req.query.all === 'true';
+  const returnAll = req.query.all === 'true' || req.query.admin === 'true';
 
   let products: any[];
 
@@ -1127,10 +1125,26 @@ app.get('/api/products/:id', (req, res) => {
     return res.status(404).json({ success: false, error: "Product not found." });
   }
 
-  res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   return res.json({
     success: true,
     product
+  });
+});
+
+// POST /api/revalidate & /api/admin/revalidate (On-Demand Cache Revalidation & Instant Invalidation)
+app.post(['/api/revalidate', '/api/admin/revalidate'], (req, res) => {
+  productIndexer.rebuild(db.products);
+  invalidateSitemapCache();
+  broadcastSync('products');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  return res.json({
+    success: true,
+    revalidated: true,
+    timestamp: Date.now(),
+    message: "On-demand cache revalidated. Products index, sitemap, and live subscribers refreshed."
   });
 });
 
@@ -4485,11 +4499,9 @@ app.get('/product/:slug', async (req, res, next) => {
   const result = await getProductSsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (result.status === 200) {
-      res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=600, stale-while-revalidate=86400');
-    } else {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.status(result.status).send(result.html);
   }
   next();
@@ -4500,11 +4512,9 @@ app.get('/category/:catSlug/:subSlug', (req, res, next) => {
   const result = getCategorySsrHtml(req.params.catSlug, req.params.subSlug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (result.status === 200) {
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
-    } else {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.status(result.status).send(result.html);
   }
   next();
@@ -4514,11 +4524,9 @@ app.get('/category/:slug', (req, res, next) => {
   const result = getCategorySsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (result.status === 200) {
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
-    } else {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.status(result.status).send(result.html);
   }
   next();

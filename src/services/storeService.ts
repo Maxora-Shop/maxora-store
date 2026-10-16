@@ -678,7 +678,13 @@ async function tryApi<T>(url: string, options?: RequestInit & { timeoutMs?: numb
     const { timeoutMs: _, ...fetchOptions } = options || {};
 
     const res = await fetch(fullUrl, {
+      cache: 'no-store',
       ...fetchOptions,
+      headers: {
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        ...(fetchOptions.headers || {}),
+      },
       signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
 
@@ -1455,6 +1461,8 @@ export const storeService = {
       method: 'POST',
       headers: getAuthHeaders(adminPassword),
       body: JSON.stringify(newProd),
+    }).then(() => {
+      tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
     }).catch(() => {});
     tryApi<{ success: boolean; product?: Product }>('/api/products', {
       method: 'POST',
@@ -1519,6 +1527,8 @@ export const storeService = {
       method: 'PUT',
       headers: getAuthHeaders(adminPassword),
       body: JSON.stringify(updated),
+    }).then(() => {
+      tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
     }).catch(() => {});
     tryApi<{ success: boolean; product?: Product }>(`/api/products?id=${encodeURIComponent(idStr)}`, {
       method: 'PUT',
@@ -1570,11 +1580,15 @@ export const storeService = {
     tryApi(`/api/admin/products/${encodeURIComponent(targetDocId)}`, {
       method: 'DELETE',
       headers: getAuthHeaders(adminPassword),
+    }).then(() => {
+      tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
     }).catch(() => {});
     if (idStr !== targetDocId) {
       tryApi(`/api/admin/products/${encodeURIComponent(idStr)}`, {
         method: 'DELETE',
         headers: getAuthHeaders(adminPassword),
+      }).then(() => {
+        tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
       }).catch(() => {});
     }
 

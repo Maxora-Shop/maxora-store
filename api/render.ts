@@ -669,7 +669,9 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
         .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticSsrBody}`);
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=600, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.statusCode = 200;
       res.end(modifiedHtml);
       return;
@@ -921,7 +923,9 @@ ${JSON.stringify(itemListLd, null, 2)}
         .replace(/(<div\s+id=["']root["'][^>]*>)/i, `$1${semanticCategoryBody}`);
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.statusCode = 200;
       res.end(modifiedHtml);
       return;
