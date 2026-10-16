@@ -3226,7 +3226,18 @@
       "created_at": "2026-09-18T10:12:12.378Z"
     }
   },
-  "reviews": [],
+  "reviews": [
+    {
+      "id": "rev-1792128935744-wpyhz",
+      "product_id": "prod-mv6zcr60-914",
+      "rating": 5,
+      "comment": "Best smartwatch ever! Very fast delivery.",
+      "user_name": "Rahim Ahmed",
+      "created_at": "2026-10-16T05:35:35.744Z",
+      "verified_purchase": true,
+      "images": []
+    }
+  ],
   "traffic_analytics": {
     "daily": {
       "2026-09-25": {
@@ -3572,6 +3583,32 @@
           "/product/tresemme-keratin-smooth-shampoo-1l": {
             "title": "TRESemmé Keratin Smooth Shampoo 1L | Maxora Shop",
             "count": 2
+          }
+        }
+      },
+      "2026-10-16": {
+        "date": "2026-10-16",
+        "unique_visitors": 1,
+        "page_views": 30,
+        "visitor_ids": [
+          "v_muzn8z7g_ee6e9z0n"
+        ],
+        "referrers": {
+          "Google Search": 30
+        },
+        "devices": {
+          "mobile": 0,
+          "desktop": 30,
+          "tablet": 0
+        },
+        "pages": {
+          "/": {
+            "title": "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
+            "count": 26
+          },
+          "/product/knife-box-set-price-in-bd": {
+            "title": "Knife Box Set price in bd Price in BD ৳1,478 | Maxora BD",
+            "count": 4
           }
         }
       }
