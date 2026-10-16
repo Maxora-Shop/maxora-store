@@ -312,12 +312,16 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
           <div>
             {/* Header */}
             <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center shrink-0">
+              <div 
+                onClick={onViewAllHotDeals}
+                className="flex items-center gap-2.5 cursor-pointer group/hdr"
+                title="View all Hot Deals"
+              >
+                <div className="w-8 h-8 rounded-full bg-rose-500/15 flex items-center justify-center shrink-0 group-hover/hdr:scale-105 transition-transform">
                   <Flame className="w-5 h-5 text-red-500 fill-red-500" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-red-600 leading-tight">
+                  <h3 className="text-base sm:text-lg font-black text-red-600 leading-tight group-hover/hdr:underline">
                     Hot Deals
                   </h3>
                   <p className="text-[11px] text-zinc-500 font-medium">
@@ -459,12 +463,16 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
           <div>
             {/* Header: Title, Countdown and View All matching screenshot */}
             <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 flex items-center justify-center shrink-0">
+              <div 
+                onClick={onViewAllFlashSale}
+                className="flex items-center gap-2 cursor-pointer group/hdr"
+                title="View all Flash Sale products"
+              >
+                <div className="w-7 h-7 flex items-center justify-center shrink-0 group-hover/hdr:scale-105 transition-transform">
                   <Zap className="w-6 h-6 text-amber-400 fill-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-white leading-tight">
+                  <h3 className="text-base sm:text-lg font-black text-white leading-tight group-hover/hdr:underline">
                     Flash Sale
                   </h3>
                   <p className="text-[11px] text-zinc-400 font-medium">
@@ -617,12 +625,16 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
           <div>
             {/* Header */}
             <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-[9px] flex items-center justify-center shrink-0 shadow-xs">
+              <div 
+                onClick={onViewAllNewArrivals}
+                className="flex items-center gap-2.5 cursor-pointer group/hdr"
+                title="View all New Arrivals"
+              >
+                <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-[9px] flex items-center justify-center shrink-0 shadow-xs group-hover/hdr:scale-105 transition-transform">
                   NEW
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-zinc-950 leading-tight">
+                  <h3 className="text-base sm:text-lg font-black text-zinc-950 leading-tight group-hover/hdr:underline">
                     New Arrivals
                   </h3>
                   <p className="text-[11px] text-zinc-500 font-medium">

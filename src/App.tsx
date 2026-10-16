@@ -49,7 +49,7 @@ import {
   INITIAL_PRODUCT_TYPES,
   INITIAL_CHILD_CATEGORIES,
 } from './data/initialData';
-import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter, CheckCircle2, Sparkles, CreditCard, X } from 'lucide-react';
+import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter, CheckCircle2, Sparkles, CreditCard, X, Flame, Zap } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
 import { SavedItemsDrawer } from './components/SavedItemsDrawer';
@@ -110,6 +110,13 @@ export default function App() {
   const [selectedProductType, setSelectedProductType] = useState('');
   const [selectedChildCategory, setSelectedChildCategory] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('');
+  const [promoFilter, setPromoFilter] = useState<'hot_deals' | 'flash_sale' | 'new_arrivals' | null>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('promo');
+      if (p === 'hot_deals' || p === 'flash_sale' || p === 'new_arrivals') return p;
+    }
+    return null;
+  });
 
   // Price Filter State
   const [priceRange, setPriceRange] = useState<PriceRange>({ min: 0, max: 50000 });
@@ -378,6 +385,12 @@ export default function App() {
           const child = searchParams.get('childCategory') || searchParams.get('child_category') || searchParams.get('child') || '';
           const brand = searchParams.get('brand') || '';
           const q = searchParams.get('q') || searchParams.get('search') || '';
+          const promo = searchParams.get('promo');
+          if (promo === 'hot_deals' || promo === 'flash_sale' || promo === 'new_arrivals') {
+            setPromoFilter(promo);
+          } else {
+            setPromoFilter(null);
+          }
 
           setSelectedCategory(cat);
           setSelectedSubCategory(sub);
@@ -386,7 +399,7 @@ export default function App() {
           setSelectedBrand(brand);
           if (q) setSearchQuery(q);
 
-          if (cat || sub || type || child || brand || q || path.startsWith('/products')) {
+          if (cat || sub || type || child || brand || q || promo || path.startsWith('/products')) {
             setTimeout(() => {
               productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 80);
@@ -398,6 +411,7 @@ export default function App() {
           setSelectedChildCategory('');
           setSelectedBrand('');
           setSearchQuery('');
+          setPromoFilter(null);
         }
       }
     };
@@ -1053,6 +1067,7 @@ export default function App() {
     setSelectedChildCategory(child);
     setSelectedBrand(brand);
     setSearchQuery('');
+    setPromoFilter(null);
     setQuickViewProduct(null);
     setIsProductNotFound(false);
     setIsAboutUsOpen(false);
@@ -1145,6 +1160,33 @@ export default function App() {
     setSelectedChildCategory('');
     setSelectedBrand('');
     setSearchQuery('');
+    setPromoFilter(null);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/');
+    }
+  };
+
+  const handleSelectPromoFilter = (promo: 'hot_deals' | 'flash_sale' | 'new_arrivals') => {
+    setPromoFilter(promo);
+    setSelectedCategory('');
+    setSelectedSubCategory('');
+    setSelectedProductType('');
+    setSelectedChildCategory('');
+    setSelectedBrand('');
+    setSearchQuery('');
+    setShowSavedOnly(false);
+    setQuickViewProduct(null);
+    setIsAboutUsOpen(false);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', `/?promo=${promo}`);
+    }
+    setTimeout(() => {
+      productSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 60);
+  };
+
+  const handleClearPromoFilter = () => {
+    setPromoFilter(null);
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/');
     }
@@ -1175,11 +1217,23 @@ export default function App() {
 
   // Source products for sidebar filter counts (scoped to category/search if active)
   const sidebarSourceProducts = useMemo(() => {
-    if (!selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !searchQuery.trim() && !showSavedOnly) {
+    if (!selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !searchQuery.trim() && !showSavedOnly && !promoFilter) {
       return products;
     }
     return products.filter((p) => {
       if (showSavedOnly && !wishlistIds.includes(p.id)) return false;
+
+      // Promo filter (Hot Deals, Flash Sale, New Arrivals)
+      if (promoFilter === 'hot_deals') {
+        const isHot = p.is_hot_deal === true || p.is_hot_deal === 1 || String(p.is_hot_deal) === '1';
+        if (!isHot) return false;
+      } else if (promoFilter === 'flash_sale') {
+        const isFlash = p.is_flash_sale === true || p.is_flash_sale === 1 || String(p.is_flash_sale) === '1';
+        if (!isFlash) return false;
+      } else if (promoFilter === 'new_arrivals') {
+        const isNew = p.is_new_arrival === true || p.is_new_arrival === 1 || String(p.is_new_arrival) === '1' || p.badge === 'NEW';
+        if (!isNew) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matches =
@@ -1232,6 +1286,7 @@ export default function App() {
     selectedChildCategory,
     showSavedOnly,
     wishlistIds,
+    promoFilter,
   ]);
 
   // Filter products by search, 4-tier taxonomy, and budget price range
@@ -1240,6 +1295,18 @@ export default function App() {
       // 0. Wishlist filter if user selected "Saved Items" section view
       if (showSavedOnly && !wishlistIds.includes(p.id)) {
         return false;
+      }
+
+      // 0b. Promo collection filter (Hot Deals, Flash Sale, New Arrivals)
+      if (promoFilter === 'hot_deals') {
+        const isHot = p.is_hot_deal === true || p.is_hot_deal === 1 || String(p.is_hot_deal) === '1';
+        if (!isHot) return false;
+      } else if (promoFilter === 'flash_sale') {
+        const isFlash = p.is_flash_sale === true || p.is_flash_sale === 1 || String(p.is_flash_sale) === '1';
+        if (!isFlash) return false;
+      } else if (promoFilter === 'new_arrivals') {
+        const isNew = p.is_new_arrival === true || p.is_new_arrival === 1 || String(p.is_new_arrival) === '1' || p.badge === 'NEW';
+        if (!isNew) return false;
       }
 
       // 1. Search filter
@@ -1358,6 +1425,7 @@ export default function App() {
     ratingStatsMap,
     showSavedOnly,
     wishlistIds,
+    promoFilter,
   ]);
 
   // Real sales count per product calculated from orders in storeService + product.sold_count
@@ -1699,8 +1767,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            {/* Homepage Sections - Only displayed on main home view without active taxonomy filters or search */}
-            {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !showSavedOnly && (
+            {/* Homepage Sections - Only displayed on main home view without active taxonomy filters, search, or promo collection */}
+            {!searchQuery && !selectedCategory && !selectedSubCategory && !selectedProductType && !selectedChildCategory && !showSavedOnly && !promoFilter && (
               <>
                 <Hero
                   settings={settings}
@@ -1733,9 +1801,9 @@ export default function App() {
                   onAddToCart={(p) => handleAddToCart(p, 1)}
                   onBuyNow={(p) => handleBuyNow(p, 1)}
                   onQuickView={(p, tab) => handleOpenProductDetail(p, true, tab || 'details')}
-                  onViewAllHotDeals={scrollToProducts}
-                  onViewAllFlashSale={scrollToProducts}
-                  onViewAllNewArrivals={scrollToProducts}
+                  onViewAllHotDeals={() => handleSelectPromoFilter('hot_deals')}
+                  onViewAllFlashSale={() => handleSelectPromoFilter('flash_sale')}
+                  onViewAllNewArrivals={() => handleSelectPromoFilter('new_arrivals')}
                   ratingStatsMap={ratingStatsMap}
                   recentlyAddedId={recentlyAddedId}
                 />
@@ -1757,8 +1825,8 @@ export default function App() {
 
             {/* Product Grid Section */}
             <section ref={productSectionRef} className="mt-6 sm:mt-8 mb-8 sm:mb-10 scroll-mt-24" id="products-catalog-section">
-          {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category */}
-          {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) && (
+          {/* Breadcrumb Navigation matching: Home > Category > Subcategory > Product Type > Child Category / Promo */}
+          {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || promoFilter) && (
             <nav aria-label="Breadcrumb" className="mb-4 flex items-center flex-wrap gap-1.5 text-xs text-zinc-600 font-medium bg-zinc-50 px-3 py-2 rounded-xl border border-zinc-200/90 max-w-full overflow-hidden">
               <button
                 type="button"
@@ -1768,6 +1836,29 @@ export default function App() {
                 <Home className="w-3.5 h-3.5" />
                 <span>Home</span>
               </button>
+
+              {promoFilter && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span className="font-bold text-zinc-950 flex items-center gap-1.5">
+                    {promoFilter === 'hot_deals' && (
+                      <span className="text-red-600 flex items-center gap-1">
+                        <Flame className="w-3.5 h-3.5 fill-red-500 text-red-500" /> Hot Deals
+                      </span>
+                    )}
+                    {promoFilter === 'flash_sale' && (
+                      <span className="text-amber-600 flex items-center gap-1">
+                        <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> Flash Sale
+                      </span>
+                    )}
+                    {promoFilter === 'new_arrivals' && (
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <span className="text-[9px] bg-emerald-600 text-white px-1 rounded font-black">NEW</span> New Arrivals
+                      </span>
+                    )}
+                  </span>
+                </>
+              )}
 
               {selectedCategory && (
                 <>
@@ -1834,6 +1925,27 @@ export default function App() {
                       <Heart className="w-6 h-6 fill-rose-500 text-rose-500 inline" />
                       Saved Items / Wishlist
                     </span>
+                  ) : promoFilter ? (
+                    <span className="flex items-center gap-2.5 flex-wrap">
+                      {promoFilter === 'hot_deals' && (
+                        <span className="text-red-600 flex items-center gap-2">
+                          <Flame className="w-6 h-6 sm:w-7 sm:h-7 fill-red-500 text-red-500" />
+                          Hot Deals
+                        </span>
+                      )}
+                      {promoFilter === 'flash_sale' && (
+                        <span className="text-zinc-950 flex items-center gap-2">
+                          <Zap className="w-6 h-6 sm:w-7 sm:h-7 fill-amber-400 text-amber-500" />
+                          Flash Sale
+                        </span>
+                      )}
+                      {promoFilter === 'new_arrivals' && (
+                        <span className="text-emerald-700 flex items-center gap-2">
+                          <span className="bg-emerald-600 text-white text-[10px] sm:text-xs px-2 py-0.5 rounded-md font-black">NEW</span>
+                          New Arrivals
+                        </span>
+                      )}
+                    </span>
                   ) : (selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory) ? (
                     <>
                       {displayCategoryName && <span>{displayCategoryName}</span>}
@@ -1878,8 +1990,28 @@ export default function App() {
             </div>
 
             {/* Active Filters Badges & Clear Controls */}
-            {(selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000 || availabilityFilter !== 'all' || minRatingFilter > 0) && (
+            {(promoFilter || selectedCategory || selectedSubCategory || selectedProductType || selectedChildCategory || selectedBrand || selectedPricePreset !== 'all' || priceRange.min > 0 || priceRange.max < 50000 || availabilityFilter !== 'all' || minRatingFilter > 0) && (
               <div className="flex items-center flex-wrap gap-2 pt-1">
+                {promoFilter && (
+                  <button
+                    type="button"
+                    onClick={handleClearPromoFilter}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                      promoFilter === 'hot_deals'
+                        ? 'text-red-950 bg-red-100 hover:bg-red-200 border border-red-300'
+                        : promoFilter === 'flash_sale'
+                        ? 'text-zinc-950 bg-amber-100 hover:bg-amber-200 border border-amber-300'
+                        : 'text-emerald-950 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300'
+                    }`}
+                  >
+                    <span>
+                      {promoFilter === 'hot_deals' && '🔥 Hot Deals Only'}
+                      {promoFilter === 'flash_sale' && '⚡ Flash Sale Only'}
+                      {promoFilter === 'new_arrivals' && '✨ New Arrivals Only'}
+                    </span>
+                    <span className="text-xs font-black">✕ All Products</span>
+                  </button>
+                )}
                 {selectedBrand && (
                   <button
                     type="button"
@@ -2195,6 +2327,7 @@ export default function App() {
         settings={settings}
         onOpenTracker={() => setIsTrackerOpen(true)}
         onScrollToProducts={scrollToProducts}
+        onScrollToHotDeals={() => handleSelectPromoFilter('hot_deals')}
         onSelectCategory={(slug) => handleTaxonomySelect({ category: slug })}
         onOpenAboutUs={() => {
           setIsAboutUsOpen(true);
