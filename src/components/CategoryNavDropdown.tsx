@@ -238,8 +238,11 @@ export const CategoryNavDropdown: React.FC<CategoryNavDropdownProps> = ({
                   <img
                     src={topProduct.image_url || (topProduct.images && topProduct.images[0]) || ''}
                     alt={topProduct.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    width={180}
+                    height={96}
                     loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                   />
                   {topProduct.discount && Number(topProduct.discount) > 0 ? (
                     <span className="absolute top-1 right-1 bg-teal-700 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">

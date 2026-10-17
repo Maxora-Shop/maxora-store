@@ -1,0 +1,31 @@
+# Maxora Bangladesh (maxorabd.com)
+
+> Maxora is a premier e-commerce marketplace and lifestyle electronics retailer in Bangladesh, specializing in premium smart gadgets, computing accessories, audio gear, travel essentials, and lifestyle home appliances with nationwide Cash on Delivery (COD) and fast delivery across all 64 districts.
+
+## Store Information
+- Website: https://maxorabd.com
+- Location: Dhaka, Bangladesh
+- Currency: BDT (Bangladeshi Taka - ৳)
+- Payment Methods: Cash on Delivery (COD), bKash, Nagad, Rocket, Upay, Visa, Mastercard
+- Delivery Coverage: All 64 Districts of Bangladesh (Inside Dhaka, Sub-Dhaka, Outside Dhaka)
+- Return & Refund Policy: 7-day easy returns and replacement warranty for manufacturing defects
+
+## Core Categories
+- [Smart Gadgets](https://maxorabd.com/category/smart-gadgets): Smartwatches, fitness trackers, wireless charging pads, styluses, and wearable tech.
+- [Audio & Sound](https://maxorabd.com/category/audio-sound): Active Noise Cancelling (ANC) TWS earbuds, Hi-Fi Bluetooth speakers, studio monitors, gaming headsets.
+- [Computer & Gaming](https://maxorabd.com/category/computer-gaming): Custom mechanical keyboards, high-DPI ergonomic gaming mice, laptop hubs, mechanical switches, desk pads.
+- [Lifestyle & Travel](https://maxorabd.com/category/lifestyle-travel): Anti-theft travel backpacks, thermal vacuum flasks, coffee pour-over kits, travel organizers.
+- [Home Appliances](https://maxorabd.com/category/home-appliances): Smart air purifiers, robotic floor sweepers, humidifiers, ambient lighting solutions.
+
+## Key Store Features & Services
+- Nationwide Delivery with Automated Shipping Calculation
+- Instant Parcel Tracking & Live Order Journey Updates
+- 100% Genuine & Quality Checked Products
+- Dedicated Customer Support Helpline & WhatsApp Assistance
+- SSL Encrypted Checkout & Secure Online Transactions
+
+## Contact & Support
+- Email: support@maxorabd.com
+- Helpline: +880 1844-932809
+- Support Hours: 10:00 AM - 10:00 PM (Daily)
+- Address: Dhaka, Bangladesh

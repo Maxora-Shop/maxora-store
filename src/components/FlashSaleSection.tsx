@@ -184,11 +184,15 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                     }
                   }}
                   className="w-full h-full flex items-center justify-center cursor-pointer"
+                  aria-label={`View details for ${product.name}`}
                   title={product.name}
                 >
                   <img
                     src={rawImage}
                     alt={product.name}
+                    width={300}
+                    height={300}
+                    decoding="async"
                     className="max-w-full max-h-full object-contain group-hover:scale-108 transition-transform duration-300"
                     loading="lazy"
                     onError={(e) => {
@@ -221,6 +225,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                         ? 'bg-white text-rose-500 scale-105 border border-rose-200'
                         : 'bg-white/90 hover:bg-white text-zinc-500 hover:text-rose-500 border border-zinc-200'
                     }`}
+                    aria-label={isWishlisted ? "Remove from wishlist" : "Save to wishlist"}
                     title="Save to Wishlist"
                   >
                     <Heart
@@ -234,6 +239,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => onQuickView(product)}
+                    aria-label={`Quick View ${product.name}`}
                     className="pointer-events-auto bg-white hover:bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5 text-zinc-700" />
@@ -243,6 +249,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                     href={fullProductUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={`Open ${product.name} in new tab`}
                     className="pointer-events-auto bg-zinc-950 hover:bg-zinc-800 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
                   >
                     <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
@@ -324,6 +331,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                         e.stopPropagation();
                         onAddToCart(product);
                       }}
+                      aria-label={`Add ${product.name} to cart`}
                       className={`h-9 px-1.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
@@ -353,6 +361,7 @@ export const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
                         e.stopPropagation();
                         onBuyNow(product);
                       }}
+                      aria-label={`Buy ${product.name} now`}
                       className={`h-9 px-1.5 rounded-xl text-xs font-black flex items-center justify-center gap-1 whitespace-nowrap transition-all shadow-xs cursor-pointer active:scale-95 ${
                         isOutOfStock
                           ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'

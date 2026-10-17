@@ -326,6 +326,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-3 sm:gap-5 text-zinc-300 shrink-0 text-[11px] sm:text-xs font-medium">
             <button
               onClick={onOpenTracker}
+              aria-label="Track Order"
               className="hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <PackageCheck className="w-3.5 h-3.5 text-zinc-400" />
@@ -352,6 +353,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Logo & Store Name */}
         <button
           onClick={handleLogoClick}
+          aria-label="Maxora Home"
           className="flex items-center gap-2.5 text-left group cursor-pointer shrink-0 max-w-[220px] sm:max-w-none"
         >
           {settings.logo_url ? (
@@ -359,6 +361,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <img
                 src={settings.logo_url}
                 alt={settings.store_name || "Store Logo"}
+                width={40}
+                height={40}
+                fetchPriority="high"
+                decoding="async"
                 className="w-full h-full object-contain p-0.5"
                 onError={(e) => {
                   (e.currentTarget as HTMLElement).style.display = 'none';
@@ -410,6 +416,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onSearchChange('');
                   setIsSearchFocused(false);
                 }}
+                aria-label="Clear Search Input"
                 className="absolute right-14 text-xs text-zinc-400 hover:text-zinc-700 bg-zinc-200 rounded-full w-5 h-5 flex items-center justify-center cursor-pointer"
               >
                 ✕
@@ -452,12 +459,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                         key={prod.id}
                         type="button"
                         onClick={() => handleSelectInstantProduct(prod)}
+                        aria-label={`View ${prod.name}`}
                         className="w-full text-left p-3 hover:bg-emerald-50/50 flex items-center gap-3 transition-colors cursor-pointer group"
                       >
                         <div className="w-12 h-12 rounded-xl bg-zinc-50 border border-zinc-200/80 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
                           <img
                             src={thumb}
                             alt={prod.name}
+                            width={48}
+                            height={48}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-contain group-hover:scale-105 transition-transform"
                           />
                         </div>
@@ -504,6 +516,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={handleViewAllResults}
+                  aria-label={`View all search results (${instantSearchResults.length}+)`}
                   className="w-full py-2.5 px-4 bg-zinc-50 hover:bg-zinc-100 text-center text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <span>সবগুলো সার্চ ফলাফল দেখুন ({instantSearchResults.length}+)</span>
@@ -520,7 +533,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
             className="sm:hidden p-2 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-100 flex items-center justify-center cursor-pointer"
-            aria-label="Search"
+            aria-label="Toggle Mobile Search"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -529,6 +542,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             id="navbar-customer-account-button"
             onClick={onOpenCustomerAccount}
+            aria-label={customer ? "Customer Account" : "Login or Register"}
             className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-2.5 py-2 rounded-xl border transition-colors cursor-pointer ${
               customer
                 ? 'bg-emerald-50 text-emerald-950 border-emerald-300'
@@ -550,6 +564,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="wishlist-trigger-button"
               onClick={onOpenWishlist}
+              aria-label={`View Wishlist (${wishlistCount} items)`}
               className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-2.5 py-2 rounded-xl border transition-colors cursor-pointer relative ${
                 wishlistCount > 0
                   ? 'bg-rose-50 text-rose-700 border-rose-200'
@@ -576,7 +591,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="cart-trigger-button"
             onClick={onOpenCart}
             className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-zinc-800 hover:text-zinc-950 px-3 py-2 rounded-xl border border-zinc-200 hover:bg-zinc-50 transition-colors cursor-pointer relative"
-            aria-label="Shopping Cart"
+            aria-label={`Shopping Cart (${cartCount} items)`}
           >
             <div className="relative">
               <ShoppingBag className="w-5 h-5 text-zinc-800" />
@@ -610,6 +625,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
             aria-expanded={Boolean(activeMegaMenu)}
             aria-haspopup="true"
+            aria-label="All Categories Menu"
           >
             <Menu className="w-3.5 h-3.5 text-teal-400 shrink-0" />
             <span>All Categories</span>
@@ -634,6 +650,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveMegaMenu(null);
                 handleLogoClick();
               }}
+              aria-label="Home"
               className={`px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 !currentTaxonomyFilter.category && !activeMegaMenu
                   ? 'text-teal-300 bg-slate-800/90 font-bold border-b-2 border-teal-400'
@@ -651,6 +668,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setActiveMegaMenu(null);
                   onOpenAboutUs();
                 }}
+                aria-label="About Us"
                 className="px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 text-zinc-300 hover:text-teal-300 hover:bg-slate-800/50 font-medium"
               >
                 <Sparkles className="w-3.5 h-3.5 text-teal-400" />
@@ -707,6 +725,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onSearchChange('');
                   setIsSearchFocused(false);
                 }}
+                aria-label="Clear Search Input"
                 className="absolute right-3 top-2.5 text-xs text-zinc-400 hover:text-zinc-600 bg-zinc-200 rounded-full w-4 h-4 flex items-center justify-center cursor-pointer"
               >
                 ✕
@@ -722,7 +741,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsSearchFocused(false)}
-                  className="text-zinc-400 hover:text-zinc-700"
+                  aria-label="Close search dropdown"
+                  className="text-zinc-400 hover:text-zinc-700 cursor-pointer"
                 >
                   ✕ বন্ধ করুন
                 </button>
@@ -744,12 +764,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                         key={prod.id}
                         type="button"
                         onClick={() => handleSelectInstantProduct(prod)}
+                        aria-label={`View ${prod.name}`}
                         className="w-full text-left p-2.5 hover:bg-emerald-50/50 flex items-center gap-2.5 active:bg-zinc-100 transition-colors cursor-pointer"
                       >
                         <div className="w-10 h-10 rounded-lg bg-zinc-50 border border-zinc-200/80 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
                           <img
                             src={thumb}
                             alt={prod.name}
+                            width={40}
+                            height={40}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-contain"
                           />
                         </div>
@@ -786,6 +811,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={handleViewAllResults}
+                  aria-label={`View all matching products (${instantSearchResults.length}+)`}
                   className="w-full py-2.5 px-3 bg-zinc-50 hover:bg-zinc-100 text-center text-xs font-bold text-emerald-700 flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <span>সবগুলো প্রোডাক্ট দেখুন ({instantSearchResults.length}+)</span>

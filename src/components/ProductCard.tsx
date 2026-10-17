@@ -71,6 +71,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <img
               src={rawImage}
               alt={imageAlt}
+              width={360}
+              height={360}
               className="max-w-full max-h-full w-auto h-auto object-contain group-hover/image:scale-105 transition-transform duration-300"
               loading="lazy"
               decoding="async"
@@ -161,6 +163,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               onQuickView(product);
             }}
             className="pointer-events-auto bg-white hover:bg-zinc-100 text-zinc-900 px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            aria-label={`Quick View ${product.name}`}
             title="Quick View product details"
           >
             <Eye className="w-3.5 h-3.5 text-zinc-700" />
@@ -172,6 +175,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="pointer-events-auto bg-zinc-950 hover:bg-zinc-800 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 hover:scale-105 transition-all cursor-pointer"
+            aria-label={`Open ${product.name} in separate browser tab`}
             title="Open product in separate browser tab"
           >
             <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
@@ -350,6 +354,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 type="button"
                 disabled={isOutOfStock}
                 onClick={() => onAddToCart(product)}
+                aria-label={`Add ${product.name} to cart`}
                 className={`w-full h-9 sm:h-10 px-1 xs:px-1.5 sm:px-2 rounded-xl font-black text-[10.5px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-95 ${
                   isOutOfStock
                     ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200"
@@ -378,6 +383,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 type="button"
                 disabled={isOutOfStock}
                 onClick={() => onBuyNow(product)}
+                aria-label={`Buy ${product.name} now`}
                 className={`w-full h-9 sm:h-10 px-1 xs:px-1.5 sm:px-2 rounded-xl font-black text-[10.5px] xs:text-[11px] sm:text-xs flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap transition-all cursor-pointer shadow-xs active:scale-98 ${
                   isOutOfStock
                     ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
@@ -394,6 +400,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               type="button"
               disabled={isOutOfStock}
               onClick={() => onAddToCart(product)}
+              aria-label={`Add ${product.name} to shopping cart`}
               className={`w-full min-h-[38px] sm:min-h-[44px] py-1.5 sm:py-2.5 px-2 xs:px-3 sm:px-4 rounded-xl font-bold text-[11px] xs:text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 transition-all cursor-pointer ${
                 isOutOfStock
                   ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"

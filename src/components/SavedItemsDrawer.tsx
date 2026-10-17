@@ -136,6 +136,10 @@ export const SavedItemsDrawer: React.FC<SavedItemsDrawerProps> = ({
                       <img
                         src={product.image_url}
                         alt={product.name}
+                        width={80}
+                        height={80}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src =

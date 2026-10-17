@@ -141,6 +141,10 @@ Maxora Shop BD respects your personal privacy:
                     <img
                       src={settings.logo_url}
                       alt={settings.store_name || 'Logo'}
+                      width={40}
+                      height={40}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-contain"
                     />
                   </div>
@@ -388,8 +392,11 @@ Maxora Shop BD respects your personal privacy:
                   <img
                     src="/images/payments/nagad.svg"
                     alt="Nagad"
+                    width={70}
+                    height={22}
                     className="h-5 sm:h-5.5 w-auto object-contain max-w-[70px]"
                     loading="lazy"
+                    decoding="async"
                   />
                 </div>
               )}
@@ -404,8 +411,11 @@ Maxora Shop BD respects your personal privacy:
                   <img
                     src="/images/payments/bkash.svg"
                     alt="bKash"
+                    width={74}
+                    height={22}
                     className="h-5 sm:h-5.5 w-auto object-contain max-w-[74px]"
                     loading="lazy"
+                    decoding="async"
                   />
                 </div>
               )}

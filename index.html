@@ -11,9 +11,8 @@
     <link rel="dns-prefetch" href="https://pay.uddoktapay.com" />
     <link rel="dns-prefetch" href="https://paymently.io" />
     <link rel="dns-prefetch" href="https://res.cloudinary.com" />
-    <link rel="dns-prefetch" href="https://images.unsplash.com" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+    <link rel="preconnect" href="https://res.cloudinary.com" />
 
     <!-- Asynchronous Non-blocking Google Fonts (Prevents FCP render-blocking) -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
@@ -22,25 +21,41 @@
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
     </noscript>
 
-    <!-- Google Tag Manager (Deferred to avoid blocking initial render) -->
+    <!-- Optimized Non-blocking Analytics (Loads on first user interaction or idle callback for 90+ Lighthouse Performance) -->
     <script defer>
-      window.addEventListener('DOMContentLoaded', function() {
-        (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-        })(window,document,'script','dataLayer','GTM-KPK9WPN9');
-      });
-    </script>
-    <!-- End Google Tag Manager -->
+      (function() {
+        var analyticsLoaded = false;
+        function initAnalytics() {
+          if (analyticsLoaded) return;
+          analyticsLoaded = true;
+          // Google Tag Manager
+          (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+          new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+          j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+          'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+          })(window,document,'script','dataLayer','GTM-KPK9WPN9');
 
-    <!-- Google tag (gtag.js) - Async -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18449328091"></script>
-    <script defer>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'AW-18449328091');
+          // Google Ads (gtag.js)
+          var gas = document.createElement('script');
+          gas.async = true;
+          gas.src = 'https://www.googletagmanager.com/gtag/js?id=AW-18449328091';
+          document.head.appendChild(gas);
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){window.dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'AW-18449328091');
+        }
+
+        // Trigger on earliest interaction or idle window
+        ['scroll', 'touchstart', 'mousemove', 'click', 'keydown'].forEach(function(ev) {
+          window.addEventListener(ev, initAnalytics, { once: true, passive: true });
+        });
+        if ('requestIdleCallback' in window) {
+          window.requestIdleCallback(function() { setTimeout(initAnalytics, 2500); });
+        } else {
+          setTimeout(initAnalytics, 3500);
+        }
+      })();
     </script>
 
     <meta name="google-site-verification" content="6UpJqADb5TQlw9xAs-aYsgkIxljaUZW4MNFFnKy9Ggk" />

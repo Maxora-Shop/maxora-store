@@ -422,6 +422,10 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
                   <img
                     src={data.ceo_image_url}
                     alt={data.ceo_name || "CEO"}
+                    width={208}
+                    height={208}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     onError={(e) => {
                       // Fallback if local image not found

@@ -653,6 +653,10 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
               <img
                 src={selectedImage}
                 alt={product.name}
+                width={700}
+                height={700}
+                fetchPriority="high"
+                decoding="async"
                 className={`max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-200 ease-out ${
                   isZooming ? 'scale-150 cursor-crosshair' : 'scale-100'
                 }`}
@@ -733,6 +737,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => setSelectedImage(img)}
+                      aria-label={`Select product image ${idx + 1}`}
                       className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white p-1.5 border shrink-0 transition-all cursor-pointer flex items-center justify-center overflow-hidden ${
                         isActive
                           ? 'border-zinc-950 ring-2 ring-zinc-950/15 shadow-sm scale-102'
@@ -742,6 +747,9 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                       <img
                         src={img}
                         alt={`${product.name} - image ${idx + 1}`}
+                        width={80}
+                        height={80}
+                        decoding="async"
                         className="w-full h-full object-contain"
                         loading="lazy"
                       />

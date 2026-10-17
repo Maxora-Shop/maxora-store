@@ -201,6 +201,8 @@ export const Hero: React.FC<HeroProps> = ({
             <img
               src={bannerImgSrc}
               alt={slide.titlePrimary || 'Maxora Promotional Banner'}
+              width={1400}
+              height={550}
               className="w-full h-auto max-h-[550px] min-h-[160px] sm:min-h-[260px] md:min-h-[340px] lg:min-h-[400px] object-cover transition-transform duration-700 group-hover:scale-[1.01]"
               fetchPriority={currentSlide === 0 ? "high" : "auto"}
               loading={currentSlide === 0 ? "eager" : "lazy"}
@@ -337,6 +339,8 @@ export const Hero: React.FC<HeroProps> = ({
                 <img
                   src={sanitizeImg(slide.singleBannerImage)}
                   alt={slide.titlePrimary}
+                  width={640}
+                  height={400}
                   className="w-full h-full object-cover"
                   fetchPriority={currentSlide === 0 ? "high" : "auto"}
                   decoding="async"
@@ -351,6 +355,8 @@ export const Hero: React.FC<HeroProps> = ({
                   <img
                     src={sanitizeImg(slide.image1) || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 1"
+                    width={208}
+                    height={208}
                     className="w-full h-full object-contain filter drop-shadow-lg"
                     fetchPriority={currentSlide === 0 ? "high" : "auto"}
                     decoding="async"
@@ -363,6 +369,8 @@ export const Hero: React.FC<HeroProps> = ({
                   <img
                     src={sanitizeImg(slide.image2) || 'https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=600&auto=format&fit=crop&q=80'}
                     alt="Gadget 2"
+                    width={176}
+                    height={240}
                     className="w-full h-full object-contain filter drop-shadow-xl"
                     fetchPriority={currentSlide === 0 ? "high" : "auto"}
                     decoding="async"
@@ -375,6 +383,8 @@ export const Hero: React.FC<HeroProps> = ({
                   <img
                     src={sanitizeImg(slide.image3) || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 3"
+                    width={144}
+                    height={144}
                     className="w-full h-full object-contain filter drop-shadow-lg"
                     loading="lazy"
                     decoding="async"
@@ -387,6 +397,8 @@ export const Hero: React.FC<HeroProps> = ({
                   <img
                     src={sanitizeImg(slide.image4) || 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=80'}
                     alt="Gadget 4"
+                    width={144}
+                    height={144}
                     className="w-full h-full object-contain filter drop-shadow-md"
                     loading="lazy"
                     decoding="async"

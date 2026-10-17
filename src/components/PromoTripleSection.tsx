@@ -380,6 +380,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         <img
                           src={imageSrc}
                           alt={product.name || 'Hot Deal'}
+                          width={88}
+                          height={88}
+                          decoding="async"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleItemClick(product);
@@ -434,6 +437,7 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         e.stopPropagation();
                         handleItemAddToCart(product);
                       }}
+                      aria-label={`Add ${product.name} to cart`}
                       className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                         isAdded
                           ? 'bg-emerald-600 text-white'
@@ -559,6 +563,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         <img
                           src={imageSrc}
                           alt={product.name || 'Flash Sale'}
+                          width={88}
+                          height={88}
+                          decoding="async"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleItemClick(product);
@@ -607,6 +614,7 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         e.stopPropagation();
                         handleItemBuyNow(product);
                       }}
+                      aria-label={`Buy ${product.name} now`}
                       className="w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-[#0f172a] hover:bg-zinc-800 text-white flex items-center justify-center gap-1 transition-colors cursor-pointer"
                     >
                       <span>Buy Now</span>
@@ -681,6 +689,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         <img
                           src={imageSrc}
                           alt={product.name || 'New Arrival'}
+                          width={88}
+                          height={88}
+                          decoding="async"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleItemClick(product);
@@ -728,6 +739,7 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                         e.stopPropagation();
                         handleItemAddToCart(product);
                       }}
+                      aria-label={`Add ${product.name} to cart`}
                       className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                         isAdded
                           ? 'bg-emerald-600 text-white'

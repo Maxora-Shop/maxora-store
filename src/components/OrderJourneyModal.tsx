@@ -480,6 +480,10 @@ export const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
                       <img
                         src={it.image_url}
                         alt={it.product_name}
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        decoding="async"
                         className="w-12 h-12 rounded-xl object-cover border border-zinc-200 shrink-0"
                       />
                     ) : (

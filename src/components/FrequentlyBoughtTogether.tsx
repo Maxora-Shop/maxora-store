@@ -173,8 +173,11 @@ export const FrequentlyBoughtTogether: React.FC<FrequentlyBoughtTogetherProps> =
                     <img
                       src={prod.image_url}
                       alt={prod.name}
-                      className="w-full h-full object-contain"
+                      width={120}
+                      height={120}
                       loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-contain"
                     />
                   </div>
 

@@ -126,6 +126,10 @@ export const BrandSelectDropdown: React.FC<BrandSelectDropdownProps> = ({
             <img
               src={selectedBrand.logo_url}
               alt={selectedBrand.name}
+              width={20}
+              height={20}
+              loading="lazy"
+              decoding="async"
               className="w-5 h-5 rounded object-contain bg-white/10 shrink-0"
               onError={(e) => {
                 (e.target as HTMLElement).style.display = 'none';
@@ -218,6 +222,10 @@ export const BrandSelectDropdown: React.FC<BrandSelectDropdownProps> = ({
                           <img
                             src={brand.logo_url}
                             alt={brand.name}
+                            width={24}
+                            height={24}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-contain p-0.5"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = 'none';

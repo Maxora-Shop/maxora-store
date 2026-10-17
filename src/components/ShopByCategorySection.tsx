@@ -499,6 +499,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCardClick(cat)}
+                    aria-label={`Shop ${cat.name} category (${cat.count} items)`}
                     className="group flex flex-col items-center text-left w-full cursor-pointer focus:outline-none transition-all duration-300 hover:-translate-y-2"
                     title={`Shop ${cat.name}`}
                   >
@@ -508,6 +509,8 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                         <img
                           src={imageSrc}
                           alt={`${cat.name} - Maxora BD`}
+                          width={160}
+                          height={160}
                           loading="lazy"
                           decoding="async"
                           referrerPolicy="no-referrer"
@@ -588,6 +591,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                 <button
                   type="button"
                   onClick={() => handleCardClick(cat)}
+                  aria-label={`Shop ${cat.name} category (${cat.count} items)`}
                   className="group flex flex-col items-center text-left w-full cursor-pointer focus:outline-none transition-transform duration-200 hover:-translate-y-1.5"
                   title={`Shop ${cat.name}`}
                 >
@@ -596,6 +600,8 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                       <img
                         src={imageSrc}
                         alt={`${cat.name} - Maxora BD`}
+                        width={160}
+                        height={160}
                         loading="lazy"
                         decoding="async"
                         referrerPolicy="no-referrer"
@@ -606,7 +612,7 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                       />
                     </div>
 
-                    <span className="absolute bottom-0 right-0 sm:right-1 z-10 bg-white px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-emerald-800 border border-emerald-100/80 shadow-xs whitespace-nowrap group-hover:bg-[#008A45] group-hover:text-white transition-colors duration-200">
+                    <span className="absolute bottom-0 right-0 sm:right-1 z-10 bg-white px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold text-emerald-800 border border-emerald-100/90 shadow-xs whitespace-nowrap group-hover:bg-[#008A45] group-hover:text-white transition-colors duration-200">
                       {cat.count} {cat.count === 1 ? 'item' : 'items'}
                     </span>
                   </div>
@@ -648,6 +654,8 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                       GENERIC_FALLBACK_IMAGE
                     }
                     alt=""
+                    width={36}
+                    height={36}
                     className="w-full h-full object-contain p-1"
                     loading="lazy"
                     decoding="async"
@@ -706,8 +714,11 @@ export const ShopByCategorySection: React.FC<ShopByCategorySectionProps> = ({
                         <img
                           src={sub.image_url}
                           alt=""
+                          width={28}
+                          height={28}
                           className="w-full h-full object-cover"
                           loading="lazy"
+                          decoding="async"
                         />
                       </div>
                     ) : (

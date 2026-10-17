@@ -285,6 +285,8 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
               <img
                 src={selectedImage || product.image_url}
                 alt={`${product.name}${product.sku ? ` - ${product.sku}` : ''}`}
+                width={600}
+                height={600}
                 className="w-full h-full object-cover"
                 loading="lazy"
                 decoding="async"
@@ -300,7 +302,9 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                 {allImages.map((img, idx) => (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => setSelectedImage(img)}
+                    aria-label={`Select product image ${idx + 1}`}
                     className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
                       selectedImage === img
                         ? "border-zinc-950 scale-105 shadow-sm"
@@ -310,6 +314,8 @@ export const ProductQuickView: React.FC<ProductQuickViewProps> = ({
                     <img
                       src={img}
                       alt={`${product.name} thumbnail ${idx + 1}`}
+                      width={56}
+                      height={56}
                       className="w-full h-full object-cover"
                       loading="lazy"
                       decoding="async"

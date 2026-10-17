@@ -188,8 +188,11 @@ export const LiveSalesNotification: React.FC<LiveSalesNotificationProps> = ({
             <img
               src={imageSrc}
               alt={product.name}
-              className="w-full h-full object-contain"
+              width={64}
+              height={64}
               loading="lazy"
+              decoding="async"
+              className="w-full h-full object-contain"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-zinc-300">

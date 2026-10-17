@@ -99,6 +99,9 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({
                   <img
                     src={rawImage}
                     alt={product.name}
+                    width={64}
+                    height={64}
+                    decoding="async"
                     className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-200"
                     loading="lazy"
                   />

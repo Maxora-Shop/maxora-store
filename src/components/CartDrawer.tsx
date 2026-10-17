@@ -171,6 +171,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <img
                           src={item.image_url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80"}
                           alt={item.name}
+                          width={72}
+                          height={72}
                           className="w-full h-full object-cover"
                           loading="lazy"
                           decoding="async"
@@ -187,8 +189,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               {item.name}
                             </h4>
                             <button
+                              type="button"
                               onClick={() => onRemoveItem(item.product_id, item.selected_color)}
-                              className="text-zinc-400 hover:text-rose-600 transition-colors p-1"
+                              aria-label={`Remove ${item.name} from cart`}
+                              className="text-zinc-400 hover:text-rose-600 transition-colors p-1 cursor-pointer"
                               title="Remove item"
                             >
                               <Trash2 className="w-4 h-4" />
