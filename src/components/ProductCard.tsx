@@ -39,6 +39,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   const rawImage = product.image_url || (product.images && product.images[0]) || '';
 
+  // Optimize Cloudinary product-card images at the CDN, while preserving all
+  // non-Cloudinary URLs and existing transformation parameters.
+  const optimizedImage = (() => {
+    if (!rawImage || !/^https?:\/\//i.test(rawImage)) return rawImage;
+    try {
+      const url = new URL(rawImage);
+      if (url.hostname !== 'res.cloudinary.com' || !url.pathname.includes('/image/upload/')) {
+        return rawImage;
+      }
+
+      const marker = '/image/upload/';
+      const uploadIndex = url.pathname.indexOf(marker);
+      const prefix = url.pathname.slice(0, uploadIndex + marker.length);
+      const remainder = url.pathname.slice(uploadIndex + marker.length);
+      const segments = remainder.split('/');
+      const firstSegment = segments[0] || '';
+      const isVersionSegment = /^v\d+$/.test(firstSegment);
+
+      // Merge with a transformation segment if one already exists; otherwise
+      // insert transformations before the version/public ID.
+      if (firstSegment.includes(',') && !isVersionSegment) {
+        const additions = ['w_300', 'c_limit', 'f_auto', 'q_auto'];
+        const existing = new Set(firstSegment.split(','));
+        segments[0] = [firstSegment, ...additions.filter((part) => !existing.has(part))].join(',');
+      } else {
+        segments.unshift('w_300,c_limit,f_auto,q_auto');
+      }
+
+      url.pathname = prefix + segments.join('/');
+      return url.toString();
+    } catch {
+      return rawImage;
+    }
+  })();
+
   // Calculate discount percentage if applicable
   const discountPercent = sellingPrice > 0 && discount > 0 ? Math.round((discount / sellingPrice) * 100) : 0;
 
@@ -69,7 +104,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         >
           {!imageFailed && rawImage ? (
             <img
-              src={rawImage}
+              src={optimizedImage}
               alt={imageAlt}
               width={360}
               height={360}
