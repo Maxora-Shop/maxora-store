@@ -68,8 +68,19 @@ export function setSharedPaymentDb(db: any, saveFn: () => void, syncVersions?: R
  * Returns normalized UddoktaPay URLs and API Key
  */
 function getUddoktaPayConfig() {
-  const apiKey = (process.env.UDDOKTAPAY_API_KEY || 'FvRPvzR94ah2KFgmrBRME1WKZYp1nLIC7Sa8s2IG').trim();
-  let rawUrl = (process.env.UDDOKTAPAY_API_URL || 'https://paymently.io').trim();
+  const settingsKey = (sharedDb?.settings?.uddoktapay_api_key || '').trim();
+  const envKey = (process.env.UDDOKTAPAY_API_KEY || '').trim();
+  const apiKey = settingsKey || envKey;
+
+  // Placeholder/demo/expired keys that should not be treated as live configured keys
+  const isDemoKey =
+    !apiKey ||
+    apiKey === 'FvRPvzR94ah2KFgmrBRME1WKZYp1nLIC7Sa8s2IG' ||
+    apiKey === 'YOUR_UDDOKTAPAY_API_KEY' ||
+    apiKey.length < 10;
+  const isConfigured = Boolean(apiKey && !isDemoKey);
+
+  let rawUrl = (sharedDb?.settings?.uddoktapay_api_url || process.env.UDDOKTAPAY_API_URL || 'https://pay.uddoktapay.com').trim();
 
   // Strip trailing slashes
   rawUrl = rawUrl.replace(/\/+$/, '');
@@ -77,6 +88,8 @@ function getUddoktaPayConfig() {
   // If user provided paymently.io root without subdomain, pay.paymently.io is the active API gateway
   if (rawUrl === 'https://paymently.io' || rawUrl === 'http://paymently.io') {
     rawUrl = 'https://pay.paymently.io';
+  } else if (rawUrl === 'https://uddoktapay.com' || rawUrl === 'http://uddoktapay.com') {
+    rawUrl = 'https://pay.uddoktapay.com';
   }
 
   let checkoutUrl = rawUrl;
@@ -94,8 +107,9 @@ function getUddoktaPayConfig() {
   }
 
   const verifyUrl = `${baseUrl}/api/verify-payment`;
+  const isEnabled = sharedDb?.settings?.uddoktapay_enabled !== false;
 
-  return { apiKey, baseUrl, checkoutUrl, verifyUrl };
+  return { apiKey, baseUrl, checkoutUrl, verifyUrl, isEnabled, isConfigured };
 }
 
 /**
@@ -222,8 +236,24 @@ export async function initiatePayment(req: Request, res: Response) {
       });
     }
 
-    const { apiKey, checkoutUrl } = getUddoktaPayConfig();
+    const { apiKey, checkoutUrl, isEnabled, isConfigured } = getUddoktaPayConfig();
     const appBaseUrl = getAppBaseUrl(req);
+
+    if (!isEnabled) {
+      return res.status(400).json({
+        success: false,
+        is_config_error: true,
+        error: 'অনলাইন পেমেন্ট সাময়িকভাবে বন্ধ রয়েছে। অনুগ্রহ করে ক্যাশ অন ডেলিভারি (Cash on Delivery) সিলেক্ট করে অর্ডার করুন।'
+      });
+    }
+
+    if (!isConfigured) {
+      return res.status(400).json({
+        success: false,
+        is_config_error: true,
+        error: 'UddoktaPay API Key কনফিগার করা নেই। অনুগ্রহ করে ক্যাশ অন ডেলিভারি (Cash on Delivery) সিলেক্ট করুন অথবা অ্যাডমিন সেটিংস থেকে আপনার সঠিক API Key ও URL প্রদান করুন।'
+      });
+    }
 
     const safeOrderNo = order_number || `MX-${Date.now().toString(36).toUpperCase()}`;
     const safeOrderId = order_id || `ord-${Date.now().toString(36)}`;
@@ -291,9 +321,17 @@ export async function initiatePayment(req: Request, res: Response) {
 
     if (!data || (!data.payment_url && data.status === false)) {
       console.error('[UDDOKTAPAY_INIT_FAILED] Final status:', response?.status, data || responseText);
+      const rawMsg = data?.message || '';
+      const isKeyError = response?.status === 401 || rawMsg.toLowerCase().includes('api key');
+
+      const userFacingError = isKeyError
+        ? 'UddoktaPay API Key অবৈধ বা মেয়াদোত্তীর্ণ (Invalid or expired API Key)। অনুগ্রহ করে ক্যাশ অন ডেলিভারি নির্বাচন করুন অথবা অ্যাডমিন প্যানেল থেকে আপনার সঠিক UddoktaPay API Key আপডেট করুন।'
+        : (data?.message || 'পেমেন্ট গেটওয়েতে সংযোগ করতে সমস্যা হচ্ছে। অনুগ্রহ করে ক্যাশ অন ডেলিভারি (Cash on Delivery) নির্বাচন করুন।');
+
       return res.status(400).json({
         success: false,
-        error: data?.message || 'Failed to initiate payment with UddoktaPay/Paymently gateway.',
+        is_config_error: isKeyError,
+        error: userFacingError,
         details: data || responseText.slice(0, 300)
       });
     }
@@ -541,7 +579,9 @@ export async function verifyPayment(req: Request, res: Response) {
  * Public endpoint to check available payment methods
  */
 export async function getPaymentConfig(req: Request, res: Response) {
-  const isUddoktaPayConfigured = Boolean(process.env.UDDOKTAPAY_API_KEY || true);
+  const { isConfigured, isEnabled } = getUddoktaPayConfig();
+  const onlineAvailable = isEnabled && isConfigured;
+
   return res.status(200).json({
     success: true,
     methods: [
@@ -557,9 +597,88 @@ export async function getPaymentConfig(req: Request, res: Response) {
         name: 'Online Payment (bKash, Nagad, Rocket)',
         name_bn: 'অনলাইন পেমেন্ট (বিকাশ, নগদ, রকেট, কার্ড)',
         gateway: 'UddoktaPay',
-        enabled: isUddoktaPayConfigured,
+        enabled: onlineAvailable,
         supported_methods: ['bKash', 'Nagad', 'Rocket', 'Upay', 'Visa/Mastercard']
       }
     ]
   });
+}
+
+/**
+ * 7. POST /api/admin/payment/test-connection
+ * Tests merchant's UddoktaPay credentials without placing real customer order
+ */
+export async function testPaymentConnection(req: Request, res: Response) {
+  try {
+    const requestedKey = (req.body?.apiKey || '').trim();
+    const requestedUrl = (req.body?.apiUrl || '').trim();
+
+    const config = getUddoktaPayConfig();
+    const apiKey = requestedKey || config.apiKey;
+    let baseUrl = requestedUrl || config.baseUrl;
+
+    if (!apiKey || apiKey === 'YOUR_UDDOKTAPAY_API_KEY' || apiKey === 'FvRPvzR94ah2KFgmrBRME1WKZYp1nLIC7Sa8s2IG' || apiKey.length < 10) {
+      return res.status(200).json({
+        success: false,
+        error: 'বৈধ UddoktaPay API Key দিন (Please enter a valid UddoktaPay API Key).'
+      });
+    }
+
+    baseUrl = baseUrl.replace(/\/+$/, '');
+    if (baseUrl === 'https://paymently.io' || baseUrl === 'http://paymently.io') {
+      baseUrl = 'https://pay.paymently.io';
+    } else if (baseUrl === 'https://uddoktapay.com' || baseUrl === 'http://uddoktapay.com') {
+      baseUrl = 'https://pay.uddoktapay.com';
+    }
+
+    const testUrl = `${baseUrl}/api/verify-payment`;
+
+    const verifyRes = await fetch(testUrl, {
+      method: 'POST',
+      headers: {
+        'RT-UDDOKTAPAY-API-KEY': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ invoice_id: 'test_credential_ping' })
+    });
+
+    const verifyText = await verifyRes.text();
+    let verifyData: any = {};
+    try {
+      verifyData = JSON.parse(verifyText);
+    } catch {
+      verifyData = { message: verifyText };
+    }
+
+    const msg = (verifyData?.message || '').toLowerCase();
+    const isAuthError =
+      verifyRes.status === 401 ||
+      verifyData?.status === 'ERROR' ||
+      verifyData?.status === false ||
+      msg.includes('do not match') ||
+      msg.includes('api key') ||
+      msg.includes('invalid') ||
+      msg.includes('expired');
+
+    if (isAuthError) {
+      return res.status(200).json({
+        success: false,
+        error: `UddoktaPay API Key সঠিক নয় বা মিলছে না (${verifyData?.message || 'Invalid or expired API Key'})। অনুগ্রহ করে UddoktaPay ড্যাশবোর্ড থেকে সঠিক Key কপি করুন।`,
+        details: verifyData
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'UddoktaPay API Key সফলভাবে যাচাই হয়েছে এবং গেটওয়ে সক্রিয় আছে!',
+      gateway: baseUrl
+    });
+  } catch (error: any) {
+    return res.status(200).json({
+      success: false,
+      error: `পেমেন্ট গেটওয়েতে সংযোগ করতে সমস্যা হয়েছে: ${error.message}`
+    });
+  }
 }

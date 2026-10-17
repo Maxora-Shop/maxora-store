@@ -2075,11 +2075,21 @@ export const storeService = {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = {
+          success: false,
+          error: `Payment gateway communication error (HTTP ${res.status}). Please choose Cash on Delivery.`
+        };
+      }
+
       if (!res.ok || !data.success || !data.payment_url) {
         return {
           success: false,
-          error: data.error || 'Failed to initiate UddoktaPay payment.',
+          error: data.error || data.message || `Failed to initiate online payment (HTTP ${res.status}). Please choose Cash on Delivery.`,
         };
       }
 
@@ -2095,6 +2105,52 @@ export const storeService = {
         success: false,
         error: err.message || 'Could not connect to UddoktaPay payment gateway.',
       };
+    }
+  },
+
+  /**
+   * Get available payment methods
+   */
+  async getPaymentConfig(): Promise<{
+    success: boolean;
+    methods: Array<{
+      id: string;
+      name: string;
+      name_bn: string;
+      gateway?: string;
+      enabled: boolean;
+      recommended?: boolean;
+      supported_methods?: string[];
+    }>;
+  }> {
+    try {
+      const res = await fetch('/api/payment/config');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return {
+        success: true,
+        methods: [
+          { id: 'cod', name: 'Cash on Delivery', name_bn: 'ক্যাশ অন ডেলিভারি (পণ্য হাতে পেয়ে মূল্য পরিশোধ)', enabled: true, recommended: true },
+          { id: 'uddoktapay', name: 'Online Payment (bKash, Nagad, Rocket)', name_bn: 'অনলাইন পেমেন্ট (বিকাশ, নগদ, রকেট, কার্ড)', gateway: 'UddoktaPay', enabled: false }
+        ]
+      };
+    }
+  },
+
+  /**
+   * Test UddoktaPay credentials from admin dashboard
+   */
+  async testUddoktaPayConnection(apiKey?: string, apiUrl?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/admin/payment/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, apiUrl })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Connection failed' };
     }
   },
 

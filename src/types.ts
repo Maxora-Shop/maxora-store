@@ -391,6 +391,10 @@ export interface StoreSettings {
   pathao_store_id?: string;
   redx_enabled?: boolean;
   redx_token?: string;
+  // Online Payment Gateway (UddoktaPay / bKash, Nagad, Rocket)
+  uddoktapay_enabled?: boolean;
+  uddoktapay_api_key?: string;
+  uddoktapay_api_url?: string;
   updated_at?: string;
 }
 

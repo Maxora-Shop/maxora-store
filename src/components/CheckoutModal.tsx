@@ -38,6 +38,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [completedOrder, setCompletedOrder] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [onlinePaymentEnabled, setOnlinePaymentEnabled] = useState<boolean>(true);
+  const [fallbackPendingOrder, setFallbackPendingOrder] = useState<any>(null);
+
+  // Check online payment gateway availability
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    storeService.getPaymentConfig().then((cfg) => {
+      if (!isMounted) return;
+      const uddokta = cfg.methods?.find((m) => m.id === 'uddoktapay');
+      const isOnlineActive = Boolean(uddokta && uddokta.enabled);
+      setOnlinePaymentEnabled(isOnlineActive);
+      if (!isOnlineActive && paymentMethod === 'online') {
+        setPaymentMethod('cod');
+      }
+    }).catch(() => {
+      if (isMounted) setOnlinePaymentEnabled(false);
+    });
+    return () => { isMounted = false; };
+  }, [isOpen]);
 
   // Thana list based on district
   const thanaList = getThanasForDistrict(district);
@@ -160,8 +180,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           window.location.href = payInit.payment_url;
           return;
         } else {
+          setFallbackPendingOrder(result.order);
           throw new Error(
-            payInit.error || 'Could not initiate online payment. Please try again or select Cash on Delivery.'
+            payInit.error || 'অনলাইন পেমেন্ট গেটওয়েতে সংযোগ করতে সমস্যা হচ্ছে। আপনার অর্ডারটি সুরক্ষিত আছে! আপনি নিচের বাটনে ক্লিক করে ক্যাশ অন ডেলিভারিতে অর্ডারটি কনফার্ম করতে পারেন।'
           );
         }
       }
@@ -171,6 +192,33 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       onOrderSuccess(result.order);
     } catch (err: any) {
       setErrorMessage(err.message || 'Something went wrong while placing your order.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSwitchToCodFallback = async () => {
+    if (!fallbackPendingOrder) return;
+    try {
+      setIsSubmitting(true);
+      await storeService.updateOrder({
+        id: fallbackPendingOrder.id,
+        payment_method: 'Cash on Delivery (COD)',
+        payment_status: 'Pending',
+      });
+      const finalOrder = {
+        ...fallbackPendingOrder,
+        payment_method: 'Cash on Delivery (COD)',
+        payment_status: 'Pending',
+      };
+      setCompletedOrder(finalOrder);
+      onOrderSuccess(finalOrder);
+      setErrorMessage('');
+      setFallbackPendingOrder(null);
+    } catch {
+      setCompletedOrder(fallbackPendingOrder);
+      onOrderSuccess(fallbackPendingOrder);
+      setErrorMessage('');
     } finally {
       setIsSubmitting(false);
     }
@@ -326,9 +374,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{errorMessage}</span>
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-2.5 animate-fade-in shadow-xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span className="font-bold leading-relaxed">{errorMessage}</span>
+                  </div>
+                  {fallbackPendingOrder && (
+                    <div className="pt-2 border-t border-rose-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 bg-rose-100/50 p-2.5 rounded-xl">
+                      <span className="text-[11px] font-semibold text-rose-900">
+                        অর্ডার নং: <strong>{fallbackPendingOrder.order_number}</strong> সংরক্ষিত হয়েছে। ক্যাশ অন ডেলিভারিতে কনফার্ম করবেন?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSwitchToCodFallback}
+                        disabled={isSubmitting}
+                        className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer whitespace-nowrap active:scale-95 disabled:opacity-50"
+                      >
+                        ✓ ক্যাশ অন ডেলিভারিতে কনফার্ম করুন
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -589,35 +654,53 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                   {/* Option 2: Online Payment (bKash, Nagad, Rocket) */}
                   <div
-                    onClick={() => setPaymentMethod('online')}
-                    className={`relative p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                      paymentMethod === 'online'
-                        ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-sm'
-                        : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300'
+                    onClick={() => {
+                      if (!onlinePaymentEnabled) {
+                        setPaymentMethod('cod');
+                        return;
+                      }
+                      setPaymentMethod('online');
+                    }}
+                    className={`relative p-3.5 rounded-2xl border-2 transition-all ${
+                      !onlinePaymentEnabled
+                        ? 'border-zinc-200 bg-zinc-100/70 opacity-80 cursor-pointer'
+                        : paymentMethod === 'online'
+                        ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-sm cursor-pointer'
+                        : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100 hover:border-zinc-300 cursor-pointer'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all ${
-                          paymentMethod === 'online'
+                          !onlinePaymentEnabled
+                            ? 'border-zinc-300 bg-zinc-200'
+                            : paymentMethod === 'online'
                             ? 'border-emerald-600 bg-emerald-600'
                             : 'border-zinc-300 bg-white'
                         }`}
                       >
-                        {paymentMethod === 'online' && <div className="w-2 h-2 rounded-full bg-white" />}
+                        {onlinePaymentEnabled && paymentMethod === 'online' && <div className="w-2 h-2 rounded-full bg-white" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <span className="font-extrabold text-xs sm:text-sm text-zinc-900">
                             Online Payment
                           </span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0 flex items-center gap-1">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            ইনস্ট্যান্ট
-                          </span>
+                          {!onlinePaymentEnabled ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-600 shrink-0">
+                              সাময়িকভাবে অফলাইন
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0 flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              ইনস্ট্যান্ট
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-zinc-500 leading-tight mb-2">
-                          বিকাশ, নগদ, রকেট, উপায় বা কার্ড দিয়ে নিরাপদে পেমেন্ট করুন।
+                          {!onlinePaymentEnabled
+                            ? 'অনলাইন পেমেন্ট সাময়িকভাবে অফলাইনে রয়েছে। ক্যাশ অন ডেলিভারিতে অর্ডার করুন।'
+                            : 'বিকাশ, নগদ, রকেট, উপায় বা কার্ড দিয়ে নিরাপদে পেমেন্ট করুন।'}
                         </p>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-[#e2136e] text-white">
