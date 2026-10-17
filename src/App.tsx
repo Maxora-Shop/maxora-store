@@ -2366,7 +2366,7 @@ export default function App() {
       />
 
       {/* Drawers & Modals */}
-      <React.Suspense fallback={null}>
+      {isCartOpen && <React.Suspense fallback={null}>
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -2379,9 +2379,9 @@ export default function App() {
         }}
         settings={settings}
       />
-      </React.Suspense>
+      </React.Suspense>}
 
-      <React.Suspense fallback={null}>
+      {isCheckoutOpen && <React.Suspense fallback={null}>
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
@@ -2389,7 +2389,7 @@ export default function App() {
         settings={settings}
         onOrderSuccess={handleOrderSuccess}
       />
-      </React.Suspense>
+      </React.Suspense>}
 
       {/* Saved Items / Wishlist Slide-Over Drawer */}
       <SavedItemsDrawer
