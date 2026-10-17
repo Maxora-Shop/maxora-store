@@ -171,7 +171,14 @@ export const Hero: React.FC<HeroProps> = ({
     slide.mobileBannerImage ||
     '';
   const bannerImgSrc = optimizeCloudinaryImage(sanitizeImg(rawBannerImg), 700, 70);
-  const mobileBannerImgSrc = optimizeCloudinaryImage(sanitizeImg(slide.mobileBannerImage), 700, 70);
+  // Always request a smaller Cloudinary asset for mobile, even when no separate
+  // mobile banner has been uploaded. Non-Cloudinary URLs remain unchanged.
+  const mobileBannerImgSrc = optimizeCloudinaryImage(
+    sanitizeImg(slide.mobileBannerImage || rawBannerImg),
+    400,
+    60,
+    'scale'
+  );
 
   return (
     <section className="my-3 sm:my-5 w-full">
