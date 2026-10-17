@@ -3,13 +3,13 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { PriceRange } from './components/PriceFilter';
 import { ProductCard } from './components/ProductCard';
-import { ProductDetailsPage } from './components/ProductDetailsPage';
+const ProductDetailsPage = React.lazy(() => import('./components/ProductDetailsPage').then((m) => ({ default: m.ProductDetailsPage })));
 import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
-import { CartDrawer } from './components/CartDrawer';
-import { CheckoutModal } from './components/CheckoutModal';
+const CartDrawer = React.lazy(() => import('./components/CartDrawer').then((m) => ({ default: m.CartDrawer })));
+const CheckoutModal = React.lazy(() => import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal })));
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
-import { AboutUsPage } from './components/AboutUsPage';
+const AboutUsPage = React.lazy(() => import('./components/AboutUsPage').then((m) => ({ default: m.AboutUsPage })));
 
 // Customer Modals (loaded on-demand)
 const CustomerAccountModal = React.lazy(() =>
@@ -1706,6 +1706,7 @@ export default function App() {
           </div>
         )}
         {isAboutUsOpen ? (
+          <React.Suspense fallback={null}>
           <AboutUsPage
             onBackToStore={() => {
               setIsAboutUsOpen(false);
@@ -1725,7 +1726,9 @@ export default function App() {
             storePhone={settings.phone}
             storeEmail={settings.email}
           />
+          </React.Suspense>
         ) : quickViewProduct ? (
+          <React.Suspense fallback={<ProductDetailsSkeleton />}>
           <ProductDetailsPage
             product={quickViewProduct}
             settings={settings}
@@ -1744,6 +1747,7 @@ export default function App() {
             onSelectBrand={handleSelectBrand}
             initialTab={quickViewInitialTab}
           />
+          </React.Suspense>
         ) : pendingSlugRef.current ? (
           <ProductDetailsSkeleton />
         ) : isProductNotFound && typeof window !== 'undefined' && window.location.pathname.startsWith('/product/') ? (
@@ -2362,6 +2366,7 @@ export default function App() {
       />
 
       {/* Drawers & Modals */}
+      <React.Suspense fallback={null}>
       <CartDrawer
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
@@ -2374,7 +2379,9 @@ export default function App() {
         }}
         settings={settings}
       />
+      </React.Suspense>
 
+      <React.Suspense fallback={null}>
       <CheckoutModal
         isOpen={isCheckoutOpen}
         onClose={() => setIsCheckoutOpen(false)}
@@ -2382,6 +2389,7 @@ export default function App() {
         settings={settings}
         onOrderSuccess={handleOrderSuccess}
       />
+      </React.Suspense>
 
       {/* Saved Items / Wishlist Slide-Over Drawer */}
       <SavedItemsDrawer
