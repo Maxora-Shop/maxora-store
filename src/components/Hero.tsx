@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Product, StoreSettings, HeroBanner } from '../types';
 import { DEFAULT_HERO_BANNERS } from '../data/initialData';
+import { optimizeCloudinaryImage } from '../utils/cloudinaryImage';
 
 interface HeroProps {
   settings: StoreSettings;
@@ -169,8 +170,8 @@ export const Hero: React.FC<HeroProps> = ({
     slide.image1 ||
     slide.mobileBannerImage ||
     '';
-  const bannerImgSrc = sanitizeImg(rawBannerImg);
-  const mobileBannerImgSrc = sanitizeImg(slide.mobileBannerImage);
+  const bannerImgSrc = optimizeCloudinaryImage(sanitizeImg(rawBannerImg), 700, 70);
+  const mobileBannerImgSrc = optimizeCloudinaryImage(sanitizeImg(slide.mobileBannerImage), 700, 70);
 
   return (
     <section className="my-3 sm:my-5 w-full">
@@ -337,14 +338,14 @@ export const Hero: React.FC<HeroProps> = ({
               /* Single Full Banner Image Mode */
               <div className="relative w-full max-w-lg aspect-16/10 rounded-2xl overflow-hidden shadow-xl border border-white/60">
                 <img
-                  src={sanitizeImg(slide.singleBannerImage)}
+                  src={optimizeCloudinaryImage(sanitizeImg(slide.singleBannerImage), 700, 70)}
                   alt={slide.titlePrimary}
                   width={640}
                   height={400}
                   className="w-full h-full object-cover"
                   fetchPriority={currentSlide === 0 ? "high" : "auto"}
                   decoding="async"
-                  onError={() => handleImageError(sanitizeImg(slide.singleBannerImage))}
+                  onError={() => handleImageError(optimizeCloudinaryImage(sanitizeImg(slide.singleBannerImage), 700, 70))}
                 />
               </div>
             ) : (

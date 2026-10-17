@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShoppingBag, ShoppingCart, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
+import { optimizeCloudinaryImage } from '../utils/cloudinaryImage';
 
 interface ProductCardProps {
   product: Product;
@@ -38,6 +39,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const imageAlt = `${product.name}${product.sku ? ` - ${product.sku}` : ''}`;
 
   const rawImage = product.image_url || (product.images && product.images[0]) || '';
+  const optimizedImage = optimizeCloudinaryImage(rawImage, 300, 'auto');
 
   // Calculate discount percentage if applicable
   const discountPercent = sellingPrice > 0 && discount > 0 ? Math.round((discount / sellingPrice) * 100) : 0;
@@ -69,7 +71,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         >
           {!imageFailed && rawImage ? (
             <img
-              src={rawImage}
+              src={optimizedImage}
               alt={imageAlt}
               width={360}
               height={360}
