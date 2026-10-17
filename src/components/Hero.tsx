@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { preload } from 'react-dom';
 import {
   Truck,
   Check,
@@ -179,6 +180,15 @@ export const Hero: React.FC<HeroProps> = ({
     60,
     'scale'
   );
+
+  // Preload the active, responsive hero image as soon as its admin-configured URL is known.
+  // A static index.html preload cannot safely target a banner that may change in the admin panel.
+  if (typeof window !== 'undefined') {
+    const heroPreloadSrc = window.matchMedia('(max-width: 640px)').matches
+      ? mobileBannerImgSrc
+      : bannerImgSrc;
+    if (heroPreloadSrc) preload(heroPreloadSrc, { as: 'image', fetchPriority: 'high' });
+  }
 
   return (
     <section className="my-3 sm:my-5 w-full">
