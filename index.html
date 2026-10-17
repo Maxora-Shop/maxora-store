@@ -46,15 +46,11 @@
           gtag('config', 'AW-18449328091');
         }
 
-        // Trigger on earliest interaction or idle window
-        ['scroll', 'touchstart', 'mousemove', 'click', 'keydown'].forEach(function(ev) {
+        // Load analytics only after a real user interaction so third-party
+        // scripts do not compete with the initial mobile render.
+        ['scroll', 'touchstart', 'click', 'keydown'].forEach(function(ev) {
           window.addEventListener(ev, initAnalytics, { once: true, passive: true });
         });
-        if ('requestIdleCallback' in window) {
-          window.requestIdleCallback(function() { setTimeout(initAnalytics, 2500); });
-        } else {
-          setTimeout(initAnalytics, 3500);
-        }
       })();
     </script>
 
