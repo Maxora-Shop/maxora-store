@@ -5,7 +5,8 @@
 export const optimizeCloudinaryImage = (
   source: string | undefined,
   width = 700,
-  quality: number | 'auto' = 70
+  quality: number | 'auto' = 70,
+  cropMode: 'limit' | 'scale' = 'limit'
 ): string => {
   if (!source || !/^https?:\/\//i.test(source)) return source || '';
 
@@ -29,7 +30,7 @@ export const optimizeCloudinaryImage = (
     const isTransformation = /^(?:w_|h_|c_|q_|f_|dpr_|ar_|g_|e_|t_|fl_|r_|b_|bo_|d_|l_|o_|pg_|x_|y_|z_)/i.test(first);
     const requested = [
       'w_' + Math.max(1, Math.round(width)),
-      'c_limit',
+      'c_' + cropMode,
       'f_auto',
       'q_' + quality,
     ];
