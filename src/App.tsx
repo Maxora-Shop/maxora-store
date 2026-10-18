@@ -38,7 +38,7 @@ import { FooterSection } from './components/FooterSection';
 import { ProductPagination } from './components/ProductPagination';
 import { ProductSortDropdown } from './components/ProductSortDropdown';
 import { Product, CartItem, StoreSettings, Category, SubCategory, ProductType, ChildCategory, Review, Customer, Order, Brand, ProductSortOption } from './types';
-import { storeService, initRealtimeFirestoreListeners, detachFirestoreListeners } from './services/storeService';
+import { storeService, scheduleStoreBackgroundSync, detachFirestoreListeners } from './services/storeService';
 import { pixelService } from './services/pixelService';
 import { visitorTrackingService } from './services/visitorTrackingService';
 import {
@@ -594,14 +594,26 @@ export default function App() {
     visitorTrackingService.init();
   }, []);
 
-  // Load Settings, Products & Categories on startup and listen for live updates
+  // Keep first paint responsive: start network-backed store work after the initial render.
   useEffect(() => {
-    // Start global real-time cloud sync listeners
-    initRealtimeFirestoreListeners();
+    let cancelled = false;
+    let startupIdleHandle: number | undefined;
+    let startupTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
-    fetchSettings();
-    fetchProducts();
-    fetchCategories();
+    scheduleStoreBackgroundSync();
+
+    const startInitialFetches = () => {
+      if (cancelled) return;
+      fetchSettings();
+      fetchProducts();
+      // TaxonomyContext schedules its own initial refresh; avoid duplicate category reads.
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      startupIdleHandle = (window as any).requestIdleCallback(startInitialFetches, { timeout: 1800 });
+    } else {
+      startupTimeoutHandle = setTimeout(startInitialFetches, 700);
+    }
 
     // Live update listeners
     const handleProductsUpdated = () => {
@@ -661,6 +673,11 @@ export default function App() {
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
+      cancelled = true;
+      if (startupIdleHandle !== undefined && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(startupIdleHandle);
+      }
+      if (startupTimeoutHandle !== undefined) clearTimeout(startupTimeoutHandle);
       if (productFetchTimeoutRef.current) {
         clearTimeout(productFetchTimeoutRef.current);
         productFetchTimeoutRef.current = null;

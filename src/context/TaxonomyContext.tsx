@@ -18,7 +18,7 @@ import {
   reconcileChildCategories,
   isProductInCategory,
 } from '../utils/categoryCompatibility';
-import { storeService, initRealtimeFirestoreListeners } from '../services/storeService';
+import { storeService } from '../services/storeService';
 import {
   INITIAL_CATEGORIES,
   INITIAL_SUBCATEGORIES,
@@ -178,13 +178,20 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     }
   }, []);
 
-  // 3. Mount: start Firestore real-time listeners and subscribe to sync channels
+  // 3. Subscribe immediately to local sync events, but defer initial cloud reads until after first paint.
   useEffect(() => {
-    // Start global real-time cloud sync listeners
-    initRealtimeFirestoreListeners();
+    let cancelled = false;
+    let idleHandle: number | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const runInitialRefresh = () => {
+      if (!cancelled) void refreshTaxonomy();
+    };
 
-    // Initial fetch from cloud/store
-    refreshTaxonomy();
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleHandle = (window as any).requestIdleCallback(runInitialRefresh, { timeout: 2000 });
+    } else {
+      timeoutHandle = setTimeout(runInitialRefresh, 800);
+    }
 
     // Sync from local cache immediately on any event
     const syncFromCache = () => {
@@ -246,6 +253,11 @@ export const TaxonomyProvider: React.FC<TaxonomyProviderProps> = ({
     } catch {}
 
     return () => {
+      cancelled = true;
+      if (idleHandle !== undefined && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
       window.removeEventListener('maxora_categories_updated', handleTaxonomyEvent);
       window.removeEventListener('maxora_subcategories_updated', handleTaxonomyEvent);
       window.removeEventListener('maxora_product_types_updated', handleTaxonomyEvent);
