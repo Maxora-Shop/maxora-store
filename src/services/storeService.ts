@@ -427,12 +427,17 @@ export function clearFirestoreCooldown() {
 }
 
 export function isClientQuotaCooldownActive(): boolean {
+  let persistedUntil = 0;
   if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('maxora_firestore_cooldown_until');
-    } catch {}
+    try { persistedUntil = Number(localStorage.getItem('maxora_firestore_cooldown_until') || 0); } catch {}
   }
-  return Date.now() < clientQuotaCooldownUntil;
+  const activeUntil = Math.max(clientQuotaCooldownUntil, persistedUntil);
+  if (activeUntil <= Date.now()) {
+    clientQuotaCooldownUntil = 0;
+    if (typeof window !== 'undefined') { try { localStorage.removeItem('maxora_firestore_cooldown_until'); } catch {} }
+    return false;
+  }
+  return true;
 }
 
 export function detachFirestoreListeners() {
@@ -464,6 +469,7 @@ export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
     // 60-second in-memory backoff so subsequent requests can retry as soon as quota resets
     clientQuotaCooldownUntil = Date.now() + 60 * 1000;
+    if (typeof window !== 'undefined') { try { localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil)); } catch {} }
     // Cleanly detach active listeners
     detachFirestoreListeners();
 
