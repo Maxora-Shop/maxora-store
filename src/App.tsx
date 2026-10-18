@@ -3,7 +3,8 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { PriceRange } from './components/PriceFilter';
 import { ProductCard } from './components/ProductCard';
-const ProductDetailsPage = React.lazy(() => import('./components/ProductDetailsPage').then((m) => ({ default: m.ProductDetailsPage })));
+const loadProductDetailsPage = () => import('./components/ProductDetailsPage').then((m) => ({ default: m.ProductDetailsPage }));
+const ProductDetailsPage = React.lazy(loadProductDetailsPage);
 import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
 const CartDrawer = React.lazy(() => import('./components/CartDrawer').then((m) => ({ default: m.CartDrawer })));
 const CheckoutModal = React.lazy(() => import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal })));
@@ -67,6 +68,31 @@ import {
 } from './utils/taxonomy';
 
 export default function App() {
+  // Warm the product-details chunk once the homepage has had time to render.
+  // Importing the same module again when the modal opens reuses the loaded module.
+  useEffect(() => {
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const prefetch = () => {
+      if (cancelled) return;
+      void loadProductDetailsPage().catch(() => {
+        // A failed prefetch must not affect homepage use; React.lazy can retry on click.
+      });
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(prefetch, { timeout: 4000 });
+    } else {
+      timeoutId = setTimeout(prefetch, 2500);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && 'cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, []);
   // Settings State
   const [settings, setSettings] = useState<StoreSettings>(() => {
     return typeof window !== 'undefined' ? storeService.getCachedSettings() : INITIAL_SETTINGS;
