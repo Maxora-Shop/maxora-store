@@ -710,9 +710,23 @@ function registerNetworkSyncListeners() {
   });
 }
 
-// Start listeners immediately
-initRealtimeFirestoreListeners();
-initServerLiveSync();
+// Schedule network-heavy realtime sync after the storefront's first paint.
+let backgroundSyncScheduled = false;
+export function scheduleStoreBackgroundSync() {
+  if (typeof window === 'undefined' || backgroundSyncScheduled) return;
+  backgroundSyncScheduled = true;
+
+  const start = () => {
+    initRealtimeFirestoreListeners();
+    initServerLiveSync();
+  };
+
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(start, { timeout: 2000 });
+  } else {
+    window.setTimeout(start, 900);
+  }
+}
 
 // Check if online API is reachable
 const isInternalHost = typeof window !== 'undefined' && (
