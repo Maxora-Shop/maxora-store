@@ -3799,12 +3799,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
             </button>
 
+            {/* Payment & Accounts Direct Button */}
+            <button
+              type="button"
+              onClick={() => {
+                handleTabChange('settings');
+                setSettingsSubTab('payment');
+              }}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                currentTab === 'settings' && settingsSubTab === 'payment'
+                  ? 'bg-rose-600 text-white font-black shadow-md shadow-rose-600/30'
+                  : 'hover:bg-zinc-900 text-rose-400 hover:text-rose-300'
+              }`}
+            >
+              <CreditCard className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>Payment & Accounts</span>
+              <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-extrabold border border-rose-500/30">
+                বিকাশ/নগদ
+              </span>
+            </button>
+
             {/* Settings */}
             <button
               type="button"
               onClick={() => handleTabChange('settings')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                currentTab === 'settings'
+                currentTab === 'settings' && settingsSubTab !== 'payment'
                   ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
                   : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
               }`}
@@ -7113,12 +7133,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onClick={() => setSettingsSubTab('payment')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     settingsSubTab === 'payment'
-                      ? 'bg-white text-zinc-950 shadow-xs font-black'
-                      : 'text-zinc-600 hover:text-zinc-900'
+                      ? 'bg-rose-600 text-white shadow-xs font-black'
+                      : 'text-zinc-800 bg-rose-50/80 hover:bg-rose-100 hover:text-rose-900 border border-rose-200'
                   }`}
                 >
-                  <CreditCard className="w-3.5 h-3.5 text-rose-600" />
-                  💳 Payment Gateway
+                  <CreditCard className="w-3.5 h-3.5 text-rose-500" />
+                  💳 বিকাশ, নগদ ও ব্যাংক নম্বর (Payment)
                 </button>
               </div>
             </div>
@@ -8119,6 +8139,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <form onSubmit={handleSaveSettings} className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-xs space-y-5">
               {settingsSubTab === 'general' ? (
                 <>
+                  {/* Quick Payment Banner Link */}
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-rose-50 via-pink-50 to-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-black text-zinc-900">
+                          বিকাশ, নগদ ও ব্যাংক অ্যাকাউন্ট নম্বর এডিট করতে চান?
+                        </h4>
+                        <p className="text-[11px] text-zinc-600">
+                          কাস্টমার চেকআউটে প্রদর্শিত বিকাশ/নগদ নম্বর ও TrxID সেটিংস সরাসরি পেমেন্ট ট্যাবে রয়েছে।
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab('payment')}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap"
+                    >
+                      <span>💳 পেমেন্ট সেটিংসে যান &rarr;</span>
+                    </button>
+                  </div>
+
                   <div className="space-y-4">
                     <h3 className="text-xs font-black uppercase tracking-wider text-zinc-400">
                       Store Branding & Helpline
