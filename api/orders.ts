@@ -126,14 +126,29 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           updated_at: new Date().toISOString(),
         });
 
-        // 1. Save order to Firestore with timeout
-        await Promise.race([
-          setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
-        ]).catch((e) => console.warn('api/orders Firestore save note:', e));
+        // 1. Confirm the order write before reporting success or changing stock.
+        // A timeout must not be silently treated as a successful order.
+        try {
+          await Promise.race([
+            setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
+          ]);
+        } catch (writeError: any) {
+          console.error('api/orders Firestore order save failed:', writeError);
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = 503;
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Order could not be confirmed as saved. Please contact the shop before placing the order again.',
+            code: writeError?.code || 'ORDER_SAVE_UNCONFIRMED'
+          }));
+          return;
+        }
 
-        // 2. Save customer to Firestore (non-blocking)
-        setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true }).catch(() => {});
+        // 2. Save customer record only after the order write is confirmed (non-blocking).
+        setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true }).catch((e) => {
+          console.warn('api/orders customer save note:', e);
+        });
 
         // 3. Update stock for ordered products in Firestore
         if (Array.isArray(orderRecord.items)) {
