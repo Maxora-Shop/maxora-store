@@ -1706,6 +1706,8 @@ export const storeService = {
     payment_method?: string;
     payment_status?: string;
     transaction_id?: string;
+    payment_gateway?: string;
+    payment_details?: any;
     note?: string;
     items: Array<{
       product_id: string;
@@ -1769,6 +1771,8 @@ export const storeService = {
       payment_method?: string;
       payment_status?: string;
       transaction_id?: string;
+      payment_gateway?: string;
+      payment_details?: any;
       note?: string;
       items: Array<{
         product_id: string;
@@ -1911,7 +1915,8 @@ export const storeService = {
       payment_method: orderPayload.payment_method || 'Cash on Delivery',
       payment_status: orderPayload.payment_status || (orderPayload.payment_method?.includes('Online') ? 'Pending' : 'Pending'),
       transaction_id: orderPayload.transaction_id || '',
-      payment_gateway: orderPayload.payment_method?.includes('Online') ? 'uddoktapay' : 'cod',
+      payment_gateway: orderPayload.payment_gateway || (orderPayload.payment_method?.includes('Online') ? 'uddoktapay' : 'cod'),
+      payment_details: orderPayload.payment_details || undefined,
       note: orderPayload.note || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

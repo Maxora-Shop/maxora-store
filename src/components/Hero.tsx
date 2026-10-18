@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { preload } from 'react-dom';
 import {
   Truck,
   Check,
@@ -16,7 +15,6 @@ import {
 } from 'lucide-react';
 import { Product, StoreSettings, HeroBanner } from '../types';
 import { DEFAULT_HERO_BANNERS } from '../data/initialData';
-import { optimizeCloudinaryImage } from '../utils/cloudinaryImage';
 
 interface HeroProps {
   settings: StoreSettings;
@@ -171,24 +169,8 @@ export const Hero: React.FC<HeroProps> = ({
     slide.image1 ||
     slide.mobileBannerImage ||
     '';
-  const bannerImgSrc = optimizeCloudinaryImage(sanitizeImg(rawBannerImg), 700, 70);
-  // Always request a smaller Cloudinary asset for mobile, even when no separate
-  // mobile banner has been uploaded. Non-Cloudinary URLs remain unchanged.
-  const mobileBannerImgSrc = optimizeCloudinaryImage(
-    sanitizeImg(slide.mobileBannerImage || rawBannerImg),
-    400,
-    60,
-    'scale'
-  );
-
-  // Preload the active, responsive hero image as soon as its admin-configured URL is known.
-  // A static index.html preload cannot safely target a banner that may change in the admin panel.
-  if (typeof window !== 'undefined') {
-    const heroPreloadSrc = window.matchMedia('(max-width: 640px)').matches
-      ? mobileBannerImgSrc
-      : bannerImgSrc;
-    if (heroPreloadSrc) preload(heroPreloadSrc, { as: 'image', fetchPriority: 'high' });
-  }
+  const bannerImgSrc = sanitizeImg(rawBannerImg);
+  const mobileBannerImgSrc = sanitizeImg(slide.mobileBannerImage);
 
   return (
     <section className="my-3 sm:my-5 w-full">
@@ -355,14 +337,14 @@ export const Hero: React.FC<HeroProps> = ({
               /* Single Full Banner Image Mode */
               <div className="relative w-full max-w-lg aspect-16/10 rounded-2xl overflow-hidden shadow-xl border border-white/60">
                 <img
-                  src={optimizeCloudinaryImage(sanitizeImg(slide.singleBannerImage), 700, 70)}
+                  src={sanitizeImg(slide.singleBannerImage)}
                   alt={slide.titlePrimary}
                   width={640}
                   height={400}
                   className="w-full h-full object-cover"
                   fetchPriority={currentSlide === 0 ? "high" : "auto"}
                   decoding="async"
-                  onError={() => handleImageError(optimizeCloudinaryImage(sanitizeImg(slide.singleBannerImage), 700, 70))}
+                  onError={() => handleImageError(sanitizeImg(slide.singleBannerImage))}
                 />
               </div>
             ) : (

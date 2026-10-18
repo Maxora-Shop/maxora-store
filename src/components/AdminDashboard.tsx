@@ -81,6 +81,7 @@ import {
   Bell,
   FileSpreadsheet,
   CreditCard,
+  Landmark,
 } from 'lucide-react';
 
 const Facebook = ({ className }: { className?: string }) => (
@@ -7701,6 +7702,249 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ? 'সক্রিয় (Active)'
                         : 'কনফিগার করা হয়নি'}
                     </span>
+                  </div>
+                </div>
+
+                {/* =================================================================== */}
+                {/* 1. DIRECT MANUAL PAYMENT SETTINGS: bKash, Nagad, Bank Transfer       */}
+                {/* =================================================================== */}
+                <div className="p-5 sm:p-6 rounded-3xl border border-emerald-300/80 bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/40 space-y-5 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-emerald-100">
+                    <div>
+                      <h4 className="text-base font-black text-zinc-900 flex items-center gap-2">
+                        <Smartphone className="w-5 h-5 text-emerald-600" />
+                        <span>সরাসরি বিকাশ, নগদ ও ব্যাংক পেমেন্ট (Direct Account Numbers)</span>
+                      </h4>
+                      <p className="text-xs text-zinc-600 mt-0.5">
+                        চেকআউট পেজে কাস্টমার আপনার এই অ্যাকাউন্ট নম্বরগুলো দেখতে পাবে এবং টাকা পাঠিয়ে ট্রানজেকশন আইডি (TrxID) ইনপুট করবে।
+                      </p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-600 text-white shadow-2xs w-fit flex items-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>সরাসরি পেমেন্ট সিস্টেম</span>
+                    </span>
+                  </div>
+
+                  {/* bKash Configuration Box */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-xl bg-[#e2136e] text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                          bK
+                        </span>
+                        <div>
+                          <span className="font-black text-sm text-zinc-900 block">বিকাশ সরাসরি পেমেন্ট (bKash)</span>
+                          <span className="text-[11px] text-zinc-500">চেকআউট পেজে বিকাশ অ্যাকাউন্ট নম্বর প্রদর্শন করুন</span>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm.manual_bkash_enabled !== false}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, manual_bkash_enabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-zinc-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#e2136e]"></div>
+                      </label>
+                    </div>
+
+                    {settingsForm.manual_bkash_enabled !== false && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-zinc-100">
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            বিকাশ নম্বর (Phone Number) *
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bkash_number ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bkash_number: e.target.value })}
+                            placeholder="e.g. 01844932809"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#e2136e] font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            অ্যাকাউন্ট টাইপ (Account Type)
+                          </label>
+                          <select
+                            value={settingsForm.manual_bkash_type || 'Personal'}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bkash_type: e.target.value })}
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#e2136e] font-bold"
+                          >
+                            <option value="Personal">Personal (সেন্ড মানি)</option>
+                            <option value="Merchant">Merchant (পেমেন্ট)</option>
+                            <option value="Agent">Agent (ক্যাশ আউট)</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            কাস্টমারের জন্য পেমেন্ট নির্দেশনা (Instructions)
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bkash_instructions ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bkash_instructions: e.target.value })}
+                            placeholder="প্রদত্ত বিকাশ নম্বরে সেন্ড মানি করে TrxID নিচে লিখুন।"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#e2136e]"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Nagad Configuration Box */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-xl bg-[#f7941d] text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                          ন
+                        </span>
+                        <div>
+                          <span className="font-black text-sm text-zinc-900 block">নগদ সরাসরি পেমেন্ট (Nagad)</span>
+                          <span className="text-[11px] text-zinc-500">চেকআউট পেজে নগদ অ্যাকাউন্ট নম্বর প্রদর্শন করুন</span>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm.manual_nagad_enabled !== false}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, manual_nagad_enabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-zinc-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#f7941d]"></div>
+                      </label>
+                    </div>
+
+                    {settingsForm.manual_nagad_enabled !== false && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-zinc-100">
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            নগদ নম্বর (Phone Number) *
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_nagad_number ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_nagad_number: e.target.value })}
+                            placeholder="e.g. 01844932809"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#f7941d] font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            অ্যাকাউন্ট টাইপ (Account Type)
+                          </label>
+                          <select
+                            value={settingsForm.manual_nagad_type || 'Personal'}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_nagad_type: e.target.value })}
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#f7941d] font-bold"
+                          >
+                            <option value="Personal">Personal (সেন্ড মানি)</option>
+                            <option value="Merchant">Merchant (পেমেন্ট)</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            কাস্টমারের জন্য পেমেন্ট নির্দেশনা (Instructions)
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_nagad_instructions ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_nagad_instructions: e.target.value })}
+                            placeholder="প্রদত্ত নগদ নম্বরে Send Money করে TrxID নিচে লিখুন।"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#f7941d]"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bank Transfer Configuration Box */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                          <Landmark className="w-4 h-4 text-emerald-400" />
+                        </span>
+                        <div>
+                          <span className="font-black text-sm text-zinc-900 block">ব্যাংক অ্যাকাউন্ট / কার্ড ট্রান্সফার (Bank Transfer)</span>
+                          <span className="text-[11px] text-zinc-500">ব্যাংক ডিপোজিট বা অনলাইন ফান্ড ট্রান্সফার</span>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm.manual_bank_enabled === true}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_enabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-zinc-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-slate-900"></div>
+                      </label>
+                    </div>
+
+                    {settingsForm.manual_bank_enabled === true && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-zinc-100">
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            ব্যাংকের নাম (Bank Name) *
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bank_name ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_name: e.target.value })}
+                            placeholder="e.g. The City Bank Ltd. / DBBL"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-slate-900 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            অ্যাকাউন্ট হোল্ডারের নাম (Account Name) *
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bank_account_name ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_account_name: e.target.value })}
+                            placeholder="e.g. Maxora Bangladesh"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-slate-900 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            অ্যাকাউন্ট নম্বর (Account Number) *
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bank_account_number ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_account_number: e.target.value })}
+                            placeholder="e.g. 1102938475001"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-slate-900 font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            শাখা ও রাউটিং (Branch / Routing)
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bank_branch ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_branch: e.target.value })}
+                            placeholder="e.g. Dhanmondi Branch, Routing: 225261728"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-slate-900"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-black text-zinc-800 mb-1">
+                            কাস্টমারের জন্য পেমেন্ট নির্দেশনা (Instructions)
+                          </label>
+                          <input
+                            type="text"
+                            value={settingsForm.manual_bank_instructions ?? ''}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, manual_bank_instructions: e.target.value })}
+                            placeholder="ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।"
+                            className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-slate-900"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

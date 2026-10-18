@@ -395,6 +395,22 @@ export interface StoreSettings {
   uddoktapay_enabled?: boolean;
   uddoktapay_api_key?: string;
   uddoktapay_api_url?: string;
+  // Direct Manual Payment Options (bKash, Nagad, Bank Transfer)
+  manual_bkash_enabled?: boolean;
+  manual_bkash_number?: string;
+  manual_bkash_type?: 'Personal' | 'Merchant' | 'Agent' | string;
+  manual_bkash_instructions?: string;
+  manual_nagad_enabled?: boolean;
+  manual_nagad_number?: string;
+  manual_nagad_type?: 'Personal' | 'Merchant' | string;
+  manual_nagad_instructions?: string;
+  manual_bank_enabled?: boolean;
+  manual_bank_name?: string;
+  manual_bank_account_name?: string;
+  manual_bank_account_number?: string;
+  manual_bank_branch?: string;
+  manual_bank_routing?: string;
+  manual_bank_instructions?: string;
   updated_at?: string;
 }
 

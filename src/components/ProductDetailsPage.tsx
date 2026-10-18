@@ -37,7 +37,6 @@ import {
 } from 'lucide-react';
 import { Product, StoreSettings, Review, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
-import { optimizeCloudinaryImage } from '../utils/cloudinaryImage';
 import { parseProductDescription } from '../utils/productDescriptionParser';
 import { sanitizeSafeHtml } from '../utils/sanitizeHtml';
 import { storeService } from '../services/storeService';
@@ -652,7 +651,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             {/* Main Product Image with zoom effect */}
             <div className="w-full h-full p-4 sm:p-6 flex items-center justify-center overflow-hidden">
               <img
-                src={optimizeCloudinaryImage(selectedImage, 700, 70)}
+                src={selectedImage}
                 alt={product.name}
                 width={700}
                 height={700}
@@ -746,7 +745,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
                       }`}
                     >
                       <img
-                        src={optimizeCloudinaryImage(img, 300, 70)}
+                        src={img}
                         alt={`${product.name} - image ${idx + 1}`}
                         width={80}
                         height={80}
@@ -1809,7 +1808,7 @@ export const ProductDetailsPage: React.FC<ProductDetailsPageProps> = ({
             className="max-w-4xl max-h-[85vh] w-full h-full flex items-center justify-center p-4"
           >
             <img
-              src={optimizeCloudinaryImage(galleryImages[lightboxIndex] || selectedImage, 700, 70)}
+              src={galleryImages[lightboxIndex] || selectedImage}
               alt={product.name}
               className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
             />

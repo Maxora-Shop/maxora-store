@@ -42,12 +42,6 @@ export default defineConfig(() => {
             if (id.includes('userProducts.json')) {
               return 'catalog-data';
             }
-            if (id.includes('node_modules/@google/genai')) {
-              return 'vendor-google-genai';
-            }
-            if (id.includes('node_modules/xlsx')) {
-              return 'vendor-xlsx';
-            }
             if (id.includes('node_modules/firebase')) {
               return 'vendor-firebase';
             }
