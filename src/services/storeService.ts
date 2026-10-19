@@ -21,6 +21,7 @@ import {
 
 const SETTINGS_KEY = 'maxora_settings_v1';
 const PRODUCTS_KEY = 'maxora_products_v1';
+const PRODUCTS_CACHE_UNAVAILABLE_KEY = 'maxora_products_cache_unavailable_v1';
 const ORDERS_KEY = 'maxora_orders_v1';
 const CUSTOMERS_KEY = 'maxora_customers_v1';
 const CURRENT_CUSTOMER_KEY = 'maxora_current_customer_v1';
@@ -297,34 +298,30 @@ export function initLocalStorage(): void {
     setLocal(SETTINGS_KEY, INITIAL_SETTINGS);
   }
   if (!localStorage.getItem(PRODUCTS_KEY)) {
-    const initialProds = INITIAL_PRODUCTS.filter(
-      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
-    );
-    setLocal(PRODUCTS_KEY, initialProds);
+    // If the last Firestore product sync failed due to quota, fail closed:
+    // do not repopulate the storefront with bundled/demo or stale products.
+    if (localStorage.getItem(PRODUCTS_CACHE_UNAVAILABLE_KEY) === '1') {
+      setLocal(PRODUCTS_KEY, []);
+    } else {
+      const initialProds = INITIAL_PRODUCTS.filter(
+        (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+      );
+      setLocal(PRODUCTS_KEY, initialProds);
+    }
+  } else if (localStorage.getItem(PRODUCTS_CACHE_UNAVAILABLE_KEY) === '1') {
+    // Keep an explicitly empty cache empty until Firestore provides an authoritative snapshot.
+    setLocal(PRODUCTS_KEY, []);
   } else {
+    // Preserve the existing local cache, but never merge INITIAL_PRODUCTS back into it.
+    // Re-merging bundled products on every page load resurrects products deleted in Firestore.
     const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
-    const pMap = new Map<string, Product>();
-    // 1. Populate baseline catalog from INITIAL_PRODUCTS
-    if (Array.isArray(INITIAL_PRODUCTS)) {
-      INITIAL_PRODUCTS.forEach((p) => {
-        const id = String(p.id || p.sku || p.slug || '');
-        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
-          pMap.set(id, p);
-        }
-      });
-    }
-    // 2. Merge existing local storage products (e.g. newly uploaded fan or edits)
-    if (Array.isArray(existingProds) && existingProds.length > 0) {
-      existingProds.forEach((p) => {
-        const id = String(p.id || p.sku || p.slug || '');
-        if (id && !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))) {
-          pMap.set(id, p);
-        }
-      });
-    }
-    const merged = Array.from(pMap.values());
-    merged.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    setLocal(PRODUCTS_KEY, merged);
+    const filtered = (Array.isArray(existingProds) ? existingProds : []).filter((p) => {
+      const id = String(p.id || '').toLowerCase();
+      const sku = String(p.sku || '').toLowerCase();
+      const slug = String(p.slug || '').toLowerCase();
+      return id && !deletedProductIds.has(id) && (!sku || !deletedProductIds.has(sku)) && (!slug || !deletedProductIds.has(slug));
+    });
+    setLocal(PRODUCTS_KEY, filtered);
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     setLocal(ORDERS_KEY, []);
@@ -430,12 +427,17 @@ export function clearFirestoreCooldown() {
 }
 
 export function isClientQuotaCooldownActive(): boolean {
+  let persistedUntil = 0;
   if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('maxora_firestore_cooldown_until');
-    } catch {}
+    try { persistedUntil = Number(localStorage.getItem('maxora_firestore_cooldown_until') || 0); } catch {}
   }
-  return Date.now() < clientQuotaCooldownUntil;
+  const activeUntil = Math.max(clientQuotaCooldownUntil, persistedUntil);
+  if (activeUntil <= Date.now()) {
+    clientQuotaCooldownUntil = 0;
+    if (typeof window !== 'undefined') { try { localStorage.removeItem('maxora_firestore_cooldown_until'); } catch {} }
+    return false;
+  }
+  return true;
 }
 
 export function detachFirestoreListeners() {
@@ -467,6 +469,7 @@ export function handleStoreFirestoreError(context: string, err: any) {
   if (isQuotaExceededError(err)) {
     // 60-second in-memory backoff so subsequent requests can retry as soon as quota resets
     clientQuotaCooldownUntil = Date.now() + 60 * 1000;
+    if (typeof window !== 'undefined') { try { localStorage.setItem('maxora_firestore_cooldown_until', String(clientQuotaCooldownUntil)); } catch {} }
     // Cleanly detach active listeners
     detachFirestoreListeners();
 
@@ -506,6 +509,7 @@ export function initRealtimeFirestoreListeners() {
       const deletedProductIds = getDeletedProductIds();
       if (snapshot.empty) {
         setLocal(PRODUCTS_KEY, []);
+        try { localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY); } catch {}
         notifyProductsChanged();
         return;
       }
@@ -524,31 +528,21 @@ export function initRealtimeFirestoreListeners() {
         prodMap.set(pId, { ...d, id: pId });
       });
 
-      // Merge any local products (e.g. freshly uploaded products from admin) that are not marked as deleted
-      const local = getLocal<Product[]>(PRODUCTS_KEY, []);
-      if (Array.isArray(local) && local.length > 0) {
-        local.forEach((p) => {
-          const pId = String(p.id || '');
-          const pSku = String(p.sku || '');
-          const pSlug = String(p.slug || '');
-          const pIdLower = pId.toLowerCase();
-          const pSkuLower = pSku.toLowerCase();
-          const pSlugLower = pSlug.toLowerCase();
-          if (pId && !deletedProductIds.has(pIdLower) && (!pSkuLower || !deletedProductIds.has(pSkuLower)) && (!pSlugLower || !deletedProductIds.has(pSlugLower))) {
-            if (!prodMap.has(pId)) {
-              prodMap.set(pId, p);
-            }
-          }
-        });
-      }
-
+      // Firestore is authoritative after a successful snapshot. Do not merge local-only
+      // products back in: deleted/outdated cached products would reappear on the storefront.
       const prods = Array.from(prodMap.values());
       prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      if (prods.length > 0) {
-        setLocal(PRODUCTS_KEY, prods);
-      }
+      setLocal(PRODUCTS_KEY, prods);
+      try { localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY); } catch {}
       notifyProductsChanged();
     }, (err) => {
+      if (isQuotaExceededError(err) && typeof window !== 'undefined') {
+        // Quota means we cannot know which cached products are still current.
+        // Hide the stale catalogue rather than showing deleted/out-of-stock items again.
+        setLocal(PRODUCTS_KEY, []);
+        try { localStorage.setItem(PRODUCTS_CACHE_UNAVAILABLE_KEY, '1'); } catch {}
+        notifyProductsChanged();
+      }
       handleStoreFirestoreError('Products snapshot', err);
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('maxora_products_fetch_failed', { detail: { error: err?.message || String(err) } }));

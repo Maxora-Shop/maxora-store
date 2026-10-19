@@ -106,8 +106,27 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
           updated_at: new Date().toISOString(),
         });
 
-        await setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true });
-        await setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true });
+        // Do not report success unless the order write is confirmed.
+        try {
+          await Promise.race([
+            setDoc(doc(db, 'orders', orderId), orderRecord, { merge: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore write timeout')), 8000))
+          ]);
+        } catch (writeError: any) {
+          console.error('api/orders Firestore order save failed:', writeError);
+          res.setHeader('Content-Type', 'application/json');
+          res.statusCode = 503;
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Order could not be confirmed as saved. Please contact the shop before placing the order again.',
+            code: writeError?.code || 'ORDER_SAVE_UNCONFIRMED'
+          }));
+          return;
+        }
+        // Customer record is secondary; it must not block a confirmed order.
+        setDoc(doc(db, 'customers', customerId), customerRecord, { merge: true }).catch((e) => {
+          console.warn('api/orders customer save note:', e);
+        });
 
         if (Array.isArray(orderRecord.items)) {
           for (const item of orderRecord.items) {
