@@ -112,6 +112,7 @@ export interface Product {
   product_link?: string;
   buying_price: number;
   selling_price: number;
+  regular_price?: number;
   discount: number;
   final_price?: number;
   stock: number;
@@ -387,6 +388,26 @@ export interface StoreSettings {
   pathao_password?: string;
   pathao_store_id?: string;
   redx_enabled?: boolean;
+  // Online Payment Gateway (UddoktaPay / bKash, Nagad, Rocket)
+  uddoktapay_enabled?: boolean;
+  uddoktapay_api_key?: string;
+  uddoktapay_api_url?: string;
+  // Direct Manual Payment Options (bKash, Nagad, Bank Transfer)
+  manual_bkash_enabled?: boolean;
+  manual_bkash_number?: string;
+  manual_bkash_type?: 'Personal' | 'Merchant' | 'Agent' | string;
+  manual_bkash_instructions?: string;
+  manual_nagad_enabled?: boolean;
+  manual_nagad_number?: string;
+  manual_nagad_type?: 'Personal' | 'Merchant' | string;
+  manual_nagad_instructions?: string;
+  manual_bank_enabled?: boolean;
+  manual_bank_name?: string;
+  manual_bank_account_name?: string;
+  manual_bank_account_number?: string;
+  manual_bank_branch?: string;
+  manual_bank_routing?: string;
+  manual_bank_instructions?: string;
   updated_at?: string;
 }
 

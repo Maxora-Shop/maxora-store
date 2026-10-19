@@ -4218,6 +4218,19 @@ export const storeService = {
     return { success: true, affectedProductsCount: affectedCount };
   },
 
+  async testUddoktaPayConnection(apiKey?: string, apiUrl?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/admin/payment/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, apiUrl })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Connection failed' };
+    }
+  },
+
   clearFirestoreCooldown() {
     clearFirestoreCooldown();
   },

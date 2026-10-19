@@ -721,10 +721,10 @@ export function scheduleStoreBackgroundSync() {
     initServerLiveSync();
   };
 
-  if ('requestIdleCallback' in window) {
+  if (typeof (window as any).requestIdleCallback === 'function') {
     (window as any).requestIdleCallback(start, { timeout: 2000 });
   } else {
-    window.setTimeout(start, 900);
+    setTimeout(start, 900);
   }
 }
 

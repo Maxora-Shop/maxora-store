@@ -652,6 +652,25 @@ export const INITIAL_SETTINGS: StoreSettings = {
   ai_faqs: DEFAULT_AI_FAQS,
   ai_custom_commands: DEFAULT_AI_CUSTOM_COMMANDS,
   ai_system_instructions: "কাস্টমারদের সাথে সর্বদা সর্বোচ্চ বিনম্র ও প্রফেশনাল আচরণ করুন। Maxora-এর সব পণ্য ১০০% আসল ও কোয়ালিটি নিশ্চিত।",
+  // Payment Options
+  uddoktapay_enabled: false,
+  uddoktapay_api_key: "",
+  uddoktapay_api_url: "https://pay.maxorabd.com/api/checkout-v2",
+  manual_bkash_enabled: true,
+  manual_bkash_number: "01844932809",
+  manual_bkash_type: "Personal",
+  manual_bkash_instructions: "প্রদত্ত বিকাশ নম্বরে সেন্ড মানি (Send Money) করে TrxID নিচে লিখুন।",
+  manual_nagad_enabled: true,
+  manual_nagad_number: "01844932809",
+  manual_nagad_type: "Personal",
+  manual_nagad_instructions: "প্রদত্ত নগদ নম্বরে Send Money করে TrxID নিচে লিখুন।",
+  manual_bank_enabled: true,
+  manual_bank_name: "The City Bank Ltd.",
+  manual_bank_account_name: "Maxora Bangladesh",
+  manual_bank_account_number: "1102938475001",
+  manual_bank_branch: "Principal Branch, Dhaka",
+  manual_bank_routing: "225261728",
+  manual_bank_instructions: "ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।",
 };
 
 export const INITIAL_PRODUCTS: Product[] = (userProductsJson as Product[]);
