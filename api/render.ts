@@ -555,6 +555,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             '@type': 'Organization',
             name: 'Maxora Shop Bangladesh',
           },
+          hasMerchantReturnPolicy: {
+            '@type': 'MerchantReturnPolicy',
+            applicableCountry: 'BD',
+            returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+            merchantReturnDays: 1,
+            refundType: 'https://schema.org/ExchangeRefund',
+            itemDefectReturnFees: 'https://schema.org/FreeReturn',
+          },
         },
       };
 

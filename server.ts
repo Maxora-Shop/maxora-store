@@ -4199,7 +4199,15 @@ async function getProductSsrHtml(rawSlug: string): Promise<{ html: string; statu
       priceValidUntil: '2027-12-31',
       itemCondition: 'https://schema.org/NewCondition',
       availability: Number(product.stock || 1) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-      seller: { '@type': 'Organization', name: 'Maxora Shop Bangladesh' }
+      seller: { '@type': 'Organization', name: 'Maxora Shop Bangladesh' },
+      hasMerchantReturnPolicy: {
+        '@type': 'MerchantReturnPolicy',
+        applicableCountry: 'BD',
+        returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        merchantReturnDays: 1,
+        refundType: 'https://schema.org/ExchangeRefund',
+        itemDefectReturnFees: 'https://schema.org/FreeReturn'
+      }
     }
   };
 
