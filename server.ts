@@ -553,6 +553,10 @@ function saveDB() {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
     productIndexer.rebuild(db.products);
+    try {
+      const upPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+      fs.writeFileSync(upPath, JSON.stringify(db.products, null, 2));
+    } catch {}
   } catch (e) {
     console.error("Error saving DB:", e);
   }

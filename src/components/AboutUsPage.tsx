@@ -42,8 +42,19 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
   storePhone,
   storeEmail
 }) => {
-  const [data, setData] = useState<AboutPageData>(defaultAboutPageData);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [data, setData] = useState<AboutPageData>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('maxora_about_page_v1');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.title) return parsed;
+        }
+      } catch {}
+    }
+    return defaultAboutPageData;
+  });
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Fetch dynamic About Us data from backend API and Firestore
   useEffect(() => {
@@ -88,6 +99,9 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
 
         if (fetchedData && isMounted) {
           setData(fetchedData);
+          try {
+            localStorage.setItem('maxora_about_page_v1', JSON.stringify(fetchedData));
+          } catch {}
         }
       } catch (err) {
         console.warn('Could not fetch dynamic About Us data, using defaults:', err);
@@ -139,7 +153,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
   };
 
   // Merge contact info with props if missing
-  const activePhone = data.contact_info?.phone || storePhone || '01700-123456';
+  const activePhone = data.contact_info?.phone || storePhone || '01635451746';
   const activeEmail = data.contact_info?.email || storeEmail || 'support@maxorabd.com';
   const activeAddress = data.contact_info?.address || 'বাড়ি #১২, রোড #০৪, সেক্টর #১১, উত্তরা, ঢাকা-১২৩০, বাংলাদেশ';
   const activeWhatsApp = data.contact_info?.whatsapp || activePhone;

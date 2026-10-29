@@ -240,6 +240,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
       }
 
+      if (prodMap.size === 0) {
+        try {
+          const upPath = path.join(process.cwd(), 'src', 'data', 'userProducts.json');
+          if (fs.existsSync(upPath)) {
+            const upData = JSON.parse(fs.readFileSync(upPath, 'utf8'));
+            if (Array.isArray(upData)) {
+              upData.forEach((p: any) => prodMap.set(String(p.id || p.sku || p.slug), p));
+            }
+          }
+        } catch {}
+      }
+
       // 2. Query Firestore and overlay with timeout guard
       try {
         const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);

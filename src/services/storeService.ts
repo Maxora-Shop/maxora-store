@@ -298,30 +298,27 @@ export function initLocalStorage(): void {
     setLocal(SETTINGS_KEY, INITIAL_SETTINGS);
   }
   if (!localStorage.getItem(PRODUCTS_KEY)) {
-    // If the last Firestore product sync failed due to quota, fail closed:
-    // do not repopulate the storefront with bundled/demo or stale products.
-    if (localStorage.getItem(PRODUCTS_CACHE_UNAVAILABLE_KEY) === '1') {
-      setLocal(PRODUCTS_KEY, []);
-    } else {
+    const initialProds = INITIAL_PRODUCTS.filter(
+      (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
+    );
+    setLocal(PRODUCTS_KEY, initialProds);
+  } else {
+    // Preserve the existing local cache, but if it is empty, restore INITIAL_PRODUCTS
+    const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
+    if (!Array.isArray(existingProds) || existingProds.length === 0) {
       const initialProds = INITIAL_PRODUCTS.filter(
         (p) => !deletedProductIds.has(String(p.id)) && (!p.sku || !deletedProductIds.has(String(p.sku))) && (!p.slug || !deletedProductIds.has(String(p.slug)))
       );
       setLocal(PRODUCTS_KEY, initialProds);
+    } else {
+      const filtered = existingProds.filter((p) => {
+        const id = String(p.id || '').toLowerCase();
+        const sku = String(p.sku || '').toLowerCase();
+        const slug = String(p.slug || '').toLowerCase();
+        return id && !deletedProductIds.has(id) && (!sku || !deletedProductIds.has(sku)) && (!slug || !deletedProductIds.has(slug));
+      });
+      setLocal(PRODUCTS_KEY, filtered.length > 0 ? filtered : INITIAL_PRODUCTS);
     }
-  } else if (localStorage.getItem(PRODUCTS_CACHE_UNAVAILABLE_KEY) === '1') {
-    // Keep an explicitly empty cache empty until Firestore provides an authoritative snapshot.
-    setLocal(PRODUCTS_KEY, []);
-  } else {
-    // Preserve the existing local cache, but never merge INITIAL_PRODUCTS back into it.
-    // Re-merging bundled products on every page load resurrects products deleted in Firestore.
-    const existingProds = getLocal<Product[]>(PRODUCTS_KEY, []);
-    const filtered = (Array.isArray(existingProds) ? existingProds : []).filter((p) => {
-      const id = String(p.id || '').toLowerCase();
-      const sku = String(p.sku || '').toLowerCase();
-      const slug = String(p.slug || '').toLowerCase();
-      return id && !deletedProductIds.has(id) && (!sku || !deletedProductIds.has(sku)) && (!slug || !deletedProductIds.has(slug));
-    });
-    setLocal(PRODUCTS_KEY, filtered);
   }
   if (!localStorage.getItem(ORDERS_KEY)) {
     setLocal(ORDERS_KEY, []);
@@ -537,11 +534,19 @@ export function initRealtimeFirestoreListeners() {
       notifyProductsChanged();
     }, (err) => {
       if (isQuotaExceededError(err) && typeof window !== 'undefined') {
-        // Quota means we cannot know which cached products are still current.
-        // Hide the stale catalogue rather than showing deleted/out-of-stock items again.
-        setLocal(PRODUCTS_KEY, []);
-        try { localStorage.setItem(PRODUCTS_CACHE_UNAVAILABLE_KEY, '1'); } catch {}
-        notifyProductsChanged();
+        // Fallback to local server REST API immediately so products are never wiped out
+        try {
+          localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY);
+        } catch {}
+        fetch('/api/products?all=true')
+          .then((res) => res.json())
+          .then((data) => {
+            if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
+              setLocal(PRODUCTS_KEY, data.products);
+              notifyProductsChanged();
+            }
+          })
+          .catch(() => {});
       }
       handleStoreFirestoreError('Products snapshot', err);
       if (typeof window !== 'undefined') {
