@@ -1,6 +1,7 @@
 import React from 'react';
 import { Award, ArrowRight, Star, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
+import { prefetchProduct } from '../utils/prefetch';
 
 interface BestSellersSectionProps {
   products: Product[];
@@ -92,6 +93,9 @@ export const BestSellersSection: React.FC<BestSellersSectionProps> = ({
               <div
                 key={product.id}
                 onClick={() => onQuickView(product)}
+                onMouseEnter={() => prefetchProduct(product)}
+                onPointerEnter={() => prefetchProduct(product)}
+                onTouchStart={() => prefetchProduct(product)}
                 className="group p-2.5 rounded-xl border border-zinc-100 bg-zinc-50/50 hover:bg-white hover:border-zinc-300 transition-all flex items-center gap-3 cursor-pointer shadow-2xs hover:shadow-sm"
               >
                 {/* Product Thumbnail */}

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
+import { prefetchProduct } from '../utils/prefetch';
 
 interface PromoTripleSectionProps {
   products: Product[];
@@ -369,6 +370,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                   <div
                     key={product.id || `hd-${idx}`}
                     onClick={() => handleItemClick(product)}
+                    onMouseEnter={() => prefetchProduct(product as Product)}
+                    onPointerEnter={() => prefetchProduct(product as Product)}
+                    onTouchStart={() => prefetchProduct(product as Product)}
                     className="bg-white rounded-xl border border-rose-100/80 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>
@@ -552,6 +556,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                   <div
                     key={product.id || `fs-${idx}`}
                     onClick={() => handleItemClick(product)}
+                    onMouseEnter={() => prefetchProduct(product as Product)}
+                    onPointerEnter={() => prefetchProduct(product as Product)}
+                    onTouchStart={() => prefetchProduct(product as Product)}
                     className="bg-white text-zinc-900 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>
@@ -678,6 +685,9 @@ export const PromoTripleSection: React.FC<PromoTripleSectionProps> = ({
                   <div
                     key={product.id || `na-${idx}`}
                     onClick={() => handleItemClick(product)}
+                    onMouseEnter={() => prefetchProduct(product as Product)}
+                    onPointerEnter={() => prefetchProduct(product as Product)}
+                    onTouchStart={() => prefetchProduct(product as Product)}
                     className="bg-white rounded-xl border border-zinc-100 p-2 sm:p-2.5 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer group"
                   >
                     <div>

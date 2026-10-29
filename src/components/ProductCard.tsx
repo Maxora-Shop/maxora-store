@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ShoppingBag, ShoppingCart, Eye, Check, Star, Heart, ExternalLink, Package, Zap, AlertTriangle, Flame } from 'lucide-react';
 import { Product, ProductRatingStats } from '../types';
 import { getProductSlug } from '../utils/seo';
+import { prefetchProduct } from '../utils/prefetch';
 
 interface ProductCardProps {
   product: Product;
@@ -12,6 +13,7 @@ interface ProductCardProps {
   ratingStats?: ProductRatingStats;
   isWishlisted?: boolean;
   onToggleWishlist?: (product: Product) => void;
+  isPriority?: boolean;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -23,6 +25,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   ratingStats,
   isWishlisted = false,
   onToggleWishlist,
+  isPriority = false,
 }) => {
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -42,6 +45,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Calculate discount percentage if applicable
   const discountPercent = sellingPrice > 0 && discount > 0 ? Math.round((discount / sellingPrice) * 100) : 0;
 
+  const handlePrefetch = useCallback(() => {
+    prefetchProduct(product);
+  }, [product]);
+
   const handleProductLinkClick = (e: React.MouseEvent<HTMLElement>) => {
     // If user clicked with Ctrl/Cmd or middle mouse, let browser open new tab natively
     if (e.metaKey || e.ctrlKey || e.button === 1) {
@@ -56,6 +63,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <div
       onClick={handleProductLinkClick}
+      onMouseEnter={handlePrefetch}
+      onPointerEnter={handlePrefetch}
+      onTouchStart={handlePrefetch}
       className={`group bg-white rounded-2xl border ${isLowStock ? 'border-amber-300/80 hover:border-amber-400' : 'border-zinc-200/90'} overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col justify-between hover:-translate-y-0.5 h-full w-full min-w-0 cursor-pointer`}
     >
       {/* Product Image Area */}
@@ -74,7 +84,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               width={360}
               height={360}
               className="max-w-full max-h-full w-auto h-auto object-contain group-hover/image:scale-105 transition-transform duration-300"
-              loading="lazy"
+              loading={isPriority ? "eager" : "lazy"}
+              fetchPriority={isPriority ? "high" : "auto"}
               decoding="async"
               onError={() => setImageFailed(true)}
             />

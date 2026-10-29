@@ -1122,17 +1122,20 @@ async function backgroundSyncProducts(force = false) {
 // GET /api/products (Public customer endpoint - Live Sub-millisecond < 1ms real-time response)
 app.get('/api/products', (req, res) => {
   // Fire background sync asynchronously without blocking client response
-  backgroundSyncProducts().catch(() => {});
+  // High-performance micro-caching for customer storefront with instant stale-while-revalidate
+  const returnAll = req.query.all === 'true' || req.query.admin === 'true';
+  const isAdminReq = returnAll || Boolean(req.headers['x-admin-token'] || req.headers['authorization']);
 
-  // Guaranteed no-cache live response for instant real-time product updates
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
+  if (isAdminReq) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+  }
 
   const search = (req.query.search as string || '').toLowerCase().trim();
   const category = (req.query.category as string || '').trim();
-  const returnAll = req.query.all === 'true' || req.query.admin === 'true';
 
   let products: any[];
 
@@ -1167,9 +1170,7 @@ app.get('/api/products/:id', (req, res) => {
     return res.status(404).json({ success: false, error: "Product not found." });
   }
 
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
   return res.json({
     success: true,
     product
@@ -4549,9 +4550,7 @@ app.get('/product/:slug', async (req, res, next) => {
   const result = await getProductSsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
     return res.status(result.status).send(result.html);
   }
   next();
@@ -4562,9 +4561,7 @@ app.get('/category/:catSlug/:subSlug', (req, res, next) => {
   const result = getCategorySsrHtml(req.params.catSlug, req.params.subSlug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
     return res.status(result.status).send(result.html);
   }
   next();
@@ -4574,9 +4571,7 @@ app.get('/category/:slug', (req, res, next) => {
   const result = getCategorySsrHtml(req.params.slug);
   if (result) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
     return res.status(result.status).send(result.html);
   }
   next();

@@ -24,6 +24,7 @@ import {
   ArrowRight,
   Tag,
 } from 'lucide-react';
+import { prefetchProduct } from '../utils/prefetch';
 import { StoreSettings, Category, Product, Customer } from '../types';
 import { TaxonomyCategory, TaxonomyFilterState, matchesTaxonomyField } from '../utils/taxonomy';
 import {
@@ -459,6 +460,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                         key={prod.id}
                         type="button"
                         onClick={() => handleSelectInstantProduct(prod)}
+                        onMouseEnter={() => prefetchProduct(prod)}
+                        onPointerEnter={() => prefetchProduct(prod)}
+                        onTouchStart={() => prefetchProduct(prod)}
                         aria-label={`View ${prod.name}`}
                         className="w-full text-left p-3 hover:bg-emerald-50/50 flex items-center gap-3 transition-colors cursor-pointer group"
                       >

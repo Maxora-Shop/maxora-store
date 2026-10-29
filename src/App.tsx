@@ -6,12 +6,19 @@ import { ProductCard } from './components/ProductCard';
 import { ProductDetailsPage } from './components/ProductDetailsPage';
 import { ProductDetailsSkeleton } from './components/ProductDetailsSkeleton';
 import { CartDrawer } from './components/CartDrawer';
-import { CheckoutModal } from './components/CheckoutModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { SEOHead } from './components/SEOHead';
-import { AboutUsPage } from './components/AboutUsPage';
 
-// Customer Modals (loaded on-demand)
+// Heavy & Customer Modals (loaded on-demand to minimize initial bundle size and maximize load speed)
+const CheckoutModal = React.lazy(() =>
+  import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
+);
+const AboutUsPage = React.lazy(() =>
+  import('./components/AboutUsPage').then((m) => ({ default: m.AboutUsPage }))
+);
+const SavedItemsDrawer = React.lazy(() =>
+  import('./components/SavedItemsDrawer').then((m) => ({ default: m.SavedItemsDrawer }))
+);
 const CustomerAccountModal = React.lazy(() =>
   import('./components/CustomerAccountModal').then((m) => ({ default: m.CustomerAccountModal }))
 );
@@ -52,7 +59,6 @@ import {
 import { Truck, ShieldCheck, Phone, MapPin, ShoppingBag, AlertCircle, Heart, ChevronRight, Home, Tag, PackageCheck, Star, Filter, CheckCircle2, Sparkles, CreditCard, X, Flame, Zap } from 'lucide-react';
 import { getProductSlug, findProductBySlugOrId, generateSlug } from './utils/seo';
 import { getStoredWishlist, toggleWishlistProduct, clearStoredWishlist } from './utils/wishlist';
-import { SavedItemsDrawer } from './components/SavedItemsDrawer';
 import { useTaxonomy } from './context/TaxonomyContext';
 import {
   isProductInCategory,
@@ -877,7 +883,7 @@ export default function App() {
         window.history.pushState({ slug, productId: product.id }, '', newPath);
       }
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
     // Fire Ad Pixels ViewContent event for product page views
     pixelService.trackViewContent(product);
   };
@@ -901,7 +907,7 @@ export default function App() {
         window.history.pushState({}, '', '/');
       }
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   };
 
   const handleSelectBrand = (brandName: string) => {
@@ -1723,25 +1729,27 @@ export default function App() {
           </div>
         )}
         {isAboutUsOpen ? (
-          <AboutUsPage
-            onBackToStore={() => {
-              setIsAboutUsOpen(false);
-              if (window.location.hash === '#about' || window.location.hash === '#about-us') {
-                window.history.pushState(null, '', window.location.pathname);
-              }
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onExploreProducts={() => {
-              setIsAboutUsOpen(false);
-              if (window.location.hash === '#about' || window.location.hash === '#about-us') {
-                window.history.pushState(null, '', window.location.pathname);
-              }
-              scrollToProducts();
-            }}
-            storeName={settings.store_name}
-            storePhone={settings.phone}
-            storeEmail={settings.email}
-          />
+          <React.Suspense fallback={null}>
+            <AboutUsPage
+              onBackToStore={() => {
+                setIsAboutUsOpen(false);
+                if (window.location.hash === '#about' || window.location.hash === '#about-us') {
+                  window.history.pushState(null, '', window.location.pathname);
+                }
+                window.scrollTo({ top: 0, behavior: 'instant' as any });
+              }}
+              onExploreProducts={() => {
+                setIsAboutUsOpen(false);
+                if (window.location.hash === '#about' || window.location.hash === '#about-us') {
+                  window.history.pushState(null, '', window.location.pathname);
+                }
+                scrollToProducts();
+              }}
+              storeName={settings.store_name}
+              storePhone={settings.phone}
+              storeEmail={settings.email}
+            />
+          </React.Suspense>
         ) : quickViewProduct ? (
           <ProductDetailsPage
             product={quickViewProduct}
@@ -2230,10 +2238,11 @@ export default function App() {
                         : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
                     }`}
                   >
-                    {paginatedProducts.map((product) => (
+                    {paginatedProducts.map((product, index) => (
                       <ProductCard
                         key={product.id}
                         product={product}
+                        isPriority={index < 4}
                         ratingStats={ratingStatsMap[product.id]}
                         isWishlisted={wishlistIds.includes(product.id)}
                         onToggleWishlist={handleToggleWishlist}
@@ -2392,36 +2401,44 @@ export default function App() {
         settings={settings}
       />
 
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        cart={cart}
-        settings={settings}
-        onOrderSuccess={handleOrderSuccess}
-      />
+      {isCheckoutOpen && (
+        <React.Suspense fallback={null}>
+          <CheckoutModal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            cart={cart}
+            settings={settings}
+            onOrderSuccess={handleOrderSuccess}
+          />
+        </React.Suspense>
+      )}
 
       {/* Saved Items / Wishlist Slide-Over Drawer */}
-      <SavedItemsDrawer
-        isOpen={isWishlistOpen}
-        onClose={() => setIsWishlistOpen(false)}
-        savedProducts={savedProducts}
-        onAddToCart={(p) => handleAddToCart(p, 1)}
-        onRemoveFromWishlist={(id) => {
-          const { ids } = toggleWishlistProduct(id);
-          setWishlistIds(ids);
-        }}
-        onClearWishlist={() => {
-          clearStoredWishlist();
-          setWishlistIds([]);
-        }}
-        onQuickView={(p) => handleOpenProductDetail(p)}
-        onAddAllToCart={() => {
-          savedProducts
-            .filter((p) => Number(p.stock || 0) > 0)
-            .forEach((p) => handleAddToCart(p, 1));
-        }}
-        ratingStatsMap={ratingStatsMap}
-      />
+      {isWishlistOpen && (
+        <React.Suspense fallback={null}>
+          <SavedItemsDrawer
+            isOpen={isWishlistOpen}
+            onClose={() => setIsWishlistOpen(false)}
+            savedProducts={savedProducts}
+            onAddToCart={(p) => handleAddToCart(p, 1)}
+            onRemoveFromWishlist={(id) => {
+              const { ids } = toggleWishlistProduct(id);
+              setWishlistIds(ids);
+            }}
+            onClearWishlist={() => {
+              clearStoredWishlist();
+              setWishlistIds([]);
+            }}
+            onQuickView={(p) => handleOpenProductDetail(p)}
+            onAddAllToCart={() => {
+              savedProducts
+                .filter((p) => Number(p.stock || 0) > 0)
+                .forEach((p) => handleAddToCart(p, 1));
+            }}
+            ratingStatsMap={ratingStatsMap}
+          />
+        </React.Suspense>
+      )}
 
       {isTrackerOpen && (
         <React.Suspense fallback={null}>
