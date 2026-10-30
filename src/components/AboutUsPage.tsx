@@ -467,7 +467,7 @@ export const AboutUsPage: React.FC<AboutUsPageProps> = ({
                   <span>প্রতিষ্ঠাতার বিশেষ বার্তা</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-black text-zinc-900">
-                  {data.ceo_name || "মোঃ আরিফুল ইসলাম"}
+                  {data.ceo_name || "Lutas Biswas"}
                 </h3>
                 <p className="text-xs sm:text-sm font-bold text-emerald-700">
                   {data.ceo_title || "প্রতিষ্ঠাতা ও প্রধান নির্বাহী কর্মকর্তা (Founder & CEO)"}

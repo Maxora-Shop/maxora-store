@@ -7797,7 +7797,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="text"
                             value={settingsForm.manual_bkash_number ?? ''}
                             onChange={(e) => setSettingsForm({ ...settingsForm, manual_bkash_number: e.target.value })}
-                            placeholder="e.g. 01844932809"
+                            placeholder="e.g. 01932878270"
                             className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#e2136e] font-mono font-bold"
                           />
                         </div>
@@ -7864,7 +7864,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             type="text"
                             value={settingsForm.manual_nagad_number ?? ''}
                             onChange={(e) => setSettingsForm({ ...settingsForm, manual_nagad_number: e.target.value })}
-                            placeholder="e.g. 01844932809"
+                            placeholder="e.g. 01618367128"
                             className="w-full bg-zinc-50 focus:bg-white text-zinc-900 text-xs sm:text-sm p-2.5 rounded-xl border border-zinc-300 focus:outline-none focus:border-[#f7941d] font-mono font-bold"
                           />
                         </div>
@@ -8490,7 +8490,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           value={settingsForm.phone || ''}
                           onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                          placeholder="e.g. 01700-123456"
+                          placeholder="e.g. 01635451746"
                           className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                         />
                       </div>
@@ -8506,7 +8506,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           type="text"
                           value={settingsForm.phone || ''}
                           onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                          placeholder="e.g. 01700-123456"
+                          placeholder="e.g. 01635451746"
                           className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm p-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900"
                         />
                       </div>

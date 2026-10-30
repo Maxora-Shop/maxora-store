@@ -13,7 +13,6 @@
     "hero_title": "Discover Products You'll Love",
     "hero_subtitle": "Quality lifestyle gadgets & accessories delivered across Bangladesh with 100% Cash on Delivery.",
     "promo_text": "Cash on Delivery Available Across Bangladesh (All 64 Districts)",
-    "footer_text": "© Maxora Bangladesh. সর্বস্বত্ব সংরক্ষিত। মানসম্মত লাইফস্টাইল গ্যাজেট ও প্রয়োজনীয় পণ্যের বিশ্বস্ত অনলাইন শপ।",
     "hero_banners": [
       {
         "singleBannerImage": "/images/hero-banner-desktop.webp",
@@ -90,6 +89,22 @@
       }
     ],
     "banner_slide_speed": 3000,
+    "manual_bkash_enabled": true,
+    "manual_bkash_number": "01932878270",
+    "manual_bkash_type": "Personal",
+    "manual_bkash_instructions": "প্রদত্ত বিকাশ নম্বরে মোট টাকার পরিমাণ Send Money করুন এবং নিচে আপনার বিকাশ নম্বর ও TrxID দিন।",
+    "manual_nagad_enabled": true,
+    "manual_nagad_number": "01618367128",
+    "manual_nagad_type": "Personal",
+    "manual_nagad_instructions": "প্রদত্ত নগদ নম্বরে Send Money করুন এবং নিচে আপনার প্রেরক নগদ নম্বর ও TrxID দিন।",
+    "manual_bank_enabled": false,
+    "manual_bank_name": "The City Bank Ltd.",
+    "manual_bank_account_name": "Maxora Bangladesh",
+    "manual_bank_account_number": "1102938475001",
+    "manual_bank_branch": "Principal Branch, Dhaka",
+    "manual_bank_routing": "225261728",
+    "manual_bank_instructions": "ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।",
+    "footer_text": "© Maxora Bangladesh. সর্বস্বত্ব সংরক্ষিত। মানসম্মত লাইফস্টাইল গ্যাজেট ও প্রয়োজনীয় পণ্যের বিশ্বস্ত অনলাইন শপ।",
     "tiktok_pixel_id": "",
     "meta_pixel_id": "",
     "ai_whatsapp_number": "+8801635451746",
@@ -5029,6 +5044,28 @@
             "count": 23
           }
         }
+      },
+      "2026-10-30": {
+        "date": "2026-10-30",
+        "unique_visitors": 1,
+        "page_views": 10,
+        "visitor_ids": [
+          "v_muzn8z7g_ee6e9z0n"
+        ],
+        "referrers": {
+          "Google Search": 10
+        },
+        "devices": {
+          "mobile": 0,
+          "desktop": 10,
+          "tablet": 0
+        },
+        "pages": {
+          "/": {
+            "title": "Maxora Store BD | Buy Premium Smart Gadgets & Lifestyle Accessories Online",
+            "count": 10
+          }
+        }
       }
     }
   },
@@ -5065,14 +5102,14 @@
       }
     ],
     "contact_info": {
-      "phone": "01700-123456",
+      "phone": "01635451746",
       "email": "support@maxorabd.com",
       "address": "বাড়ি #১২, রোড #০৪, সেক্টর #১১, উত্তরা, ঢাকা-১২৩০, বাংলাদেশ",
-      "whatsapp": "+8801700123456",
+      "whatsapp": "+8801635451746",
       "facebook": "https://facebook.com/maxora.store",
       "working_hours": "সকাল ১০:০০ টা - রাত ১০:০০ টা (প্রতিদিন)"
     },
-    "ceo_name": "মোঃ আরিফুল ইসলাম (Md. Ariful Islam)",
+    "ceo_name": "Lutas Biswas",
     "ceo_title": "প্রতিষ্ঠাতা ও প্রধান নির্বাহী কর্মকর্তা (Founder & CEO)",
     "ceo_message": "ম্যাক্সোরা-তে আমাদের প্রতিটি কাজের কেন্দ্রবিন্দুতে রয়েছেন আপনি—আমাদের সম্মানিত গ্রাহক। অনলাইন কেনাকাটায় প্রতারণা ও নিম্নমানের পণ্যের ভিড়ে আমরা সততা ও কোয়ালিটির একটি স্বচ্ছ মানদণ্ড প্রতিষ্ঠা করতে চাই।\n\nআমরা প্রতিটি প্রোডাক্টের পেছনে দাঁড়িয়ে গ্রাহককে বিক্রয়োত্তর নির্ভরযোগ্য সহায়তার গ্যারান্টি দিই। আমাদের সাথে আপনার এই আস্থার পথচলাই আমাদের সবচেয়ে বড় অর্জন।",
     "ceo_image_url": "/uploads/ceo-profile-1791998437390.png",

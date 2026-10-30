@@ -262,8 +262,8 @@ const defaultSettings: Record<string, any> = {
   delivery_sub_dhaka: "100",
   delivery_outside_dhaka: "130",
   currency: "৳",
-  phone: "01700-123456",
-  whatsapp: "+8801700123456",
+  phone: "01635451746",
+  whatsapp: "+8801635451746",
   facebook: "https://facebook.com/maxora.store",
   logo_url: "",
   hero_title: "Discover Products You'll Love",
@@ -272,14 +272,14 @@ const defaultSettings: Record<string, any> = {
   hero_banners: DEFAULT_HERO_BANNERS,
   banner_slide_speed: 4500,
   manual_bkash_enabled: true,
-  manual_bkash_number: "01844932809",
+  manual_bkash_number: "01932878270",
   manual_bkash_type: "Personal",
   manual_bkash_instructions: "প্রদত্ত বিকাশ নম্বরে মোট টাকার পরিমাণ Send Money করুন এবং নিচে আপনার বিকাশ নম্বর ও TrxID দিন।",
   manual_nagad_enabled: true,
-  manual_nagad_number: "01844932809",
+  manual_nagad_number: "01618367128",
   manual_nagad_type: "Personal",
   manual_nagad_instructions: "প্রদত্ত নগদ নম্বরে Send Money করুন এবং নিচে আপনার প্রেরক নগদ নম্বর ও TrxID দিন।",
-  manual_bank_enabled: true,
+  manual_bank_enabled: false,
   manual_bank_name: "The City Bank Ltd.",
   manual_bank_account_name: "Maxora Bangladesh",
   manual_bank_account_number: "1102938475001",
@@ -401,22 +401,38 @@ try {
 
     // Auto-backfill manual payment defaults for existing databases
     if (db.settings.manual_bkash_enabled === undefined) db.settings.manual_bkash_enabled = true;
-    if (!db.settings.manual_bkash_number) db.settings.manual_bkash_number = "01844932809";
+    if (!db.settings.manual_bkash_number || db.settings.manual_bkash_number === "01844932809") db.settings.manual_bkash_number = "01932878270";
     if (!db.settings.manual_bkash_type) db.settings.manual_bkash_type = "Personal";
     if (!db.settings.manual_bkash_instructions) db.settings.manual_bkash_instructions = "প্রদত্ত বিকাশ নম্বরে মোট টাকার পরিমাণ Send Money করুন এবং নিচে আপনার বিকাশ নম্বর ও TrxID দিন।";
 
     if (db.settings.manual_nagad_enabled === undefined) db.settings.manual_nagad_enabled = true;
-    if (!db.settings.manual_nagad_number) db.settings.manual_nagad_number = "01844932809";
+    if (!db.settings.manual_nagad_number || db.settings.manual_nagad_number === "01844932809") db.settings.manual_nagad_number = "01618367128";
     if (!db.settings.manual_nagad_type) db.settings.manual_nagad_type = "Personal";
     if (!db.settings.manual_nagad_instructions) db.settings.manual_nagad_instructions = "প্রদত্ত নগদ নম্বরে Send Money করুন এবং নিচে আপনার প্রেরক নগদ নম্বর ও TrxID দিন।";
 
-    if (db.settings.manual_bank_enabled === undefined) db.settings.manual_bank_enabled = true;
+    if (db.settings.manual_bank_enabled === undefined) db.settings.manual_bank_enabled = false;
     if (!db.settings.manual_bank_name) db.settings.manual_bank_name = "The City Bank Ltd.";
     if (!db.settings.manual_bank_account_name) db.settings.manual_bank_account_name = "Maxora Bangladesh";
     if (!db.settings.manual_bank_account_number) db.settings.manual_bank_account_number = "1102938475001";
     if (!db.settings.manual_bank_branch) db.settings.manual_bank_branch = "Principal Branch, Dhaka";
     if (!db.settings.manual_bank_routing) db.settings.manual_bank_routing = "225261728";
     if (!db.settings.manual_bank_instructions) db.settings.manual_bank_instructions = "ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।";
+    if (!db.settings.phone || db.settings.phone === "01700-123456") db.settings.phone = "01635451746";
+    if (!db.settings.whatsapp || db.settings.whatsapp === "+8801700123456") db.settings.whatsapp = "+8801635451746";
+
+    if (db.about_page) {
+      if (!db.about_page.ceo_name || db.about_page.ceo_name.includes("Ariful")) {
+        db.about_page.ceo_name = "Lutas Biswas";
+      }
+      if (db.about_page.contact_info) {
+        if (!db.about_page.contact_info.phone || db.about_page.contact_info.phone.includes("01700")) {
+          db.about_page.contact_info.phone = "01635451746";
+        }
+        if (!db.about_page.contact_info.whatsapp || db.about_page.contact_info.whatsapp.includes("01700")) {
+          db.about_page.contact_info.whatsapp = "+8801635451746";
+        }
+      }
+    }
   } else {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   }

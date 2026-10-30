@@ -999,7 +999,11 @@ export const storeService = {
 
   // 1. SETTINGS
   getCachedSettings(): StoreSettings {
-    return getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+    const s = getLocal<StoreSettings>(SETTINGS_KEY, INITIAL_SETTINGS);
+    if (!s.manual_bkash_number || s.manual_bkash_number === '01844932809') s.manual_bkash_number = '01932878270';
+    if (!s.manual_nagad_number || s.manual_nagad_number === '01844932809') s.manual_nagad_number = '01618367128';
+    if (!s.manual_bank_account_number) s.manual_bank_account_number = '1102938475001';
+    return s;
   },
 
   async getSettings(): Promise<StoreSettings> {
@@ -1047,6 +1051,16 @@ export const storeService = {
 
     if (typeof current.favicon_url === 'string' && current.favicon_url.includes('cloudinary.com')) {
       current.favicon_url = '/favicon.ico';
+    }
+
+    if (!current.manual_bkash_number || current.manual_bkash_number === '01844932809') {
+      current.manual_bkash_number = '01932878270';
+    }
+    if (!current.manual_nagad_number || current.manual_nagad_number === '01844932809') {
+      current.manual_nagad_number = '01618367128';
+    }
+    if (!current.manual_bank_account_number) {
+      current.manual_bank_account_number = '1102938475001';
     }
 
     return current;

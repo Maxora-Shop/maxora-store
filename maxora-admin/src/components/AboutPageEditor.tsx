@@ -833,7 +833,7 @@ export const AboutPageEditor: React.FC<AboutPageEditorProps> = ({
                     contact_info: { ...formData.contact_info, phone: e.target.value },
                   })
                 }
-                placeholder="01700-123456"
+                placeholder="01635451746"
                 className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-bold font-mono focus:outline-none focus:border-emerald-600"
               />
             </div>

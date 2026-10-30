@@ -155,9 +155,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       const isOnline = paymentMethod === 'online';
-      const bkashNum = settings.manual_bkash_number || '01844932809';
+      const bkashNum = settings.manual_bkash_number || '01932878270';
       const bkashType = settings.manual_bkash_type || 'Personal';
-      const nagadNum = settings.manual_nagad_number || '01844932809';
+      const nagadNum = settings.manual_nagad_number || '01618367128';
       const nagadType = settings.manual_nagad_type || 'Personal';
       const bankName = settings.manual_bank_name || 'The City Bank Ltd.';
       const bankAcctNum = settings.manual_bank_account_number || '';
@@ -923,12 +923,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           বিকাশ নম্বর ({settings.manual_bkash_type || 'Personal'}):
                         </span>
                         <span className="text-base sm:text-lg font-black font-mono text-zinc-900 tracking-wider">
-                          {settings.manual_bkash_number || '01844932809'}
+                          {settings.manual_bkash_number || '01932878270'}
                         </span>
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleCopyAccount(settings.manual_bkash_number || '01844932809', 'bkash')}
+                        onClick={() => handleCopyAccount(settings.manual_bkash_number || '01932878270', 'bkash')}
                         className="px-3 py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 text-[#e2136e] border border-pink-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                       >
                         {copiedAccount === 'bkash' ? (
@@ -1023,12 +1023,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           নগদ নম্বর ({settings.manual_nagad_type || 'Personal'}):
                         </span>
                         <span className="text-base sm:text-lg font-black font-mono text-zinc-900 tracking-wider">
-                          {settings.manual_nagad_number || '01844932809'}
+                          {settings.manual_nagad_number || '01618367128'}
                         </span>
                       </div>
                       <button
                         type="button"
-                        onClick={() => handleCopyAccount(settings.manual_nagad_number || '01844932809', 'nagad')}
+                        onClick={() => handleCopyAccount(settings.manual_nagad_number || '01618367128', 'nagad')}
                         className="px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#f7941d] border border-orange-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                       >
                         {copiedAccount === 'nagad' ? (
@@ -1240,11 +1240,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </span>
                   ) : paymentMethod === 'manual_bkash' ? (
                     <span>
-                      Payment Method: <strong>বিকাশ সরাসরি পেমেন্ট (নম্বর: {settings.manual_bkash_number || '01844932809'})</strong>
+                      Payment Method: <strong>বিকাশ সরাসরি পেমেন্ট (নম্বর: {settings.manual_bkash_number || '01932878270'})</strong>
                     </span>
                   ) : paymentMethod === 'manual_nagad' ? (
                     <span>
-                      Payment Method: <strong>নগদ সরাসরি পেমেন্ট (নম্বর: {settings.manual_nagad_number || '01844932809'})</strong>
+                      Payment Method: <strong>নগদ সরাসরি পেমেন্ট (নম্বর: {settings.manual_nagad_number || '01618367128'})</strong>
                     </span>
                   ) : paymentMethod === 'manual_bank' ? (
                     <span>
