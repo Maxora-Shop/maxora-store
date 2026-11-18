@@ -107,17 +107,6 @@ const Youtube = ({ className }: { className?: string }) => (
 import { Product, Order, Customer, StoreSettings, DashboardTotals, OrderStatus, ProductColor, Category, SubCategory, ProductType, ChildCategory, Brand, LiveTrafficAnalytics } from '../types';
 import { BD_DISTRICTS, getThanasForDistrict } from '../data/bangladeshData';
 import { storeService } from '../services/storeService';
-import { db, auth } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
-import {
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword,
-  signOut,
-  onAuthStateChanged,
-} from 'firebase/auth';
 import { CustomerOrdersModal } from './CustomerOrdersModal';
 import { InvoiceModal } from './InvoiceModal';
 import { AdminOrderAnalytics } from './AdminOrderAnalytics';
@@ -331,6 +320,7 @@ export type AdminTab =
   | 'orders'
   | 'order_analytics'
   | 'customers'
+  | 'employees'
   | 'settings'
   | 'about';
 
@@ -372,6 +362,7 @@ export const getAdminTabFromLocation = (): {
   if (pathname === '/admin/orders/all' || pathname === '/admin/orders') return { tab: 'orders', orderStatus: '' };
 
   if (pathname === '/admin/customers') return { tab: 'customers' };
+  if (pathname === '/admin/employees') return { tab: 'employees' };
   if (pathname === '/admin/ai-assistant') return { tab: 'ai-assistant' };
   if (pathname === '/admin/settings') return { tab: 'settings' };
 
@@ -446,6 +437,8 @@ export const getRouteForAdminTab = (tab: AdminTab, subAction?: string): string =
       return '/admin/banners';
     case 'customers':
       return '/admin/customers';
+    case 'employees':
+      return '/admin/employees';
     case 'ai-assistant':
       return '/admin/ai-assistant';
     case 'settings':
@@ -472,12 +465,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSettingsUpdated,
 }) => {
   // Auth state - Session persistence across page reload in current tab, strict login on tab close
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const isTabAuth = sessionStorage.getItem('maxora_admin_session_auth') === 'true';
-    const sessionToken = sessionStorage.getItem('maxora_admin_token');
-    return Boolean(isTabAuth && sessionToken);
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
   const [username, setUsername] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
@@ -487,13 +475,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const [adminRole, setAdminRole] = useState<string>('');
+  const [adminPermissions, setAdminPermissions] = useState<string[]>([]);
 
   // Admin Authorization & Forgot Password States
-  const AUTHORIZED_ADMIN_EMAIL = 'moonlofiofficial@gmail.com';
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmail, setResetEmail] = useState(AUTHORIZED_ADMIN_EMAIL);
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetStatus, setResetStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const AUTHORIZED_ADMIN_EMAIL = 'maxorashop.admin@gmail.com';
 
   // Change Password States (in Settings)
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
@@ -505,13 +491,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassStatus, setChangePassStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Gmail Verification OTP states for Password Change
-  const [otpSent, setOtpSent] = useState(false);
-  const [enteredOtp, setEnteredOtp] = useState('');
-  const [activeOtpCode, setActiveOtpCode] = useState('');
-  const [otpExpiry, setOtpExpiry] = useState<number | null>(null);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [otpTimerSeconds, setOtpTimerSeconds] = useState(300);
 
   // Navigation
   const [currentTab, setCurrentTab] = useState<AdminTab>(() => getAdminTabFromLocation().tab);
@@ -632,9 +611,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       } catch {}
       if (next) {
         playOrderAlertChime();
-        showToast('🔔 অর্ডার সাউন্ড অ্যালার্ট চালু করা হয়েছে!', 'success');
+        showToast('🔔 অর্ডার সাউন্ড অ্যালার্ট চালু করা হয়েছে!', 'success');
       } else {
-        showToast('🔕 অর্ডার সাউন্ড অ্যালার্ট বন্ধ করা হয়েছে।', 'info');
+        showToast('🔕 অর্ডার সাউন্ড অ্যালার্ট বন্ধ করা হয়েছে।', 'info');
       }
       return next;
     });
@@ -1297,61 +1276,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
   const [selectedOrderForCourier, setSelectedOrderForCourier] = useState<Order | null>(null);
 
-  // Check auth on load: tab-scoped session persistence + Firebase onAuthStateChanged
+  // Restore authenticated D1 HttpOnly session on page load
   useEffect(() => {
-    // 1. Tab-level session persistence (persists across page reloads in the same tab)
-    const isTabAuth = sessionStorage.getItem('maxora_admin_session_auth') === 'true';
-    const sessionToken = sessionStorage.getItem('maxora_admin_token');
+    let cancelled = false;
 
-    if (isTabAuth && sessionToken) {
-      setIsAuthenticated(true);
-      loadTabData(currentTab, password);
-    }
+    const restoreD1Session = async () => {
+      try {
+        const response = await fetch('/api/admin/session', {
+          method: 'GET',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
 
-    // 2. Firebase Auth state listener (supports seamless login on both custom and vercel domains)
-    let unsubscribeAuth: (() => void) | null = null;
-    if (auth) {
-      unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-        if (user && user.email && user.email.toLowerCase() === AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
-          try {
-            const token = await user.getIdToken();
-            sessionStorage.setItem('maxora_admin_session_auth', 'true');
-            sessionStorage.setItem('maxora_admin_username', user.email);
-            sessionStorage.setItem('maxora_admin_token', token);
-            sessionStorage.setItem('maxora_admin_view_active', 'true');
-            sessionStorage.removeItem('maxora_admin_password');
-            localStorage.removeItem('maxora_admin_password');
-            setIsAuthenticated(true);
-            loadTabData(currentTab, '');
-          } catch (e) {
-            console.warn('onAuthStateChanged token error:', e);
-          }
+        if (!response.ok) {
+          if (!cancelled) setIsAuthenticated(false);
+          return;
         }
-      });
-    }
 
-    // Clean up any legacy localStorage/sessionStorage credentials to guarantee zero plaintext passwords
+        const result = await response.json();
+        if (!cancelled && result?.authenticated === true) {
+          setIsAuthenticated(true);
+          setAdminRole(result.role || 'employee_admin');
+          setAdminPermissions(Array.isArray(result.permissions) ? result.permissions : []);
+          if (result.email) setUsername(result.email);
+          sessionStorage.setItem('maxora_admin_session_auth', 'true');
+          sessionStorage.setItem('maxora_admin_view_active', 'true');
+          sessionStorage.removeItem('maxora_admin_token');
+          localStorage.removeItem('maxora_admin_token');
+          loadTabData(currentTab, '');
+        }
+      } catch (error) {
+        console.warn('D1 admin session restore failed:', error);
+        if (!cancelled) setIsAuthenticated(false);
+      }
+    };
+
     try {
+      sessionStorage.removeItem('maxora_admin_token');
+      sessionStorage.removeItem('maxora_admin_password');
       localStorage.removeItem('maxora_admin_token');
       localStorage.removeItem('maxora_admin_password');
-      sessionStorage.removeItem('maxora_admin_password');
     } catch {}
 
-    return () => {
-      if (unsubscribeAuth) unsubscribeAuth();
-    };
+    void restoreD1Session();
+    return () => { cancelled = true; };
   }, []);
-
-  // OTP Countdown Timer Effect for Password Change
-  useEffect(() => {
-    if (!otpSent || otpTimerSeconds <= 0) return;
-    const timer = setInterval(() => {
-      setOtpTimerSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [otpSent, otpTimerSeconds]);
-
-  // Listen for live order, product, and settings updates & auto-poll
+  // OTP Countdown Timer Effect  // OTP Countdown Timer Effect for Password Change
+// Listen for live order, product, and settings updates & auto-poll
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -1509,342 +1480,178 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const verifyAdminAuth = async (passToTry?: string, userToTry?: string) => {
     const p = passToTry !== undefined ? passToTry : password;
-    const u = userToTry !== undefined ? userToTry : username;
+    const u = (userToTry !== undefined ? userToTry : username).trim();
     setAuthLoading(true);
     setAuthError('');
+
     try {
-      // If user typed an email that is not the authorized admin email, block immediately
-      if (u.includes('@') && u.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
+      const primaryEmail = 'maxorashop.admin@gmail.com';
+      const backupEmail = 'moonlofiofficial@gmail.com';
+      const loginEmail = u.includes('@') ? u.toLowerCase() : primaryEmail;
+
+
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ email: loginEmail, password: p }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || result?.authenticated !== true) {
         setIsAuthenticated(false);
-        setAuthError('Access Denied: Only the authorized admin account can access this panel.');
+        setAuthError(
+          response.status === 429
+            ? 'Too many failed login attempts. Please wait and try again.'
+            : result?.error || 'Login failed. Please check your email and password.'
+        );
         return;
       }
 
-      // 1. Authoritative Firebase Authentication flow
-      // Works whether user enters their email (moonlofiofficial@gmail.com) OR username ('admin')
-      if (auth) {
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, AUTHORIZED_ADMIN_EMAIL, p);
-          if (userCredential && userCredential.user) {
-            const token = await userCredential.user.getIdToken();
-            sessionStorage.setItem('maxora_admin_session_auth', 'true');
-            sessionStorage.setItem('maxora_admin_username', userCredential.user.email || AUTHORIZED_ADMIN_EMAIL);
-            sessionStorage.setItem('maxora_admin_token', token);
-            sessionStorage.setItem('maxora_admin_view_active', 'true');
-            // Strict security requirement: Never store plaintext passwords in browser storage
-            sessionStorage.removeItem('maxora_admin_password');
-            localStorage.removeItem('maxora_admin_password');
+      sessionStorage.setItem('maxora_admin_session_auth', 'true');
+      sessionStorage.setItem('maxora_admin_username', result.email || loginEmail);
+      sessionStorage.setItem('maxora_admin_view_active', 'true');
+      sessionStorage.removeItem('maxora_admin_token');
+      sessionStorage.removeItem('maxora_admin_password');
+      localStorage.removeItem('maxora_admin_token');
+      localStorage.removeItem('maxora_admin_password');
 
-            setPassword(p); // Keep in component state memory only for legacy REST proxies if needed
-            setUsername(u || 'admin');
-            setLoginSuccess(true);
-            setTimeout(() => {
-              setIsAuthenticated(true);
-              setLoginSuccess(false);
-              loadTabData(currentTab, p);
-            }, 600);
-            return; // STRICT RETURN: Firebase Auth succeeded, never execute fallback!
-          }
-        } catch (fbErr: any) {
-          console.warn('Firebase admin signin notice:', fbErr);
-          // If the user explicitly typed their email and Firebase rejected, show the exact error immediately
-          if (u.includes('@')) {
-            setIsAuthenticated(false);
-            if (fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/invalid-credential') {
-              setAuthError('পাসওয়ার্ডটি সঠিক নয়। অনুগ্রহ করে আবার চেষ্টা করুন বা Forgot Password ব্যবহার করুন। (Incorrect password)');
-            } else if (fbErr.code === 'auth/user-not-found') {
-              setAuthError('No authorized admin account found with this email.');
-            } else if (fbErr.code === 'auth/too-many-requests') {
-              setAuthError('Too many failed login attempts. Please wait a few moments and try again.');
-            } else if (fbErr.code === 'auth/network-request-failed') {
-              setAuthError('Network error. Please check your internet connection and try again.');
-            } else if (fbErr.message) {
-              setAuthError(fbErr.message);
-            } else {
-              setAuthError('Authentication failed. Please verify your credentials.');
-            }
-            return;
-          }
-        }
-      }
+      setUsername(result.email || loginEmail);
+      setAdminRole(result.role || 'employee_admin');
+      setAdminPermissions(Array.isArray(result.permissions) ? result.permissions : []);
+      setPassword('');
+      setLoginSuccess(true);
 
-      // 2. Legacy fallback for username 'admin' (when local password is provided)
-      const validPass = (settingsForm?.admin_password && settingsForm.admin_password.trim()) || (globalSettings?.admin_password && globalSettings.admin_password.trim()) || '123456';
-      let isValid = (u === 'admin' || !u) && (p === validPass || p === '123456' || p === 'admin123');
-
-      if (isValid) {
-        const generatedToken = Buffer.from(`${u || 'admin'}:${p}:${Date.now()}`).toString('base64');
-        sessionStorage.setItem('maxora_admin_session_auth', 'true');
-        sessionStorage.setItem('maxora_admin_username', u || 'admin');
-        sessionStorage.setItem('maxora_admin_token', generatedToken);
-        sessionStorage.setItem('maxora_admin_view_active', 'true');
-        // Do not store plaintext password in browser storage
-        sessionStorage.removeItem('maxora_admin_password');
-        localStorage.removeItem('maxora_admin_password');
-
-        setPassword(p);
-        setLoginSuccess(true);
-        setTimeout(() => {
-          setIsAuthenticated(true);
-          setLoginSuccess(false);
-          loadTabData(currentTab, p);
-        }, 600);
-      } else {
-        setIsAuthenticated(false);
-        setAuthError('পাসওয়ার্ড বা ইউজারনেম সঠিক নয়। (Incorrect username or password)');
-      }
-    } catch (e: any) {
+      window.setTimeout(() => {
+        setIsAuthenticated(true);
+        setLoginSuccess(false);
+        loadTabData(currentTab, '');
+      }, 600);
+    } catch (error: any) {
       setIsAuthenticated(false);
-      setAuthError('Error: ' + e.message);
+      setAuthError(error?.message || 'Network error. Please try again.');
     } finally {
       setAuthLoading(false);
     }
   };
-
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     verifyAdminAuth(password, username);
   };
 
   const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+    } catch (error) {
+      console.warn('D1 admin logout request failed:', error);
+    }
+
     sessionStorage.removeItem('maxora_admin_session_auth');
     sessionStorage.removeItem('maxora_admin_password');
     sessionStorage.removeItem('maxora_admin_username');
     sessionStorage.removeItem('maxora_admin_token');
     sessionStorage.removeItem('maxora_admin_view_active');
+
     try {
       localStorage.removeItem('maxora_admin_token');
       localStorage.removeItem('maxora_admin_password');
     } catch {}
-    if (auth) {
-      try {
-        await signOut(auth);
-      } catch {}
-    }
+
     setIsAuthenticated(false);
+    setAdminRole('');
+    setAdminPermissions([]);
     setOrders([]);
     setCustomers([]);
     setPassword('');
     showToast('Logged out of admin panel', 'success');
   };
-
-  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = resetEmail.trim();
-    if (!email) {
-      setResetStatus({
-        type: 'error',
-        message: 'Please enter your registered admin email address.',
-      });
-      return;
-    }
-
-    if (email.toLowerCase() !== AUTHORIZED_ADMIN_EMAIL.toLowerCase()) {
-      setResetStatus({
-        type: 'error',
-        message: 'Access Denied: This email is not registered as an authorized administrator.',
-      });
-      return;
-    }
-
-    if (!auth) {
-      setResetStatus({
-        type: 'error',
-        message: 'Firebase Authentication is currently unavailable. Please check your network connection.',
-      });
-      return;
-    }
-
-    setResetLoading(true);
-    setResetStatus(null);
-
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setResetStatus({
-        type: 'success',
-        message: `Password reset email sent to ${email}! Please check your inbox or spam folder for the secure reset link.`,
-      });
-    } catch (err: any) {
-      console.error('sendPasswordResetEmail error:', err);
-      let errorMsg = 'Failed to send password reset email.';
-      if (err.code === 'auth/user-not-found') {
-        errorMsg = 'No Firebase account found with this email address.';
-      } else if (err.code === 'auth/invalid-email') {
-        errorMsg = 'Invalid email address format.';
-      } else if (err.code === 'auth/too-many-requests') {
-        errorMsg = 'Too many password reset requests. Please wait a few minutes and try again.';
-      } else if (err.code === 'auth/network-request-failed') {
-        errorMsg = 'Network error. Please check your internet connection.';
-      } else if (err.message) {
-        errorMsg = err.message;
-      }
-      setResetStatus({ type: 'error', message: errorMsg });
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
-  // Send 6-digit verification code to authorized Gmail for password change
-  const handleSendOtp = async () => {
-    setChangePassStatus(null);
-
-    if (!currentPasswordInput.trim()) {
-      setChangePassStatus({ type: 'error', message: 'Current password is required before requesting verification code.' });
-      return;
-    }
-
-    // Verify current password first
-    const activePass = password || '123456';
-    const storeAdminPass = settingsForm?.admin_password || globalSettings?.admin_password;
-    const isCurrentCorrect = currentPasswordInput === activePass || currentPasswordInput === '123456' || currentPasswordInput === 'admin123' || (storeAdminPass && currentPasswordInput === storeAdminPass);
-    if (!isCurrentCorrect) {
-      setChangePassStatus({ type: 'error', message: 'বর্তমান পাসওয়ার্ডটি সঠিক নয় (Current password is incorrect).' });
-      return;
-    }
-
-    if (newPasswordInput.length < 6) {
-      setChangePassStatus({ type: 'error', message: 'New password must be at least 6 characters long.' });
-      return;
-    }
-
-    if (newPasswordInput !== confirmPasswordInput) {
-      setChangePassStatus({ type: 'error', message: 'New passwords do not match. Please verify.' });
-      return;
-    }
-
-    setIsSendingOtp(true);
-    try {
-      // 1. Generate 6-digit random security code
-      const secureOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setActiveOtpCode(secureOtp);
-      setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 minutes validity
-      setOtpTimerSeconds(300);
-
-      // 2. Dispatch to server OTP endpoint
-      try {
-        await fetch('/api/admin/send-password-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ currentPassword: currentPasswordInput }),
-        });
-      } catch (apiErr) {
-        console.warn('Backend OTP dispatch notice:', apiErr);
-      }
-
-      // 3. Dispatch official Firebase security password reset email to authorized Gmail
-      if (auth) {
-        try {
-          await sendPasswordResetEmail(auth, AUTHORIZED_ADMIN_EMAIL);
-        } catch (e) {
-          console.warn('Firebase email dispatch note:', e);
-        }
-      }
-
-      setOtpSent(true);
-      setChangePassStatus({
-        type: 'success',
-        message: `৬ ডিজিটের সিকিউরিটি কোড সফলভাবে ${AUTHORIZED_ADMIN_EMAIL}-এ পাঠানো হয়েছে। (Security Code: ${secureOtp} - মেয়াদ: ৫ মিনিট)`,
-      });
-      showToast(`সিকিউরিটি কোড ${AUTHORIZED_ADMIN_EMAIL}-এ পাঠানো হয়েছে! (Code: ${secureOtp})`, 'success');
-    } catch (err: any) {
-      console.error('Failed to send OTP:', err);
-      setChangePassStatus({ type: 'error', message: 'Failed to dispatch security code. Please try again.' });
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setChangePassStatus(null);
 
-    if (!otpSent) {
-      setChangePassStatus({ type: 'error', message: 'প্রথমে "Send Verification Code to Gmail" বাটনে ক্লিক করে কোড নিন।' });
+    const current = currentPasswordInput;
+    const next = newPasswordInput;
+
+    if (!current || current.length > 128) {
+      setChangePassStatus({ type: 'error', message: 'Enter your current password.' });
       return;
     }
 
-    if (!enteredOtp.trim()) {
-      setChangePassStatus({ type: 'error', message: 'Please enter the 6-digit verification code sent to your Gmail.' });
+    if (next.length < 12 || next.length > 128) {
+      setChangePassStatus({ type: 'error', message: 'New password must be 12–128 characters long.' });
       return;
     }
 
-    if (otpExpiry && Date.now() > otpExpiry) {
-      setChangePassStatus({ type: 'error', message: 'Security code has expired. Please click "Resend Code" to get a new code.' });
+    if (next !== confirmPasswordInput) {
+      setChangePassStatus({ type: 'error', message: 'New passwords do not match.' });
       return;
     }
 
-    if (enteredOtp.trim() !== activeOtpCode) {
-      setChangePassStatus({ type: 'error', message: 'ভেরিফিকেশন কোডটি সঠিক নয়! (Incorrect verification code. Please check your Gmail)' });
+    if (current === next) {
+      setChangePassStatus({ type: 'error', message: 'New password must be different from the current password.' });
       return;
     }
 
     setChangePassLoading(true);
+
     try {
-      if (auth && auth.currentUser) {
-        try {
-          await updatePassword(auth.currentUser, newPasswordInput);
-        } catch (e) {
-          console.warn('Firebase update password note:', e);
-        }
+      const response = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          currentPassword: current,
+          newPassword: next,
+        }),
+      });
+
+      let result: any = {};
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error('Server returned an invalid response. Password change was not confirmed.');
       }
 
-      // Sync with server API
-      try {
-        await fetch('/api/admin/change-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            currentPassword: currentPasswordInput,
-            newPassword: newPasswordInput,
-            otpCode: enteredOtp.trim(),
-          }),
-        });
-      } catch (srvErr) {
-        console.warn('Backend server password update note:', srvErr);
+      if (!response.ok || result.success !== true) {
+        throw new Error(result.error || 'Password change failed. Please verify your current password.');
       }
 
-      // Persist new password to Store Settings in Firestore and database
-      const newSettings = {
-        ...settingsForm,
-        admin_password: newPasswordInput,
-      };
-      await storeService.updateSettings(newSettings, newPasswordInput);
-      onSettingsUpdated();
-
-      // Update session credentials strictly in tab session without storing plaintext password
-      setPassword(newPasswordInput);
-      sessionStorage.setItem('maxora_admin_session_auth', 'true');
-      const updatedToken = Buffer.from(`${username || 'admin'}:${newPasswordInput}:${Date.now()}`).toString('base64');
-      sessionStorage.setItem('maxora_admin_token', updatedToken);
-      sessionStorage.removeItem('maxora_admin_password');
-      try {
-        localStorage.removeItem('maxora_admin_password');
-        localStorage.removeItem('maxora_admin_token');
-      } catch {}
-
-      // Clear input fields
       setCurrentPasswordInput('');
       setNewPasswordInput('');
       setConfirmPasswordInput('');
-      setEnteredOtp('');
-      setActiveOtpCode('');
-      setOtpSent(false);
+      setPassword('');
+      setIsAuthenticated(false);
 
-      setChangePassStatus({
-        type: 'success',
-        message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন থেকে এই নতুন পাসওয়ার্ড কার্যকর থাকবে।',
-      });
-      showToast('Admin password updated successfully with Gmail verification!', 'success');
+      sessionStorage.removeItem('maxora_admin_session_auth');
+      sessionStorage.removeItem('maxora_admin_token');
+      sessionStorage.removeItem('maxora_admin_password');
+
+      try {
+        localStorage.removeItem('maxora_admin_token');
+        localStorage.removeItem('maxora_admin_password');
+      } catch {}
+
+      showToast('Password changed successfully. Please log in again with your new password.', 'success');
     } catch (err: any) {
-      console.error('Change password error:', err);
-      let msg = err.message || 'Failed to update password.';
-      setChangePassStatus({ type: 'error', message: msg });
-      showToast(msg, 'error');
+      console.error('D1 password change failed:', err);
+      const message = err?.message || 'Password change failed.';
+      setChangePassStatus({ type: 'error', message });
+      showToast(message, 'error');
     } finally {
       setChangePassLoading(false);
     }
   };
-
   const loadCategories = async () => {
     try {
       await Promise.all([
@@ -1865,6 +1672,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const canAccessAdminTab = (tab: AdminTab): boolean => {
+    if (adminRole === 'main_admin') return true;
+    if (tab === 'employees') return false;
+    if (adminRole !== 'employee_admin') return false;
+
+    const requiredPermissions: Partial<Record<AdminTab, string>> = {
+      overview: 'dashboard.read',
+      traffic: 'traffic.read',
+      products: 'products.read',
+      categories: 'taxonomy.manage',
+      subcategories: 'taxonomy.manage',
+      product_types: 'taxonomy.manage',
+      brands: 'taxonomy.manage',
+      banners: 'settings.manage',
+      orders: 'orders.read',
+      order_analytics: 'reports.read',
+      customers: 'customers.read',
+      settings: 'settings.manage',
+      'ai-assistant': 'dashboard.read',
+      about: 'dashboard.read',
+    };
+
+    const required = requiredPermissions[tab];
+    return Boolean(required && adminPermissions.includes(required));
+  };
   const loadTabData = (tab: string, currentPassword = password) => {
     if (tab === 'overview') loadOverview(currentPassword);
     if (tab === 'products') {
@@ -1901,6 +1733,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     subAction?: string,
     orderStatus?: string
   ) => {
+        if (!canAccessAdminTab(tab)) {
+      window.alert('আপনার এই বিভাগে প্রবেশের অনুমতি নেই।');
+      return;
+    }
     setCurrentTab(tab);
     if (['products', 'categories', 'subcategories', 'product_types', 'brands'].includes(tab)) {
       setIsProductsMenuExpanded(true);
@@ -2009,6 +1845,162 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [isAuthenticated]);
 
+
+  // Employee Management (Main Admin only)
+  const EMPLOYEE_PERMISSION_OPTIONS = [
+    ['dashboard.read', 'View Dashboard'],
+    ['traffic.read', 'View Traffic Analytics'],
+    ['products.read', 'View Products'],
+    ['products.create', 'Create Products'],
+    ['products.update', 'Update Products'],
+    ['products.delete', 'Delete Products'],
+    ['orders.read', 'View Orders'],
+    ['orders.update', 'Update Orders'],
+    ['orders.delete', 'Delete Orders'],
+    ['customers.read', 'View Customers'],
+    ['taxonomy.manage', 'Manage Categories and Brands'],
+  ] as const;
+
+  const [employeeAccounts, setEmployeeAccounts] = useState<any[]>([]);
+  const [employeeAuditLogs, setEmployeeAuditLogs] = useState<any[]>([]);
+  const [employeeEmail, setEmployeeEmail] = useState('');
+  const [employeePassword, setEmployeePassword] = useState('');
+  const [employeeSelectedPermissions, setEmployeeSelectedPermissions] = useState<string[]>([]);
+  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [employeeSaving, setEmployeeSaving] = useState(false);
+
+  const loadEmployeeManagement = async () => {
+    if (adminRole !== 'main_admin') return;
+    setEmployeeLoading(true);
+    try {
+      const employeeResponse = await fetch('/api/admin/employees', {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const employeeData = await employeeResponse.json();
+      if (!employeeResponse.ok || employeeData.success !== true) {
+        throw new Error(employeeData.error || 'Employee list load failed');
+      }
+      setEmployeeAccounts(Array.isArray(employeeData.employees) ? employeeData.employees : []);
+
+      // Audit log is independent: its temporary failure must not hide employee accounts.
+      try {
+        const auditResponse = await fetch('/api/admin/audit-logs', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const auditData = await auditResponse.json();
+        if (!auditResponse.ok || auditData.success !== true) {
+          throw new Error(auditData.error || 'Audit log load failed');
+        }
+        setEmployeeAuditLogs(Array.isArray(auditData.logs) ? auditData.logs : []);
+      } catch (auditError: any) {
+        setEmployeeAuditLogs([]);
+        showToast(auditError?.message || 'Failed to load audit logs', 'error');
+      }
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to load employee data', 'error');
+    } finally {
+      setEmployeeLoading(false);
+    }
+  };
+
+  const employeeApiRequest = async (url: string, method: string, body?: Record<string, unknown>) => {
+    const response = await fetch(url, {
+      method,
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const result = await response.json();
+    if (!response.ok || result.success !== true) {
+      throw new Error(result.error || 'Request failed');
+    }
+    return result;
+  };
+
+  const createEmployeeAccount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (adminRole !== 'main_admin' || employeeSaving) return;
+    setEmployeeSaving(true);
+    try {
+      await employeeApiRequest('/api/admin/employees', 'POST', {
+        email: employeeEmail.trim().toLowerCase(),
+        password: employeePassword,
+      });
+      setEmployeeEmail('');
+      setEmployeePassword('');
+      showToast('Employee account created successfully', 'success');
+      await loadEmployeeManagement();
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to create employee', 'error');
+    } finally {
+      setEmployeeSaving(false);
+    }
+  };
+
+  const saveEmployeePermissions = async (employee: any) => {
+    if (adminRole !== 'main_admin') return;
+    try {
+      await employeeApiRequest(
+        `/api/admin/employees/${encodeURIComponent(employee.id)}/permissions`,
+        'PUT',
+        { permissions: employee.permissions || [] }
+      );
+      showToast(`Permissions saved successfully for ${employee.email}`, 'success');
+      await loadEmployeeManagement();
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to save permissions', 'error');
+    }
+  };
+
+  const updateEmployeeAccount = async (employee: any, updates: Record<string, unknown>) => {
+    if (adminRole !== 'main_admin') return;
+    try {
+      await employeeApiRequest(
+        `/api/admin/employees/${encodeURIComponent(employee.id)}`,
+        'PUT',
+        updates
+      );
+      showToast('Employee account updated successfully', 'success');
+      await loadEmployeeManagement();
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to update account', 'error');
+    }
+  };
+
+  const resetEmployeePassword = async (employee: any) => {
+    const newPassword = window.prompt('Enter new password (minimum 12 characters):');
+    if (newPassword === null) return;
+    if (newPassword.length < 12 || newPassword.length > 128) {
+      showToast('Password must be 12 to 128 characters', 'error');
+      return;
+    }
+    await updateEmployeeAccount(employee, { password: newPassword });
+  };
+
+  const revokeEmployeeSessions = async (employee: any) => {
+    if (!window.confirm(`Revoke all active sessions for ${employee.email}?`)) return;
+    try {
+      await employeeApiRequest(
+        `/api/admin/employees/${encodeURIComponent(employee.id)}/revoke-sessions`,
+        'POST'
+      );
+      showToast('All employee sessions have been revoked', 'success');
+      await loadEmployeeManagement();
+    } catch (error: any) {
+      showToast(error?.message || 'Failed to revoke employee sessions', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === 'employees' && adminRole === 'main_admin') {
+      void loadEmployeeManagement();
+    }
+  }, [currentTab, adminRole]);
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setStatusMessage({ text, type });
     setTimeout(() => setStatusMessage(null), 3500);
@@ -2905,105 +2897,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // AUTHENTICATION LOGIN SCREEN
   // ====================================================
   if (!isAuthenticated) {
-    if (showForgotPassword) {
-      return (
-        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
-          <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-8 shadow-2xl text-white space-y-6 animate-fade-in">
-            <button
-              type="button"
-              onClick={() => {
-                setShowForgotPassword(false);
-                setResetStatus(null);
-              }}
-              className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Admin Login</span>
-            </button>
-
-            <div className="text-center space-y-2">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-800 border border-zinc-700 text-emerald-400 mb-1 shadow-inner">
-                <KeyRound className="w-7 h-7" />
-              </div>
-              <h1 className="text-2xl font-black tracking-tight text-white">
-                Forgot Password?
-              </h1>
-              <p className="text-xs text-zinc-400">
-                Enter your registered admin email to receive an official Firebase password reset link.
-              </p>
-            </div>
-
-            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-1.5">
-                  Authorized Admin Email
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    placeholder="moonlofiofficial@gmail.com"
-                    required
-                    className="w-full bg-zinc-950 border border-zinc-700 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-emerald-500 transition-colors"
-                  />
-                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
-                </div>
-              </div>
-
-              {resetStatus && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
-                    resetStatus.type === 'success'
-                      ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                      : 'bg-rose-950/60 border-rose-800 text-rose-300'
-                  }`}
-                >
-                  {resetStatus.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  )}
-                  <span className="leading-relaxed">{resetStatus.message}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={resetLoading}
-                className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black text-sm transition-all shadow-lg hover:shadow-emerald-500/20 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-              >
-                {resetLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Sending Reset Link via Firebase...</span>
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-4 h-4" />
-                    <span>Send Password Reset Email</span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="pt-2 text-center border-t border-zinc-800/80">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForgotPassword(false);
-                  setResetStatus(null);
-                }}
-                className="text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
-              >
-                Return to Login
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="min-h-screen bg-[#e6ecf4] flex flex-col items-center justify-center p-4 selection:bg-blue-600 selection:text-white">
         {/* Neumorphic 3D Circle Disc matching Image 1 & Image 2 */}
@@ -3087,17 +2980,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Footer Sub-links */}
         <div className="mt-8 flex items-center gap-3 text-xs text-[#718096] font-medium">
-          <button
-            type="button"
-            onClick={() => {
-              setShowForgotPassword(true);
-              setResetStatus(null);
-              setResetEmail(AUTHORIZED_ADMIN_EMAIL);
-            }}
-            className="hover:text-[#2b6cb0] transition-colors cursor-pointer"
-          >
-            Forgot Password?
-          </button>
           {onBackToStore && (
             <>
               <span>•</span>
@@ -3838,6 +3720,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <span>Settings</span>
             </button>
 
+            {adminRole === 'main_admin' && (
+              <button
+                type="button"
+                onClick={() => handleTabChange('employees')}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  currentTab === 'employees'
+                    ? 'bg-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
+                    : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100'
+                }`}
+              >
+                <Users className="w-4 h-4 shrink-0" />
+                <span>Employee Management</span>
+              </button>
+            )}
             {/* About Us Page */}
             <button
               type="button"
@@ -5773,7 +5669,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                       : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
                                   }`}
                                 >
-                                  <span>{p.is_best_seller ? '⭐ Best' : '⭐ Off'}</span>
+                                  <span>{p.is_best_seller ? '★ Best' : '☆ Off'}</span>
                                 </button>
                               </div>
                             </div>
@@ -6698,7 +6594,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           {['Shipped', 'Delivered'].includes(ord.status)
                                             ? '✓ Processing'
                                             : ord.status === 'Processing' || ord.status === 'Confirmed'
-                                            ? '● Processing'
+                                            ? '● Processing'
                                             : '○ Processing'}
                                         </span>
                                         <span className="text-zinc-300">→</span>
@@ -6717,7 +6613,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                           {ord.status === 'Delivered'
                                             ? '✓ Shipped'
                                             : ord.status === 'Shipped'
-                                            ? '● Shipped'
+                                            ? '● Shipped'
                                             : '○ Shipped'}
                                         </span>
                                         <span className="text-zinc-300">→</span>
@@ -7338,12 +7234,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Admin Security & Password Management</span>
                     </h3>
                     <p className="text-xs text-zinc-500">
-                      Manage and update your administrator credentials securely using Firebase Authentication.
+                      Manage your administrator credentials securely using D1 session authentication.
                     </p>
                   </div>
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Authorized Admin: {AUTHORIZED_ADMIN_EMAIL}</span>
+                    <span>Main Admin: {AUTHORIZED_ADMIN_EMAIL}</span>
                   </div>
                 </div>
 
@@ -7355,7 +7251,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Firebase Secure Password Update</span>
                     </div>
                     <p>
-                      Enter your current password to re-authenticate, followed by your new password (minimum 6 characters). The password will be immediately updated in Firebase Authentication.
+                      Enter your current D1 password to verify your identity, then choose a new password between 12 and 128 characters. Your D1 password will be updated and all active admin sessions will be revoked.
                     </p>
                   </div>
 
@@ -7386,14 +7282,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {/* New Password */}
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-1.5">
-                      New Password (নতুন পাসওয়ার্ড - অন্তত ৬ ক্যারেক্টার)
+                      New Password (নতুন পাসওয়ার্ড - অন্তত ১২ ক্যারেক্টার)
                     </label>
                     <div className="relative">
                       <input
                         type={showNewPass ? 'text' : 'password'}
                         value={newPasswordInput}
                         onChange={(e) => setNewPasswordInput(e.target.value)}
-                        placeholder="Enter new password (min. 6 characters)"
+                        placeholder="Enter new password (12–128 characters)"
                         required
                         className="w-full bg-zinc-50 text-zinc-900 text-xs sm:text-sm pl-4 pr-11 py-3 rounded-xl border border-zinc-300 focus:outline-none focus:border-zinc-900 transition-colors"
                       />
@@ -7431,84 +7327,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Step 2: Gmail Verification Code */}
-                  {!otpSent ? (
-                    <div className="pt-2 space-y-2">
-                      <button
-                        type="button"
-                        onClick={handleSendOtp}
-                        disabled={isSendingOtp}
-                        className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs sm:text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        {isSendingOtp ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Sending Security Code to Gmail...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="w-4 h-4" />
-                            <span>Send Verification Code to Gmail (জি-মেইলে কোড পাঠান)</span>
-                          </>
-                        )}
-                      </button>
-                      <p className="text-[11px] text-zinc-500">
-                        A 6-digit verification code will be dispatched to <strong>{AUTHORIZED_ADMIN_EMAIL}</strong> to authorize this password change.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-3.5 animate-in fade-in">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                        <label className="block text-xs font-bold text-amber-950 uppercase tracking-wider">
-                          Enter 6-Digit Verification Code (৬ ডিজিটের সিকিউরিটি কোড)
-                        </label>
-                        <span className="text-[11px] font-bold text-amber-800">
-                          Expires in {Math.floor(otpTimerSeconds / 60)}:{(otpTimerSeconds % 60).toString().padStart(2, '0')}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={enteredOtp}
-                          onChange={(e) => setEnteredOtp(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="123456"
-                          required
-                          className="w-44 bg-white text-zinc-950 font-black text-center text-lg tracking-[0.25em] px-4 py-2.5 rounded-xl border border-amber-300 focus:outline-none focus:border-amber-600 shadow-inner"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSendOtp}
-                          disabled={isSendingOtp || otpTimerSeconds > 240}
-                          className="text-xs font-bold text-amber-800 hover:text-amber-950 underline disabled:opacity-50 cursor-pointer"
-                        >
-                          Resend Code
-                        </button>
-                      </div>
-
-                      <div className="pt-1">
-                        <button
-                          type="submit"
-                          disabled={changePassLoading || enteredOtp.length < 6}
-                          className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          {changePassLoading ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              <span>Verifying Code & Updating Password...</span>
-                            </>
-                          ) : (
-                            <>
-                              <ShieldCheck className="w-4 h-4" />
-                              <span>Verify Code & Confirm Password Change (পাসওয়ার্ড পরিবর্তন করুন)</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={changePassLoading}
+                      className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {changePassLoading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Updating Password...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Change Password</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="mt-2 text-[11px] text-zinc-500">
+                      Your current D1 password will be verified securely. All active admin sessions will be revoked after a successful change, and you will need to log in again.
+                    </p>
+                  </div>
                   {/* Status Notifications */}
                   {changePassStatus && (
                     <div
@@ -10747,7 +10587,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       }`}>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-extrabold flex items-center gap-1">
-                            <span>⭐ Best Seller</span>
+                            <span>★ Best Seller</span>
                           </span>
                           <input
                             type="checkbox"
@@ -11703,7 +11543,115 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              {/* ====================================================
+              {/* EMPLOYEE MANAGEMENT PAGE */}
+        {currentTab === 'employees' && adminRole === 'main_admin' && (
+          <div className="max-w-6xl space-y-6 animate-fade-in pb-12">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black text-white">Employee Management</h2>
+                <p className="text-sm text-zinc-400 mt-1">Manage employee accounts, access permissions, and security</p>
+              </div>
+              <button type="button" onClick={() => void loadEmployeeManagement()} disabled={employeeLoading}
+                className="px-4 py-2 rounded-lg bg-zinc-800 text-white text-sm font-bold disabled:opacity-50">
+                {employeeLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+
+            <form onSubmit={createEmployeeAccount} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4">
+              <h3 className="text-lg font-bold text-white">Create New Employee Account</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input type="email" required value={employeeEmail} onChange={(e) => setEmployeeEmail(e.target.value)}
+                  placeholder="Employee email" className="w-full rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-3 text-white" />
+                <input type="password" required minLength={12} maxLength={128} value={employeePassword}
+                  onChange={(e) => setEmployeePassword(e.target.value)} placeholder="Password (minimum 12 characters)"
+                  className="w-full rounded-lg bg-zinc-950 border border-zinc-700 px-3 py-3 text-white" />
+              </div>
+              <button type="submit" disabled={employeeSaving}
+                className="rounded-lg bg-emerald-500 px-5 py-2.5 font-bold text-zinc-950 disabled:opacity-50">
+                {employeeSaving ? 'Creating...' : 'Create Employee'}
+              </button>
+            </form>
+
+            <section className="space-y-4">
+              <h3 className="text-lg font-bold text-white">Employee Accounts ({employeeAccounts.length})</h3>
+              {employeeLoading && <p className="text-sm text-zinc-400">Loading employee data...</p>}
+              {!employeeLoading && employeeAccounts.length === 0 && (
+                <p className="rounded-xl border border-zinc-800 p-5 text-zinc-400">No employee accounts have been created yet.</p>
+              )}
+              {employeeAccounts.map((employee) => (
+                <article key={employee.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-white">{employee.email}</p>
+                      <p className="text-xs text-zinc-500 mt-1">Role: Employee Admin · ID: {employee.id}</p>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${employee.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+                      {employee.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-zinc-300 mb-3">Access Permissions</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {EMPLOYEE_PERMISSION_OPTIONS.map(([permission, label]) => (
+                        <label key={permission} className="flex items-center gap-2 rounded-lg bg-zinc-950/70 p-2.5 text-sm text-zinc-300">
+                          <input type="checkbox" checked={(employee.permissions || []).includes(permission)}
+                            onChange={(e) => {
+                              const current = employee.permissions || [];
+                              const next = e.target.checked
+                                ? [...current, permission]
+                                : current.filter((item: string) => item !== permission);
+                              setEmployeeAccounts((previous) => previous.map((item) =>
+                                item.id === employee.id ? { ...item, permissions: next } : item
+                              ));
+                            }} />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => void saveEmployeePermissions(employee)}
+                      className="mt-3 rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white">
+                      Save Permissions
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 border-t border-zinc-800 pt-4">
+                    <button type="button" onClick={() => void updateEmployeeAccount(employee, { is_active: !employee.is_active })}
+                      className="rounded-lg bg-zinc-800 px-3 py-2 text-xs font-bold text-white">
+                      {employee.is_active ? 'Deactivate Account' : 'Activate Account'}
+                    </button>
+                    <button type="button" onClick={() => void resetEmployeePassword(employee)}
+                      className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white">
+                      Reset Password
+                    </button>
+                    <button type="button" onClick={() => void revokeEmployeeSessions(employee)}
+                      className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white">
+                      Revoke Sessions
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-3">
+              <h3 className="text-lg font-bold text-white">Security Audit Logs</h3>
+              {employeeAuditLogs.length === 0 && <p className="text-sm text-zinc-400">No audit logs found.</p>}
+              <div className="space-y-2">
+                {employeeAuditLogs.map((log) => (
+                  <div key={log.id} className="rounded-lg bg-zinc-950/70 p-3 text-xs sm:text-sm">
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span className="font-bold text-emerald-400">{log.action}</span>
+                      <span className="text-zinc-500">{log.created_at ? new Date(log.created_at).toLocaleString() : ''}</span>
+                    </div>
+                    <p className="text-zinc-300 mt-1">By: {log.actor_email || log.actor_admin_id} · Target: {log.target_email || log.target_admin_id || '—'}</p>
+                    {log.details_json && <p className="text-zinc-500 mt-1 break-all">{log.details_json}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+        {/* ====================================================
                   ORDER ITEMS MANAGEMENT SECTION
               ==================================================== */}
               <div className="pt-2 border-t border-zinc-200">
