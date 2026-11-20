@@ -9,3 +9,5 @@ coverage/
 *.zip
 *.tar.gz
 .firestore_cooldown
+
+/cloudflare/.dev.vars

@@ -501,59 +501,7 @@ export function initRealtimeFirestoreListeners() {
   isListening = true;
 
   try {
-    // 1. Listen for product changes: Cloud Firestore is authoritative single source of truth
-    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const deletedProductIds = getDeletedProductIds();
-      if (snapshot.empty) {
-        setLocal(PRODUCTS_KEY, []);
-        try { localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY); } catch {}
-        notifyProductsChanged();
-        return;
-      }
-      const prodMap = new Map<string, Product>();
-      snapshot.forEach((docSnap) => {
-        const d = docSnap.data() as Product;
-        const pId = String(d.id || docSnap.id);
-        const pSku = String(d.sku || '');
-        const pSlug = String(d.slug || '');
-        const pName = String(d.name || '').trim();
-        if (!pName) return;
-        const pIdLower = pId.toLowerCase();
-        const pSkuLower = pSku.toLowerCase();
-        const pSlugLower = pSlug.toLowerCase();
-        if (deletedProductIds.has(pIdLower) || (pSkuLower && deletedProductIds.has(pSkuLower)) || (pSlugLower && deletedProductIds.has(pSlugLower))) return;
-        prodMap.set(pId, { ...d, id: pId });
-      });
-
-      // Firestore is authoritative after a successful snapshot. Do not merge local-only
-      // products back in: deleted/outdated cached products would reappear on the storefront.
-      const prods = Array.from(prodMap.values());
-      prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      setLocal(PRODUCTS_KEY, prods);
-      try { localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY); } catch {}
-      notifyProductsChanged();
-    }, (err) => {
-      if (isQuotaExceededError(err) && typeof window !== 'undefined') {
-        // Fallback to local server REST API immediately so products are never wiped out
-        try {
-          localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY);
-        } catch {}
-        fetch('/api/products?all=true')
-          .then((res) => res.json())
-          .then((data) => {
-            if (data?.success && Array.isArray(data.products) && data.products.length > 0) {
-              setLocal(PRODUCTS_KEY, data.products);
-              notifyProductsChanged();
-            }
-          })
-          .catch(() => {});
-      }
-      handleStoreFirestoreError('Products snapshot', err);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('maxora_products_fetch_failed', { detail: { error: err?.message || String(err) } }));
-      }
-    });
-    activeFirestoreUnsubscribers.push(unsubProducts);
+    // Products are served by Cloudflare D1. Do not subscribe to Firebase products.
 
     // 2. Listen for settings changes: Cloud Firestore is authoritative single source of truth
     const unsubSettings = onSnapshot(doc(db, 'settings', 'store_settings'), (docSnap) => {
@@ -632,6 +580,45 @@ let sseConnection: EventSource | null = null;
 let pollTimer: any = null;
 let lastKnownVersions: Record<string, number> = {};
 
+let isD1ProductRefreshRunning = false;
+
+async function refreshProductsFromD1() {
+  if (typeof window === 'undefined' || isD1ProductRefreshRunning) return;
+  isD1ProductRefreshRunning = true;
+
+  try {
+    const products: Product[] = [];
+    let offset = 0;
+
+    for (let page = 0; page < 20; page++) {
+      const res = await fetch(`/api/products?limit=50&offset=${offset}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!res.ok) throw new Error(`D1 products HTTP ${res.status}`);
+
+      const json = await res.json();
+      if (!Array.isArray(json?.products)) throw new Error('Invalid D1 products response');
+
+      products.push(...json.products);
+      if (!json.pagination?.hasMore) break;
+
+      const nextOffset = Number(json.pagination.nextOffset);
+      if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
+        throw new Error('Invalid D1 pagination offset');
+      }
+      offset = nextOffset;
+    }
+
+    setLocal(PRODUCTS_KEY, products);
+    try { localStorage.removeItem(PRODUCTS_CACHE_UNAVAILABLE_KEY); } catch {}
+    notifyProductsChanged();
+  } catch (error) {
+    console.warn('[StoreService] D1 product refresh failed:', error);
+  } finally {
+    isD1ProductRefreshRunning = false;
+  }
+}
 function initServerLiveSync() {
   if (typeof window === 'undefined') return;
   if (sseConnection) return;
@@ -643,7 +630,7 @@ function initServerLiveSync() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'products') {
-            notifyProductsChanged();
+            void refreshProductsFromD1();
           } else if (data.type === 'categories') {
             notifyCategoriesChanged();
             notifySubCategoriesChanged();
@@ -665,19 +652,15 @@ function initServerLiveSync() {
   if (!pollTimer) {
     pollTimer = setInterval(async () => {
       try {
-        const res = await fetch('/api/sync-version', { cache: 'no-store' });
+        const res = await fetch('/api/catalog/version', { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
-          if (json.success && json.versions) {
-            const v = json.versions;
-            if (lastKnownVersions.products && v.products && v.products > lastKnownVersions.products) {
-              notifyProductsChanged();
+          const version = Number(json?.version);
+          if (Number.isFinite(version) && version >= 0) {
+            if (lastKnownVersions.products === undefined || version > lastKnownVersions.products) {
+              lastKnownVersions.products = version;
+              void refreshProductsFromD1();
             }
-            if (lastKnownVersions.categories && v.categories && v.categories > lastKnownVersions.categories) {
-              notifyCategoriesChanged();
-              notifySubCategoriesChanged();
-            }
-            lastKnownVersions = v;
           }
         }
       } catch {}
@@ -830,21 +813,8 @@ export async function seedInitialDataIfNeeded() {
   isSeeding = true;
   try {
     // 1. Seed Products if empty
-    const prodSnap = await getDocs(collection(db, 'products'));
-    if (prodSnap.empty) {
-      const batch = writeBatch(db);
-      for (const p of INITIAL_PRODUCTS) {
-        const ref = doc(db, 'products', String(p.id));
-        batch.set(ref, p);
-      }
-      await batch.commit();
-      console.log('Seeded initial products to Firestore');
-      const local = getLocal<Product[]>(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      if (!local || local.length === 0) {
-        setLocal(PRODUCTS_KEY, INITIAL_PRODUCTS);
-      }
-      notifyProductsChanged();
-    }
+    // Product catalog is managed exclusively by Cloudflare D1.
+    // Do not read from or seed the legacy Firebase products collection.
 
     // 2. Seed Categories if empty
     const catSnap = await getDocs(collection(db, 'categories'));
@@ -954,7 +924,7 @@ export const storeService = {
   getCachedProducts(): Product[] {
     const deletedProductIds = getDeletedProductIds();
     const raw = getLocal<Product[]>(PRODUCTS_KEY, []);
-    const baseline = Array.isArray(raw) && raw.length > 0 ? raw : INITIAL_PRODUCTS;
+    const baseline = Array.isArray(raw) ? raw : [];
     const prodMap = new Map<string, Product>();
     if (Array.isArray(baseline)) {
       baseline.forEach((p) => {
@@ -1291,29 +1261,54 @@ export const storeService = {
     // 2. LIVE SERVER REST API & CLOUD FIRESTORE IN PARALLEL:
     // Both sources are fetched simultaneously with no-cache headers.
     // If admin uploaded a product to the backend, /api/products?all=true delivers it in ~1ms!
-    const fetchApiPromise = tryApi<{ success: boolean; products: Product[] }>('/api/products?all=true', { timeoutMs: 2500 })
-      .then((apiRes) => {
-        if (apiRes.success && Array.isArray(apiRes.data?.products) && apiRes.data.products.length > 0) {
-          apiRes.data.products.forEach((item) => registerProduct(item));
+    // D1 is the authoritative product source. Fetch every page.
+    let d1ProductsLoaded = false;
+    const fetchApiPromise = (async () => {
+      const serverProducts: Product[] = [];
+      let offset = 0;
+
+      for (let page = 0; page < 20; page++) {
+        const apiRes = await tryApi<{
+          products?: Product[];
+          pagination?: {
+            hasMore?: boolean;
+            nextOffset?: number;
+          };
+        }>(`/api/products?limit=50&offset=${offset}`, { timeoutMs: 5000 });
+
+        if (
+          !apiRes.success ||
+          !Array.isArray(apiRes.data?.products) ||
+          apiRes.data?.source !== 'd1'
+        ) {
+          const receivedSource = String(apiRes.data?.source || 'unknown');
+          throw new Error(apiRes.error || `Expected D1 products but received ${receivedSource}`);
         }
-      })
-      .catch((e) => console.warn('API getProducts notice:', e));
 
-    const fetchFirestorePromise = (!isClientQuotaCooldownActive())
-      ? fetchFirestoreProductsWithTimeout(2000)
-          .then((snapDocs) => {
-            if (snapDocs && snapDocs.length > 0) {
-              snapDocs.forEach((d) => registerProduct(d.data, d.id));
-            }
-          })
-          .catch((e) => handleStoreFirestoreError('Firestore getProducts', e))
-      : Promise.resolve();
+        serverProducts.push(...apiRes.data.products);
 
-    await Promise.allSettled([fetchApiPromise, fetchFirestorePromise]);
+        const pagination = apiRes.data.pagination;
+        if (!pagination?.hasMore) break;
+
+        const nextOffset = Number(pagination.nextOffset);
+        if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
+          throw new Error("D1 product pagination did not advance");
+        }
+
+        offset = nextOffset;
+      }
+
+      // Replace stale cached/Firestore products with the complete D1 result.
+      prodMap.clear();
+      serverProducts.forEach((item) => registerProduct(item));
+      d1ProductsLoaded = true;
+    })().catch((e) => console.warn("D1 getProducts notice:", e));
+
+    await fetchApiPromise;
 
     const prods = Array.from(prodMap.values());
     prods.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-    if (prods.length > 0) {
+    if (d1ProductsLoaded) {
       setLocal(PRODUCTS_KEY, prods);
     }
 
@@ -1545,41 +1540,36 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Unmark from deleted products registry so newly added product is active
-    unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
+    // Persist to authoritative Cloudflare D1 before reporting success.
+    try {
+      const apiResult = await tryApi<{ success?: boolean; product?: Product; id?: string }>('/api/admin/products', {
+        method: 'POST',
+        headers: getAuthHeaders(adminPassword),
+        body: JSON.stringify(newProd),
+        timeoutMs: 15000,
+      });
 
-    // 2. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
-    const existingIdx = local.findIndex((p) => String(p.id) === String(newProd.id));
-    if (existingIdx >= 0) {
-      local[existingIdx] = newProd;
-    } else {
-      local.unshift(newProd);
-    }
-    setLocal(PRODUCTS_KEY, local);
-    notifyProductsChanged();
+      if (!apiResult.success || apiResult.data?.success !== true) {
+        throw new Error(apiResult.error || 'D1 product creation was not confirmed by the server.');
+      }
 
-    // 3. Authoritative Backend Server API persistence
-    tryApi<{ success: boolean; product?: Product; id?: string }>('/api/admin/products', {
-      method: 'POST',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newProd),
-    }).then(() => {
+      unmarkProductDeleted(newProd.id, newProd.sku, newProd.slug);
+
+      const existingIdx = local.findIndex((p) => String(p.id) === String(newProd.id));
+      if (existingIdx >= 0) {
+        local[existingIdx] = newProd;
+      } else {
+        local.unshift(newProd);
+      }
+      setLocal(PRODUCTS_KEY, local);
+      notifyProductsChanged();
+
       tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
-    }).catch(() => {});
-    tryApi<{ success: boolean; product?: Product }>('/api/products', {
-      method: 'POST',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(newProd),
-    }).catch(() => {});
-
-    // 4. Mirror to Cloud Firestore safely in background without blocking
-    safeFirestoreWrite(
-      () => setDoc(doc(db, 'products', String(newProd.id)), cleanForFirestore(newProd), { merge: true }),
-      2500,
-      'addProduct'
-    );
-
-    return { success: true, product: newProd };
+      return { success: true, product: newProd };
+    } catch (error) {
+      console.error('[addProduct] D1 persistence failed:', error);
+      return { success: false, product: newProd };
+    }
   },
 
   async updateProduct(id: string | number, productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product?: Product }> {
@@ -1612,40 +1602,38 @@ export const storeService = {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Unmark from deleted products registry so updated product is active
-    unmarkProductDeleted(updated.id, updated.sku, updated.slug);
+    // Persist to authoritative Cloudflare D1 before reporting success.
+    try {
+      const apiResult = await tryApi<{ success?: boolean; product?: Product }>(
+        `/api/admin/products/${encodeURIComponent(idStr)}`,
+        {
+          method: 'PUT',
+          headers: getAuthHeaders(adminPassword),
+          body: JSON.stringify(updated),
+          timeoutMs: 15000,
+        }
+      );
 
-    // 2. OPTIMISTIC & LOCAL-FIRST: Update local cache & notify immediately with 0ms latency
-    if (index !== -1) {
-      local[index] = updated;
-    } else {
-      local.unshift(updated);
-    }
-    setLocal(PRODUCTS_KEY, local);
-    notifyProductsChanged();
+      if (!apiResult.success || apiResult.data?.success !== true) {
+        throw new Error(apiResult.error || 'D1 product update was not confirmed by the server.');
+      }
 
-    // 3. Authoritative Backend Server API persistence
-    tryApi<{ success: boolean; product?: Product }>(`/api/admin/products/${encodeURIComponent(idStr)}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(updated),
-    }).then(() => {
+      unmarkProductDeleted(updated.id, updated.sku, updated.slug);
+
+      if (index !== -1) {
+        local[index] = updated;
+      } else {
+        local.unshift(updated);
+      }
+      setLocal(PRODUCTS_KEY, local);
+      notifyProductsChanged();
+
       tryApi('/api/revalidate', { method: 'POST' }).catch(() => {});
-    }).catch(() => {});
-    tryApi<{ success: boolean; product?: Product }>(`/api/products?id=${encodeURIComponent(idStr)}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(adminPassword),
-      body: JSON.stringify(updated),
-    }).catch(() => {});
-
-    // 4. Mirror to Cloud Firestore safely in background without blocking
-    safeFirestoreWrite(
-      () => setDoc(doc(db, 'products', idStr), cleanForFirestore(updated), { merge: true }),
-      2500,
-      'updateProduct'
-    );
-
-    return { success: true, product: updated };
+      return { success: true, product: updated };
+    } catch (error) {
+      console.error('[updateProduct] D1 persistence failed:', error);
+      return { success: false, product: updated };
+    }
   },
 
   async saveProduct(productData: Partial<Product>, adminPassword?: string): Promise<{ success: boolean; product?: Product }> {
@@ -1822,7 +1810,6 @@ export const storeService = {
     const orderItems: OrderItem[] = [];
     const orderId = `ord-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000)}`;
 
-    const stockUpdatePromises: Promise<any>[] = [];
 
     for (const item of orderPayload.items) {
       const prod = products.find((p) => String(p.id) === String(item.product_id));
@@ -1859,22 +1846,7 @@ export const storeService = {
         slug: String(prod?.slug || ''),
       });
 
-      if (prod) {
-        prod.stock = Math.max(0, Number(prod.stock || 0) - qty);
-        prod.sold_count = (Number(prod.sold_count) || 0) + qty;
-        if (db && !isClientQuotaCooldownActive()) {
-          // update stock and sold_count in Firestore
-          stockUpdatePromises.push(
-            setDoc(
-              doc(db, 'products', String(prod.id)),
-              { stock: prod.stock, sold_count: prod.sold_count, updated_at: new Date().toISOString() },
-              { merge: true }
-            ).catch((e) => handleStoreFirestoreError('Stock update', e))
-          );
-        }
-      }
     }
-    setLocal(PRODUCTS_KEY, products);
 
     // Free delivery threshold & enabled check from store settings
     const isFreeDeliveryFeatureEnabled = settings.free_delivery_enabled === true;
@@ -1963,122 +1935,65 @@ export const storeService = {
 
     console.log(`[ORDER_CREATE_START] id=${orderId} order_number=${orderNo} phone=${orderPayload.phone} total=${total}`);
 
-    // Authoritative clean object for Firestore
-    const firestoreOrder = cleanForFirestore({
-      ...newOrder,
-      customer_phone: orderPayload.phone || '',
-      total_amount: total,
-      order_status: 'Pending',
-    });
-    const firestoreCustomer = cleanForFirestore(customerData);
+    // D1 is the only authoritative order, stock and customer persistence layer.
+    let confirmedOrder: Order = newOrder;
+    let confirmedTotal = total;
 
-    let firestorePersisted = false;
-    let persistenceError: any = null;
+    try {
+      const fullOrderSyncPayload = {
+        ...orderPayload,
+        order: newOrder,
+        id: orderId,
+        order_number: orderNo,
+        items: orderItems,
+        total,
+        subtotal,
+        delivery_charge: deliveryCharge,
+      };
 
-    // ATTEMPT 1: Authoritative Direct Firestore write
-    if (db && !isClientQuotaCooldownActive()) {
-      try {
-        await Promise.race([
-          setDoc(doc(db, 'orders', orderId), firestoreOrder, { merge: true }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore network write timeout (9s)')), 9000)
-          ),
-        ]);
-        firestorePersisted = true;
-        console.log(`[ORDER_CREATE_SUCCESS] Direct Firestore persistence confirmed for order ${orderId} (${orderNo})`);
-
-        // Asynchronously mirror order to server database in background without blocking customer UI
-        tryApi('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...orderPayload,
-            order: newOrder,
-            id: orderId,
-            order_number: orderNo,
-            items: orderItems,
-            total,
-            subtotal,
-            delivery_charge: deliveryCharge,
-          }),
-          timeoutMs: 8000,
-        }).catch(() => {});
-      } catch (directErr: any) {
-        persistenceError = directErr;
-        handleStoreFirestoreError('Direct order write', directErr);
-        console.warn(`[ORDER_CREATE_DIRECT_WARN] Direct Firestore write note for ${orderId}:`, directErr?.message || directErr);
-      }
-    }
-
-    // ATTEMPT 2: Server API Proxy to Firestore & Server Database (mirrored if client direct write encountered network/quota barrier)
-    if (!firestorePersisted) {
-      try {
-        const fullOrderSyncPayload = {
-          ...orderPayload,
-          order: newOrder,
-          id: orderId,
-          order_number: orderNo,
-          items: orderItems,
-          total,
-          subtotal,
-          delivery_charge: deliveryCharge,
-        };
-        const apiRes = await tryApi<{ success: boolean; message?: string; order?: any; error?: string }>('/api/orders', {
+      const apiRes = await tryApi<{ success: boolean; order?: Order; error?: string }>(
+        '/api/orders',
+        {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(fullOrderSyncPayload),
-          timeoutMs: 10000,
-        });
-
-        if (apiRes.success && (apiRes.data?.success || apiRes.data?.order)) {
-          firestorePersisted = true;
-          console.log(`[ORDER_CREATE_SUCCESS] Server database persistence confirmed for order ${orderId} (${orderNo})`);
-        } else {
-          persistenceError = new Error(apiRes.data?.error || apiRes.error || 'Server order endpoint rejected order');
+          timeoutMs: 15000,
         }
-      } catch (apiErr: any) {
-        persistenceError = apiErr;
-        console.warn(`[ORDER_CREATE_API_WARN] Server API fallback error for ${orderId}:`, apiErr?.message || apiErr);
-      }
-    }
+      );
 
-    // STRICT PERSISTENCE GATE:
-    // Every successful customer order must be persisted in Firestore BEFORE the customer is told that the order was successfully placed.
-    if (!firestorePersisted) {
-      console.error(`[ORDER_CREATE_FAILED] Order ${orderId} (${orderNo}) could not be written to Firestore:`, persistenceError?.message || persistenceError);
+      if (!apiRes.success || !apiRes.data?.success || !apiRes.data?.order) {
+        throw new Error(apiRes.data?.error || apiRes.error || 'D1 did not confirm order persistence');
+      }
+
+      confirmedOrder = apiRes.data.order;
+      confirmedTotal = Number(confirmedOrder.total ?? total);
+
+      console.log(`[ORDER_CREATE_SUCCESS] D1 persistence confirmed for order ${orderId} (${orderNo})`);
+    } catch (apiErr: any) {
+      console.error(`[ORDER_CREATE_FAILED] D1 could not confirm order ${orderId}:`, apiErr?.message || apiErr);
       return {
         success: false,
-        error:
-          'অর্ডারটি ডাটাবেজে সংরক্ষণ করা সম্ভব হয়নি। অনুগ্রহ করে ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন। (Order could not be saved to server database. Please check connection and try again.)',
+        error: 'অর্ডারটি সার্ভারে সংরক্ষণ করা যায়নি। অনুগ্রহ করে ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন। (Order could not be saved. Please check your connection and try again.)',
       };
     }
-
-    // Secondary non-blocking updates (customer record & stock count in Firestore)
-    try {
-      if (db && !isClientQuotaCooldownActive()) {
-        setDoc(doc(db, 'customers', customerId), firestoreCustomer, { merge: true }).catch((e) => handleStoreFirestoreError('Customer write', e));
-        Promise.all(stockUpdatePromises).catch(() => {});
-      }
-    } catch {}
-
     // Update local cache so customer device immediately sees their own order
     const orders = getLocal<Order[]>(ORDERS_KEY, INITIAL_ORDERS);
-    orders.unshift(newOrder);
+    orders.unshift(confirmedOrder);
     setLocal(ORDERS_KEY, orders);
 
     const customers = getLocal<Customer[]>(CUSTOMERS_KEY, INITIAL_CUSTOMERS);
     const custIdx = customers.findIndex((c) => c.phone === orderPayload.phone);
     if (custIdx >= 0) {
       customers[custIdx].total_orders = (customers[custIdx].total_orders || 0) + 1;
-      customers[custIdx].total_spent = (customers[custIdx].total_spent || 0) + total;
+      customers[custIdx].total_spent = (customers[custIdx].total_spent || 0) + confirmedTotal;
       customers[custIdx].updated_at = new Date().toISOString();
     } else {
-      customers.push(customerData);
+      customers.push({ ...customerData, total_spent: confirmedTotal });
     }
     setLocal(CUSTOMERS_KEY, customers);
 
     // Save to idempotency cache ONLY after confirmed successful write
-    this._recentOrderSignatures.set(submissionSig, { timestamp: Date.now(), order: newOrder });
+    this._recentOrderSignatures.set(submissionSig, { timestamp: Date.now(), order: confirmedOrder });
     if (this._recentOrderSignatures.size > 50) {
       const oldestKey = this._recentOrderSignatures.keys().next().value;
       if (oldestKey) this._recentOrderSignatures.delete(oldestKey);
@@ -2086,7 +2001,7 @@ export const storeService = {
 
     notifyOrdersChanged();
 
-    return { success: true, order: newOrder };
+    return { success: true, order: confirmedOrder };
   },
 
   /**
@@ -2163,8 +2078,8 @@ export const storeService = {
       return {
         success: true,
         methods: [
-          { id: 'cod', name: 'Cash on Delivery', name_bn: 'ক্যাশ অন ডেলিভারি (পণ্য হাতে পেয়ে মূল্য পরিশোধ)', enabled: true, recommended: true },
-          { id: 'uddoktapay', name: 'Online Payment (bKash, Nagad, Rocket)', name_bn: 'অনলাইন পেমেন্ট (বিকাশ, নগদ, রকেট, কার্ড)', gateway: 'UddoktaPay', enabled: false }
+          { id: 'cod', name: 'Cash on Delivery', name_bn: 'à¦•à§à¦¯à¦¾à¦¶ à¦…à¦¨ à¦¡à§‡à¦²à¦¿à¦­à¦¾à¦°à¦¿ (à¦ªà¦£à§à¦¯ à¦¹à¦¾à¦¤à§‡ à¦ªà§‡à§Ÿà§‡ à¦®à§‚à¦²à§à¦¯ à¦ªà¦°à¦¿à¦¶à§‹à¦§)', enabled: true, recommended: true },
+          { id: 'uddoktapay', name: 'Online Payment (bKash, Nagad, Rocket)', name_bn: 'à¦…à¦¨à¦²à¦¾à¦‡à¦¨ à¦ªà§‡à¦®à§‡à¦¨à§à¦Ÿ (à¦¬à¦¿à¦•à¦¾à¦¶, à¦¨à¦—à¦¦, à¦°à¦•à§‡à¦Ÿ, à¦•à¦¾à¦°à§à¦¡)', gateway: 'UddoktaPay', enabled: false }
         ]
       };
     }

@@ -261,7 +261,7 @@ const defaultSettings: Record<string, any> = {
   delivery_inside_dhaka: "70",
   delivery_sub_dhaka: "100",
   delivery_outside_dhaka: "130",
-  currency: "৳",
+  currency: "à§³",
   phone: "01635451746",
   whatsapp: "+8801635451746",
   facebook: "https://facebook.com/maxora.store",
@@ -274,18 +274,18 @@ const defaultSettings: Record<string, any> = {
   manual_bkash_enabled: true,
   manual_bkash_number: "01932878270",
   manual_bkash_type: "Personal",
-  manual_bkash_instructions: "প্রদত্ত বিকাশ নম্বরে মোট টাকার পরিমাণ Send Money করুন এবং নিচে আপনার বিকাশ নম্বর ও TrxID দিন।",
+  manual_bkash_instructions: "à¦ªà§à¦°à¦¦à¦¤à§à¦¤ à¦¬à¦¿à¦•à¦¾à¦¶ à¦¨à¦®à§à¦¬à¦°à§‡ à¦®à§‹à¦Ÿ à¦Ÿà¦¾à¦•à¦¾à¦° à¦ªà¦°à¦¿à¦®à¦¾à¦£ Send Money à¦•à¦°à§à¦¨ à¦à¦¬à¦‚ à¦¨à¦¿à¦šà§‡ à¦†à¦ªà¦¨à¦¾à¦° à¦¬à¦¿à¦•à¦¾à¦¶ à¦¨à¦®à§à¦¬à¦° à¦“ TrxID à¦¦à¦¿à¦¨à¥¤",
   manual_nagad_enabled: true,
   manual_nagad_number: "01618367128",
   manual_nagad_type: "Personal",
-  manual_nagad_instructions: "প্রদত্ত নগদ নম্বরে Send Money করুন এবং নিচে আপনার প্রেরক নগদ নম্বর ও TrxID দিন।",
+  manual_nagad_instructions: "à¦ªà§à¦°à¦¦à¦¤à§à¦¤ à¦¨à¦—à¦¦ à¦¨à¦®à§à¦¬à¦°à§‡ Send Money à¦•à¦°à§à¦¨ à¦à¦¬à¦‚ à¦¨à¦¿à¦šà§‡ à¦†à¦ªà¦¨à¦¾à¦° à¦ªà§à¦°à§‡à¦°à¦• à¦¨à¦—à¦¦ à¦¨à¦®à§à¦¬à¦° à¦“ TrxID à¦¦à¦¿à¦¨à¥¤",
   manual_bank_enabled: false,
   manual_bank_name: "The City Bank Ltd.",
   manual_bank_account_name: "Maxora Bangladesh",
   manual_bank_account_number: "1102938475001",
   manual_bank_branch: "Principal Branch, Dhaka",
   manual_bank_routing: "225261728",
-  manual_bank_instructions: "ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।",
+  manual_bank_instructions: "à¦¬à§à¦¯à¦¾à¦‚à¦• à¦…à§à¦¯à¦¾à¦•à¦¾à¦‰à¦¨à§à¦Ÿà§‡ à¦Ÿà¦¾à¦•à¦¾ à¦ªà¦¾à¦ à¦¿à§Ÿà§‡ à¦¡à¦¿à¦ªà§‹à¦œà¦¿à¦Ÿ à¦¸à§à¦²à¦¿à¦ª à¦¨à¦®à§à¦¬à¦° à¦¬à¦¾ à¦Ÿà§à¦°à¦¾à¦¨à¦œà§‡à¦•à¦¶à¦¨ à¦†à¦‡à¦¡à¦¿ à¦¨à¦¿à¦šà§‡ à¦¦à¦¿à¦¨à¥¤",
 };
 
 const defaultProducts = JSON.parse(fs.readFileSync(path.join(process.cwd(), "src/data/userProducts.json"), "utf8"));
@@ -403,12 +403,12 @@ try {
     if (db.settings.manual_bkash_enabled === undefined) db.settings.manual_bkash_enabled = true;
     if (!db.settings.manual_bkash_number || db.settings.manual_bkash_number === "01844932809") db.settings.manual_bkash_number = "01932878270";
     if (!db.settings.manual_bkash_type) db.settings.manual_bkash_type = "Personal";
-    if (!db.settings.manual_bkash_instructions) db.settings.manual_bkash_instructions = "প্রদত্ত বিকাশ নম্বরে মোট টাকার পরিমাণ Send Money করুন এবং নিচে আপনার বিকাশ নম্বর ও TrxID দিন।";
+    if (!db.settings.manual_bkash_instructions) db.settings.manual_bkash_instructions = "à¦ªà§à¦°à¦¦à¦¤à§à¦¤ à¦¬à¦¿à¦•à¦¾à¦¶ à¦¨à¦®à§à¦¬à¦°à§‡ à¦®à§‹à¦Ÿ à¦Ÿà¦¾à¦•à¦¾à¦° à¦ªà¦°à¦¿à¦®à¦¾à¦£ Send Money à¦•à¦°à§à¦¨ à¦à¦¬à¦‚ à¦¨à¦¿à¦šà§‡ à¦†à¦ªà¦¨à¦¾à¦° à¦¬à¦¿à¦•à¦¾à¦¶ à¦¨à¦®à§à¦¬à¦° à¦“ TrxID à¦¦à¦¿à¦¨à¥¤";
 
     if (db.settings.manual_nagad_enabled === undefined) db.settings.manual_nagad_enabled = true;
     if (!db.settings.manual_nagad_number || db.settings.manual_nagad_number === "01844932809") db.settings.manual_nagad_number = "01618367128";
     if (!db.settings.manual_nagad_type) db.settings.manual_nagad_type = "Personal";
-    if (!db.settings.manual_nagad_instructions) db.settings.manual_nagad_instructions = "প্রদত্ত নগদ নম্বরে Send Money করুন এবং নিচে আপনার প্রেরক নগদ নম্বর ও TrxID দিন।";
+    if (!db.settings.manual_nagad_instructions) db.settings.manual_nagad_instructions = "à¦ªà§à¦°à¦¦à¦¤à§à¦¤ à¦¨à¦—à¦¦ à¦¨à¦®à§à¦¬à¦°à§‡ Send Money à¦•à¦°à§à¦¨ à¦à¦¬à¦‚ à¦¨à¦¿à¦šà§‡ à¦†à¦ªà¦¨à¦¾à¦° à¦ªà§à¦°à§‡à¦°à¦• à¦¨à¦—à¦¦ à¦¨à¦®à§à¦¬à¦° à¦“ TrxID à¦¦à¦¿à¦¨à¥¤";
 
     if (db.settings.manual_bank_enabled === undefined) db.settings.manual_bank_enabled = false;
     if (!db.settings.manual_bank_name) db.settings.manual_bank_name = "The City Bank Ltd.";
@@ -416,7 +416,7 @@ try {
     if (!db.settings.manual_bank_account_number) db.settings.manual_bank_account_number = "1102938475001";
     if (!db.settings.manual_bank_branch) db.settings.manual_bank_branch = "Principal Branch, Dhaka";
     if (!db.settings.manual_bank_routing) db.settings.manual_bank_routing = "225261728";
-    if (!db.settings.manual_bank_instructions) db.settings.manual_bank_instructions = "ব্যাংক অ্যাকাউন্টে টাকা পাঠিয়ে ডিপোজিট স্লিপ নম্বর বা ট্রানজেকশন আইডি নিচে দিন।";
+    if (!db.settings.manual_bank_instructions) db.settings.manual_bank_instructions = "à¦¬à§à¦¯à¦¾à¦‚à¦• à¦…à§à¦¯à¦¾à¦•à¦¾à¦‰à¦¨à§à¦Ÿà§‡ à¦Ÿà¦¾à¦•à¦¾ à¦ªà¦¾à¦ à¦¿à§Ÿà§‡ à¦¡à¦¿à¦ªà§‹à¦œà¦¿à¦Ÿ à¦¸à§à¦²à¦¿à¦ª à¦¨à¦®à§à¦¬à¦° à¦¬à¦¾ à¦Ÿà§à¦°à¦¾à¦¨à¦œà§‡à¦•à¦¶à¦¨ à¦†à¦‡à¦¡à¦¿ à¦¨à¦¿à¦šà§‡ à¦¦à¦¿à¦¨à¥¤";
     if (!db.settings.phone || db.settings.phone === "01700-123456") db.settings.phone = "01635451746";
     if (!db.settings.whatsapp || db.settings.whatsapp === "+8801700123456") db.settings.whatsapp = "+8801635451746";
 
@@ -929,7 +929,7 @@ app.post('/api/admin/send-password-otp', (req, res) => {
 
   const isPassValid = currentPassword === validPassword || currentPassword === '123456' || currentPassword === 'admin123';
   if (!isPassValid) {
-    return res.status(401).json({ success: false, error: 'Current password is incorrect (বর্তমান পাসওয়ার্ডটি সঠিক নয়)' });
+    return res.status(401).json({ success: false, error: 'Current password is incorrect (à¦¬à¦°à§à¦¤à¦®à¦¾à¦¨ à¦ªà¦¾à¦¸à¦“à§Ÿà¦¾à¦°à§à¦¡à¦Ÿà¦¿ à¦¸à¦ à¦¿à¦• à¦¨à§Ÿ)' });
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -946,7 +946,7 @@ app.post('/api/admin/send-password-otp', (req, res) => {
     code: otp,
     email: targetEmail,
     expiresInSeconds: 300,
-    message: `৬ ডিজিটের সিকিউরিটি কোড সফলভাবে ${targetEmail}-এ পাঠানো হয়েছে।`
+    message: `à§¬ à¦¡à¦¿à¦œà¦¿à¦Ÿà§‡à¦° à¦¸à¦¿à¦•à¦¿à¦‰à¦°à¦¿à¦Ÿà¦¿ à¦•à§‹à¦¡ à¦¸à¦«à¦²à¦­à¦¾à¦¬à§‡ ${targetEmail}-à¦ à¦ªà¦¾à¦ à¦¾à¦¨à§‹ à¦¹à§Ÿà§‡à¦›à§‡à¥¤`
   });
 });
 
@@ -961,7 +961,7 @@ app.post('/api/admin/change-password', async (req, res) => {
 
   const isPassValid = currentPassword === validPassword || currentPassword === '123456' || currentPassword === 'admin123';
   if (!isPassValid) {
-    return res.status(401).json({ success: false, error: 'Current password is incorrect (বর্তমান পাসওয়ার্ডটি সঠিক নয়)' });
+    return res.status(401).json({ success: false, error: 'Current password is incorrect (à¦¬à¦°à§à¦¤à¦®à¦¾à¦¨ à¦ªà¦¾à¦¸à¦“à§Ÿà¦¾à¦°à§à¦¡à¦Ÿà¦¿ à¦¸à¦ à¦¿à¦• à¦¨à§Ÿ)' });
   }
 
   if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
@@ -975,7 +975,7 @@ app.post('/api/admin/change-password', async (req, res) => {
 
   const otpRecord = activeAdminOtps[cleanOtp];
   if (!otpRecord || Date.now() > otpRecord.expiry) {
-    return res.status(400).json({ success: false, error: 'Invalid or expired verification code (কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়ে গেছে)' });
+    return res.status(400).json({ success: false, error: 'Invalid or expired verification code (à¦•à§‹à¦¡à¦Ÿà¦¿ à¦¸à¦ à¦¿à¦• à¦¨à§Ÿ à¦…à¦¥à¦¬à¦¾ à¦®à§‡à§Ÿà¦¾à¦¦ à¦¶à§‡à¦· à¦¹à§Ÿà§‡ à¦—à§‡à¦›à§‡)' });
   }
 
   delete activeAdminOtps[cleanOtp];
@@ -1000,7 +1000,7 @@ app.post('/api/admin/change-password', async (req, res) => {
 
   return res.json({
     success: true,
-    message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!'
+    message: 'à¦ªà¦¾à¦¸à¦“à§Ÿà¦¾à¦°à§à¦¡ à¦¸à¦«à¦²à¦­à¦¾à¦¬à§‡ à¦ªà¦°à¦¿à¦¬à¦°à§à¦¤à¦¨ à¦•à¦°à¦¾ à¦¹à§Ÿà§‡à¦›à§‡!'
   });
 });
 
@@ -1140,47 +1140,213 @@ async function backgroundSyncProducts(force = false) {
 }
 
 // GET /api/products (Public customer endpoint - Live Sub-millisecond < 1ms real-time response)
-app.get('/api/products', (req, res) => {
-  // Fire background sync asynchronously without blocking client response
-  // High-performance micro-caching for customer storefront with instant stale-while-revalidate
+let d1PublicProductsCache: any[] | null = null;
+let d1PublicProductsCacheAt = 0;
+let d1PublicProductsPromise: Promise<any[]> | null = null;
+
+async function getD1PublicProducts(): Promise<any[]> {
+  const configuredWorkerUrl = String(process.env.CLOUDFLARE_WORKER_URL || '').trim();
+  const workerBaseUrl = (
+    configuredWorkerUrl ||
+    (process.env.NODE_ENV !== 'production' ? 'http://127.0.0.1:8787' : '')
+  ).replace(/\/+$/, '');
+
+  if (!workerBaseUrl) {
+    throw new Error('D1 Worker URL is not configured');
+  }
+
+  if (
+    d1PublicProductsCache &&
+    Date.now() - d1PublicProductsCacheAt < 10000
+  ) {
+    return d1PublicProductsCache;
+  }
+
+  if (d1PublicProductsPromise) {
+    return d1PublicProductsPromise;
+  }
+
+  d1PublicProductsPromise = (async () => {
+    const collected: any[] = [];
+    let offset = 0;
+
+    for (let page = 0; page < 200; page++) {
+      const endpoint = new URL('/api/products', workerBaseUrl);
+      endpoint.searchParams.set('limit', '50');
+      endpoint.searchParams.set('offset', String(offset));
+
+      const response = await fetch(endpoint.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`D1 Worker returned HTTP ${response.status}`);
+      }
+
+      const payload: any = await response.json();
+
+      if (
+        payload?.success !== true ||
+        !Array.isArray(payload.products) ||
+        !payload.pagination
+      ) {
+        throw new Error('D1 Worker returned an invalid products response');
+      }
+
+      collected.push(...payload.products);
+
+      if (payload.pagination.hasMore !== true) {
+        d1PublicProductsCache = collected;
+        d1PublicProductsCacheAt = Date.now();
+        return collected;
+      }
+
+      const nextOffset = Number(payload.pagination.nextOffset);
+
+      if (!Number.isInteger(nextOffset) || nextOffset <= offset || nextOffset > 10000) {
+        throw new Error('D1 Worker returned an invalid pagination offset');
+      }
+
+      offset = nextOffset;
+    }
+
+    throw new Error('D1 product pagination exceeded the safety limit');
+  })().finally(() => {
+    d1PublicProductsPromise = null;
+  });
+
+  return d1PublicProductsPromise;
+}
+
+// GET /api/products (Public customer endpoint - D1 first)
+app.get('/api/products', async (req, res) => {
   const returnAll = req.query.all === 'true' || req.query.admin === 'true';
-  const isAdminReq = returnAll || Boolean(req.headers['x-admin-token'] || req.headers['authorization']);
+  const isAdminReq = returnAll || Boolean(
+    req.headers['x-admin-token'] || req.headers['authorization']
+  );
 
   if (isAdminReq) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
   } else {
-    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+    res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
   }
 
-  const search = (req.query.search as string || '').toLowerCase().trim();
-  const category = (req.query.category as string || '').trim();
+  const search = String(req.query.search || '').toLowerCase().trim();
+  const category = String(req.query.category || '').toLowerCase().trim();
 
-  let products: any[];
+  const requestedLimit = Number.parseInt(String(req.query.limit || '50'), 10);
+  const requestedOffset = Number.parseInt(String(req.query.offset || '0'), 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(100, Math.max(1, requestedLimit))
+    : 50;
+  const offset = Number.isFinite(requestedOffset)
+    ? Math.max(0, requestedOffset)
+    : 0;
 
-  if (category) {
-    // Sub-millisecond O(1) Category Index Lookup
-    products = productIndexer.getByCategory(category);
-  } else if (returnAll) {
-    products = productIndexer.getAll();
-  } else {
-    products = productIndexer.getAllActive();
+  // Keep the existing Admin product source and behavior unchanged.
+  if (isAdminReq) {
+    let adminProducts: any[];
+
+    if (category) {
+      adminProducts = productIndexer.getByCategory(category);
+    } else if (returnAll) {
+      adminProducts = productIndexer.getAll();
+    } else {
+      adminProducts = productIndexer.getAllActive();
+    }
+
+    if (search) {
+      adminProducts = adminProducts.filter(p =>
+        String(p.name || '').toLowerCase().includes(search) ||
+        String(p.description || '').toLowerCase().includes(search) ||
+        String(p.sku || '').toLowerCase().includes(search)
+      );
+    }
+
+    return res.json({
+      success: true,
+      count: adminProducts.length,
+      products: adminProducts
+    });
   }
 
-  if (search) {
-    products = products.filter(p =>
-      (p.name && p.name.toLowerCase().includes(search)) ||
-      (p.description && p.description.toLowerCase().includes(search)) ||
-      (p.sku && p.sku.toLowerCase().includes(search))
-    );
-  }
+  try {
+    // D1 is the primary source for the public customer catalog.
+    let products = await getD1PublicProducts();
 
-  return res.json({
-    success: true,
-    count: products.length,
-    products
-  });
+    if (category) {
+      products = products.filter((p: any) => {
+        const values = [
+          p.category, p.category_id, p.category_slug,
+          p.sub_category, p.subcategory_id, p.subcategory_slug,
+          p.child_category, p.child_category_id, p.child_category_slug,
+          p.product_type, p.product_type_id, p.product_type_slug,
+          p.brand, p.brand_id, p.brand_slug
+        ];
+
+        return values.some(value =>
+          String(value ?? '').toLowerCase().trim() === category
+        );
+      });
+    }
+
+    if (search) {
+      products = products.filter((p: any) =>
+        String(p.name || '').toLowerCase().includes(search) ||
+        String(p.description || '').toLowerCase().includes(search) ||
+        String(p.sku || '').toLowerCase().includes(search)
+      );
+    }
+
+    const total = products.length;
+
+    return res.json({
+      success: true,
+      source: 'd1',
+      count: total,
+      products: products.slice(offset, offset + limit),
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+        nextOffset: offset + limit < total ? offset + limit : null
+      }
+    });
+  } catch (error) {
+    console.error('[D1 Product Sync] Worker request failed; using legacy fallback:', error);
+
+    // Keep the storefront available if the local Worker is temporarily offline.
+    let fallbackProducts = category
+      ? productIndexer.getByCategory(category)
+      : productIndexer.getAllActive();
+
+    if (search) {
+      fallbackProducts = fallbackProducts.filter(p =>
+        String(p.name || '').toLowerCase().includes(search) ||
+        String(p.description || '').toLowerCase().includes(search) ||
+        String(p.sku || '').toLowerCase().includes(search)
+      );
+    }
+
+    const total = fallbackProducts.length;
+
+    return res.json({
+      success: true,
+      source: 'legacy-fallback',
+      count: total,
+      products: fallbackProducts.slice(offset, offset + limit),
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+        nextOffset: offset + limit < total ? offset + limit : null
+      }
+    });
+  }
 });
 
 // GET /api/products/:id (Public single product - O(1) sub-millisecond lookup)
@@ -1695,9 +1861,9 @@ const handleAiChatRequest = async (req: express.Request, res: express.Response) 
     console.error('Server /api/ai/chat error:', err);
     return res.json({
       success: true,
-      reply: 'দুঃখিত, এই মুহূর্তে AI Assistant সাময়িকভাবে unavailable। আবার চেষ্টা করুন অথবা আমাদের WhatsApp support-এ যোগাযোগ করুন।',
+      reply: 'à¦¦à§à¦ƒà¦–à¦¿à¦¤, à¦à¦‡ à¦®à§à¦¹à§‚à¦°à§à¦¤à§‡ AI Assistant à¦¸à¦¾à¦®à§Ÿà¦¿à¦•à¦­à¦¾à¦¬à§‡ unavailableà¥¤ à¦†à¦¬à¦¾à¦° à¦šà§‡à¦·à§à¦Ÿà¦¾ à¦•à¦°à§à¦¨ à¦…à¦¥à¦¬à¦¾ à¦†à¦®à¦¾à¦¦à§‡à¦° WhatsApp support-à¦ à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦•à¦°à§à¦¨à¥¤',
       needsWhatsApp: true,
-      whatsappPrefilledText: 'হ্যালো Maxora, আমি কাস্টমার সাপোর্টে যোগাযোগ করতে চাই।',
+      whatsappPrefilledText: 'à¦¹à§à¦¯à¦¾à¦²à§‹ Maxora, à¦†à¦®à¦¿ à¦•à¦¾à¦¸à§à¦Ÿà¦®à¦¾à¦° à¦¸à¦¾à¦ªà§‹à¦°à§à¦Ÿà§‡ à¦¯à§‹à¦—à¦¾à¦¯à§‹à¦— à¦•à¦°à¦¤à§‡ à¦šà¦¾à¦‡à¥¤',
       source: 'fallback',
     });
   }
@@ -1706,6 +1872,34 @@ const handleAiChatRequest = async (req: express.Request, res: express.Response) 
 app.post('/api/ai/chat', handleAiChatRequest);
 app.post('/api/ai-chat', handleAiChatRequest);
 
+
+// LOCAL-ONLY D1 ORDER PROXY
+if (
+  process.env.MAXORA_D1_LOCAL_PROXY === 'true' &&
+  process.env.NODE_ENV !== 'production'
+) {
+  app.post('/api/orders', async (req, res) => {
+    try {
+      const workerResponse = await fetch('http://127.0.0.1:8787/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body || {}),
+      });
+
+      const responseText = await workerResponse.text();
+      const contentType = workerResponse.headers.get('content-type');
+
+      if (contentType) res.setHeader('Content-Type', contentType);
+      return res.status(workerResponse.status).send(responseText);
+    } catch (error: any) {
+      console.error('[LOCAL_D1_ORDER_PROXY_FAILED]', error?.message || error);
+      return res.status(502).json({
+        success: false,
+        error: 'Local D1 Worker unavailable. Order was not confirmed.',
+      });
+    }
+  });
+}
 // POST /api/orders
 app.post('/api/orders', async (req, res) => {
   const body = req.body || {};
@@ -3146,7 +3340,7 @@ app.post('/api/admin/courier/steadfast/book', requireAdmin, async (req, res) => 
     if (!key || !secret) {
       return res.status(400).json({
         success: false,
-        error: "Steadfast API Key অথবা Secret Key সেট করা নেই। অ্যাডমিন সেটিংস থেকে দিন।"
+        error: "Steadfast API Key à¦…à¦¥à¦¬à¦¾ Secret Key à¦¸à§‡à¦Ÿ à¦•à¦°à¦¾ à¦¨à§‡à¦‡à¥¤ à¦…à§à¦¯à¦¾à¦¡à¦®à¦¿à¦¨ à¦¸à§‡à¦Ÿà¦¿à¦‚à¦¸ à¦¥à§‡à¦•à§‡ à¦¦à¦¿à¦¨à¥¤"
       });
     }
 
@@ -3243,7 +3437,7 @@ app.post('/api/admin/courier/steadfast/book', requireAdmin, async (req, res) => 
 
     return res.json({
       success: true,
-      message: `Steadfast-এ পার্সেল সফলভাবে বুক হয়েছে! ট্র্যাকিং কোড: ${trkCode}`,
+      message: `Steadfast-à¦ à¦ªà¦¾à¦°à§à¦¸à§‡à¦² à¦¸à¦«à¦²à¦­à¦¾à¦¬à§‡ à¦¬à§à¦• à¦¹à§Ÿà§‡à¦›à§‡! à¦Ÿà§à¦°à§à¦¯à¦¾à¦•à¦¿à¦‚ à¦•à§‹à¦¡: ${trkCode}`,
       consignment_id: consignmentId,
       tracking_code: trkCode,
       tracking_url: trkUrl,
@@ -3309,7 +3503,7 @@ app.post('/api/admin/courier/pathao/book', requireAdmin, async (req, res) => {
     if (!cId || !cSecret || !uName || !uPass) {
       return res.status(400).json({
         success: false,
-        error: "Pathao Client ID, Client Secret, Username এবং Password প্রদান করুন।"
+        error: "Pathao Client ID, Client Secret, Username à¦à¦¬à¦‚ Password à¦ªà§à¦°à¦¦à¦¾à¦¨ à¦•à¦°à§à¦¨à¥¤"
       });
     }
 
@@ -3420,7 +3614,7 @@ app.post('/api/admin/courier/pathao/book', requireAdmin, async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Pathao-তে পার্সেল সফলভাবে বুক হয়েছে! কনসাইনমেন্ট আইডি: ${consignmentId}`,
+      message: `Pathao-à¦¤à§‡ à¦ªà¦¾à¦°à§à¦¸à§‡à¦² à¦¸à¦«à¦²à¦­à¦¾à¦¬à§‡ à¦¬à§à¦• à¦¹à§Ÿà§‡à¦›à§‡! à¦•à¦¨à¦¸à¦¾à¦‡à¦¨à¦®à§‡à¦¨à§à¦Ÿ à¦†à¦‡à¦¡à¦¿: ${consignmentId}`,
       consignment_id: consignmentId,
       tracking_code: consignmentId,
       tracking_url: trkUrl,
@@ -4295,8 +4489,8 @@ ${JSON.stringify(breadcrumbLd, null, 2)}
         <div>
           <h1 class="text-2xl sm:text-3xl font-bold text-zinc-900 mb-3">${escapeHtml(product.name)}</h1>
           <div class="mb-4">
-            <span class="text-2xl font-extrabold text-emerald-600">৳${finalPrice}</span>
-            ${discount > 0 ? `<span class="ml-2 text-zinc-400 line-through text-lg">৳${sellingPrice}</span>` : ''}
+            <span class="text-2xl font-extrabold text-emerald-600">à§³${finalPrice}</span>
+            ${discount > 0 ? `<span class="ml-2 text-zinc-400 line-through text-lg">à§³${sellingPrice}</span>` : ''}
           </div>
           <div class="text-xs text-zinc-600 space-y-1 mb-4">
             <p><strong>Availability:</strong> <span class="${Number(product.stock || 1) > 0 ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${Number(product.stock || 1) > 0 ? 'In Stock' : 'Out of Stock'}</span></p>
@@ -4527,8 +4721,8 @@ ${JSON.stringify(itemListLd, null, 2)}
             </div>
             <h2 class="text-sm font-semibold text-zinc-800 line-clamp-2 mb-1">${escapeHtml(p.name)}</h2>
             <div class="flex items-center gap-2">
-              <span class="text-sm font-bold text-emerald-600">৳${pFinal}</span>
-              ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">৳${pSelling}</span>` : ''}
+              <span class="text-sm font-bold text-emerald-600">à§³${pFinal}</span>
+              ${pDisc > 0 ? `<span class="text-xs text-zinc-400 line-through">à§³${pSelling}</span>` : ''}
             </div>
           </a>
           `;
