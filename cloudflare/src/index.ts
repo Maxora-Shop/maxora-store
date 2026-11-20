@@ -1287,6 +1287,8 @@ export default {
         const result = await env.DB.prepare(
           `SELECT id, active, data_json FROM products
            WHERE active = 1
+             AND json_valid(data_json) = 1
+             AND json_type(data_json) = 'object'
            ORDER BY created_at DESC, id DESC
            LIMIT ? OFFSET ?`
         ).bind(limit + 1, offset).all<ProductRow>();
@@ -1313,7 +1315,10 @@ export default {
 
         const row = await env.DB.prepare(
           `SELECT id, active, data_json FROM products
-           WHERE id = ? AND active = 1 LIMIT 1`
+           WHERE id = ? AND active = 1
+             AND json_valid(data_json) = 1
+             AND json_type(data_json) = 'object'
+           LIMIT 1`
         ).bind(id).first<ProductRow>();
 
         if (!row) return json({ error: "Product not found" }, 404, origin);
