@@ -1,4 +1,10 @@
-﻿name = "maxora-shop-api"
+name = "maxora-shop-api"
 main = "src/index.ts"
 compatibility_date = "2026-11-11"
 workers_dev = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "maxora-shop-production"
+database_id = "97f5d756-370a-4edb-a5a5-3234f2b91fb5"
+migrations_dir = "migrations"
