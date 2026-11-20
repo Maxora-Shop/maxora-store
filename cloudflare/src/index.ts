@@ -1730,11 +1730,8 @@ export default {
         for (const [productId, quantity] of quantities.entries()) {
           statements.push(env.DB.prepare(
             `INSERT INTO stock_movements (id, order_id, product_id, movement_type, quantity, created_at, data_json)
-             SELECT ?, ?, CASE WHEN EXISTS (
-               SELECT 1 FROM products WHERE id = ? AND active = 1 AND stock >= ?
-             ) THEN ? ELSE NULL END, 'order', ?, ?, '{}'
-            `
-          ).bind(crypto.randomUUID(), orderId, productId, quantity, productId, quantity, now));
+             VALUES (?, ?, ?, 'order', ?, ?, '{}')`
+          ).bind(crypto.randomUUID(), orderId, productId, quantity, now));
 
           statements.push(env.DB.prepare(
             "UPDATE products SET stock = stock - ?, updated_at = ? WHERE id = ? AND active = 1 AND stock >= ?"
